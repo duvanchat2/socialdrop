@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { PostStatus } from '@prisma/client';
+import { PostStatus } from '@socialdrop/shared';
 import { PrismaService } from '@socialdrop/prisma';
 import { CreatePostDto, UpdatePostDto } from '@socialdrop/shared';
 
