@@ -1,0 +1,49 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+import { PrismaModule } from '@socialdrop/prisma';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { DriveModule } from '../modules/drive/drive.module.js';
+import { PostsModule } from '../modules/posts/posts.module.js';
+import { IntegrationsModule } from '../modules/integrations/integrations.module.js';
+import { MediaModule } from '../modules/media/media.module.js';
+import { StatsModule } from '../modules/stats/stats.module.js';
+import { ContentModule } from '../modules/content/content.module.js';
+import googleConfig from '../config/google.config.js';
+import redisConfig from '../config/redis.config.js';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [googleConfig, redisConfig],
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('redis.host', 'localhost'),
+          port: config.get<number>('redis.port', 6379),
+        },
+      }),
+      inject: [ConfigService],
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), process.env.UPLOAD_DIRECTORY ?? './uploads'),
+      serveRoot: '/uploads',
+    }),
+    PrismaModule,
+    DriveModule,
+    PostsModule,
+    IntegrationsModule,
+    MediaModule,
+    StatsModule,
+    ContentModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}

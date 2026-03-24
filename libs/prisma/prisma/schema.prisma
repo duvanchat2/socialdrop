@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String?
+  passwordHash String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  integrations Integration[]
+  posts        Post[]
+  driveConfigs DriveConfig[]
+}
+
+model Integration {
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform     Platform
+  accountName  String?
+  accessToken  String
+  refreshToken String?
+  tokenExpiry  DateTime?
+  profileId    String?
+  metadata     Json?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  posts        PostIntegration[]
+
+  @@unique([userId, platform, profileId])
+  @@index([userId])
+}
+
+model Post {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content       String
+  scheduledAt   DateTime
+  publishedAt   DateTime?
+  status        PostStatus        @default(DRAFT)
+  errorMessage  String?
+  retryCount    Int               @default(0)
+  driveSourceId String?
+  media         Media[]
+  integrations  PostIntegration[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([userId, status])
+  @@index([scheduledAt, status])
+}
+
+model PostIntegration {
+  id             String      @id @default(uuid())
+  postId         String
+  post           Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  integrationId  String
+  integration    Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  platformPostId String?
+  status         PostStatus  @default(PENDING)
+  errorMessage   String?
+  publishedAt    DateTime?
+
+  @@unique([postId, integrationId])
+}
+
+model Media {
+  id          String    @id @default(uuid())
+  postId      String
+  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  url         String
+  mimeType    String
+  fileName    String
+  fileSize    Int?
+  mediaType   MediaType
+  driveFileId String?
+  createdAt   DateTime  @default(now())
+
+  @@index([postId])
+}
+
+model DriveConfig {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId        String
+  folderName      String?
+  accessToken     String
+  refreshToken    String
+  tokenExpiry     DateTime?
+  syncEnabled     Boolean   @default(true)
+  lastSyncAt      DateTime?
+  lastPageToken   String?
+  pollingInterval Int       @default(300)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, folderId])
+  @@index([userId])
+}
+
+enum Platform {
+  INSTAGRAM
+  TWITTER
+  FACEBOOK
+  TIKTOK
+  LINKEDIN
+  YOUTUBE
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  ERROR
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  TEXT
+}
+
+enum ContentType {
+  SOCIAL
+  YT_SHORT
+  YT_LONG
+}
+
+model ContentItem {
+  id            String      @id @default(cuid())
+  type          ContentType
+  tema          String
+  caption       String?
+  hashtags      String[]
+  title         String?
+  tags          String[]
+  thumbnailUrl  String?
+  mediaDriveId  String?
+  mediaUrl      String?
+  platforms     Platform[]
+  scheduledAt   DateTime?
+  status        PostStatus  @default(DRAFT)
+  copyGenerated Boolean     @default(false)
+  n8nJobId      String?
+  userId        String      @default("demo-user")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}

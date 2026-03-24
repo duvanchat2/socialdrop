@@ -1,0 +1,41 @@
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app/app.module';
+import { mkdirSync } from 'fs';
+import { join } from 'path';
+
+async function bootstrap() {
+  // Ensure uploads directory exists
+  const uploadDir = join(process.cwd(), process.env.UPLOAD_DIRECTORY ?? 'uploads');
+  mkdirSync(uploadDir, { recursive: true });
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Serve uploaded files as static assets so Instagram/TikTok can fetch them
+  app.useStaticAssets(uploadDir, { prefix: '/uploads' });
+
+  app.setGlobalPrefix('api');
+  app.enableCors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:3000' });
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('SocialDrop API')
+    .setDescription('Social media scheduler API')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, document);
+
+  const port = process.env.PORT ?? 3333;
+  const appUrl = process.env.APP_URL ?? `http://localhost:${port}`;
+  await app.listen(port);
+  Logger.log(`🚀 API running on: http://localhost:${port}/api`);
+  Logger.log(`📁 Static uploads: ${appUrl}/uploads/`);
+  Logger.log(`📖 Swagger docs: http://localhost:${port}/docs`);
+}
+
+bootstrap();
