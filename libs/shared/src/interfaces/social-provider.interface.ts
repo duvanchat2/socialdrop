@@ -10,6 +10,7 @@ export interface AuthResult {
 
 export interface TokenResult {
   accessToken: string;
+  refreshToken?: string;
   tokenExpiry?: Date;
 }
 

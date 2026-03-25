@@ -64,7 +64,7 @@ export class TiktokProvider extends SocialAbstract {
     });
 
     const url = `${this.AUTH_BASE}/v2/auth/authorize?${params}`;
-    this.logger.log(`[TikTok] Auth URL generated for userId=${userId} (PKCE S256)`);
+    this.logger.log(`[TikTok] Auth URL generated for userId=${userId} (PKCE S256) scopes=user.info.basic,video.upload,video.list`);
     return url;
   }
 
@@ -83,11 +83,15 @@ export class TiktokProvider extends SocialAbstract {
       code_verifier: codeVerifier,
     });
 
+    this.logger.log(`[TikTok] Exchanging authorization code for tokens (grant_type=authorization_code)`);
+
     const res = await fetch(`${this.API_BASE}/v2/oauth/token/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
+
+    this.logger.log(`[TikTok] Token exchange response status: ${res.status}`);
 
     if (res.status === 401) throw new RefreshTokenError();
 
@@ -98,21 +102,40 @@ export class TiktokProvider extends SocialAbstract {
         open_id: string;
         expires_in: number;
         refresh_expires_in?: number;
+        scope?: string;
       };
       error?: string;
       error_description?: string;
     };
 
-    if (!data.data) {
+    if (!data.data?.access_token) {
+      this.logger.error(`[TikTok] Token exchange failed — full response: ${JSON.stringify(data)}`);
       throw new Error(`TikTok auth failed: ${data.error_description ?? data.error ?? JSON.stringify(data)}`);
     }
 
+    this.logger.log(
+      `[TikTok] Token exchange OK — access_token=${data.data.access_token.substring(0, 10)}... ` +
+      `refresh_token=${data.data.refresh_token ? 'present' : 'MISSING'} ` +
+      `open_id=${data.data.open_id} ` +
+      `expires_in=${data.data.expires_in}s ` +
+      `scope=${data.data.scope ?? 'not returned'}`,
+    );
+
     // Fetch user display name
+    this.logger.debug(`[TikTok] Fetching user info with access_token=${data.data.access_token.substring(0, 10)}...`);
     const userRes = await fetch(
       `${this.API_BASE}/v2/user/info/?fields=display_name,username`,
       { headers: { Authorization: `Bearer ${data.data.access_token}` } },
     );
-    const userData = await userRes.json() as {
+
+    this.logger.log(`[TikTok] User info response status: ${userRes.status}`);
+
+    if (!userRes.ok) {
+      const errBody = await userRes.text().catch(() => '');
+      this.logger.warn(`[TikTok] User info request failed (${userRes.status}): ${errBody}`);
+    }
+
+    const userData = await (userRes.ok ? userRes.json() : Promise.resolve({})) as {
       data?: { user?: { display_name?: string; username?: string } };
     };
     const displayName =
@@ -132,6 +155,8 @@ export class TiktokProvider extends SocialAbstract {
   }
 
   async refreshToken(token: string): Promise<TokenResult> {
+    this.logger.log(`[TikTok] Refreshing token (refresh_token=${token.substring(0, 10)}...)`);
+
     const res = await fetch(`${this.API_BASE}/v2/oauth/token/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -143,20 +168,30 @@ export class TiktokProvider extends SocialAbstract {
       }),
     });
 
+    this.logger.log(`[TikTok] Token refresh response status: ${res.status}`);
+
     if (res.status === 401) throw new RefreshTokenError();
 
     const data = await res.json() as {
-      data?: { access_token: string; expires_in: number };
+      data?: { access_token: string; expires_in: number; refresh_token?: string };
       error?: string;
+      error_description?: string;
     };
 
-    if (!data.data) {
-      throw new RefreshTokenError(`TikTok token refresh failed: ${data.error}`);
+    if (!data.data?.access_token) {
+      this.logger.error(`[TikTok] Token refresh failed — full response: ${JSON.stringify(data)}`);
+      throw new RefreshTokenError(`TikTok token refresh failed: ${data.error_description ?? data.error}`);
     }
 
+    this.logger.log(
+      `[TikTok] Token refresh OK — new access_token=${data.data.access_token.substring(0, 10)}... ` +
+      `expires_in=${data.data.expires_in}s`,
+    );
+
     return {
-      accessToken: data.data.access_token,
-      tokenExpiry: new Date(Date.now() + data.data.expires_in * 1000),
+      accessToken:  data.data.access_token,
+      refreshToken: data.data.refresh_token,
+      tokenExpiry:  new Date(Date.now() + data.data.expires_in * 1000),
     };
   }
 
@@ -192,6 +227,8 @@ export class TiktokProvider extends SocialAbstract {
   }
 
   private async postVideo(accessToken: string, content: PostContent): Promise<PublishResult> {
+    this.logger.debug(`[TikTok] Initiating video publish (token=${accessToken.substring(0, 10)}...)`);
+
     const initRes = await fetch(`${this.API_BASE}/v2/post/publish/video/init/`, {
       method: 'POST',
       headers: {
@@ -213,6 +250,8 @@ export class TiktokProvider extends SocialAbstract {
       }),
     });
 
+    this.logger.log(`[TikTok] Video init response status: ${initRes.status}`);
+
     if (initRes.status === 401) throw new RefreshTokenError();
 
     const initData = await initRes.json() as {
@@ -221,6 +260,7 @@ export class TiktokProvider extends SocialAbstract {
     };
 
     if (!initData.data?.publish_id) {
+      this.logger.error(`[TikTok] Video init failed — full response: ${JSON.stringify(initData)}`);
       throw new Error(`TikTok video init failed: ${initData.error?.message ?? JSON.stringify(initData)}`);
     }
 
@@ -228,6 +268,8 @@ export class TiktokProvider extends SocialAbstract {
   }
 
   private async postPhoto(accessToken: string, content: PostContent): Promise<PublishResult> {
+    this.logger.debug(`[TikTok] Initiating photo publish (token=${accessToken.substring(0, 10)}...)`);
+
     const initRes = await fetch(`${this.API_BASE}/v2/post/publish/content/init/`, {
       method: 'POST',
       headers: {
@@ -250,6 +292,8 @@ export class TiktokProvider extends SocialAbstract {
       }),
     });
 
+    this.logger.log(`[TikTok] Photo init response status: ${initRes.status}`);
+
     if (initRes.status === 401) throw new RefreshTokenError();
 
     const initData = await initRes.json() as {
@@ -258,6 +302,7 @@ export class TiktokProvider extends SocialAbstract {
     };
 
     if (!initData.data?.publish_id) {
+      this.logger.error(`[TikTok] Photo init failed — full response: ${JSON.stringify(initData)}`);
       throw new Error(`TikTok photo init failed: ${initData.error?.message ?? JSON.stringify(initData)}`);
     }
 
@@ -281,6 +326,10 @@ export class TiktokProvider extends SocialAbstract {
         body: JSON.stringify({ publish_id: publishId }),
       });
 
+      this.logger.debug(`[TikTok] Poll status response: ${res.status}`);
+
+      if (res.status === 401) throw new RefreshTokenError();
+
       const data = await res.json() as {
         data?: { status: string; publicaly_available_post_id?: string[] };
         error?: { code?: string; message?: string };
@@ -290,6 +339,7 @@ export class TiktokProvider extends SocialAbstract {
       this.logger.debug(`[TikTok] Poll ${i + 1}/${maxAttempts} publishId=${publishId} status=${status}`);
 
       if (status === 'FAILED') {
+        this.logger.error(`[TikTok] Publish FAILED — full response: ${JSON.stringify(data)}`);
         throw new Error(`TikTok publish failed: ${data.error?.message ?? 'Unknown error'}`);
       }
       if (status === 'PUBLISH_COMPLETE') {

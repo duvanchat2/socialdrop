@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { PrismaService } from '@socialdrop/prisma';
-import { IntegrationManager } from '@socialdrop/integrations';
+import { IntegrationManager, RefreshTokenError } from '@socialdrop/integrations';
 
 interface SchedulerJobData {
   type: 'scan' | 'publish';
@@ -72,13 +72,44 @@ export class PostSchedulerProcessor extends WorkerHost {
       },
     });
 
-    try {
-      const provider = this.integrationManager.getProvider(
-        pi.integration.platform,
+    const provider = this.integrationManager.getProvider(pi.integration.platform);
+
+    // Pre-emptively refresh token if expired or about to expire within 5 minutes
+    let accessToken = pi.integration.accessToken;
+    const refreshToken = pi.integration.refreshToken;
+    const tokenExpiry = pi.integration.tokenExpiry;
+    const fiveMinutes = 5 * 60 * 1000;
+
+    if (refreshToken && tokenExpiry && tokenExpiry.getTime() - Date.now() < fiveMinutes) {
+      this.logger.warn(
+        `[Scheduler] Token for ${pi.integration.platform} integration=${pi.integration.id} ` +
+        `is expired or expiring soon (expiry=${tokenExpiry.toISOString()}). Refreshing...`,
       );
-      const result = await provider.post(pi.integration.accessToken, {
+      try {
+        const refreshed = await provider.refreshToken(refreshToken);
+        accessToken = refreshed.accessToken;
+        await this.prisma.integration.update({
+          where: { id: pi.integration.id },
+          data: {
+            accessToken: refreshed.accessToken,
+            ...(refreshed.refreshToken && { refreshToken: refreshed.refreshToken }),
+            ...(refreshed.tokenExpiry && { tokenExpiry: refreshed.tokenExpiry }),
+          },
+        });
+        this.logger.log(`[Scheduler] Token refreshed for integration=${pi.integration.id}`);
+      } catch (err) {
+        this.logger.error(
+          `[Scheduler] Pre-emptive token refresh failed for integration=${pi.integration.id}: ${(err as Error).message}`,
+        );
+        // Continue with existing token — let the actual request fail and handle below
+      }
+    }
+
+    try {
+      const result = await provider.post(accessToken, {
         text: pi.post.content,
         mediaUrls: pi.post.media.map((m) => m.url),
+        mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
       });
 
       await this.prisma.postIntegration.update({
@@ -96,6 +127,51 @@ export class PostSchedulerProcessor extends WorkerHost {
         `Published to ${pi.integration.platform}: ${result.platformPostId}`,
       );
     } catch (error) {
+      let finalError = error as Error;
+
+      // On 401: try to refresh token once and retry the post
+      if (error instanceof RefreshTokenError && refreshToken) {
+        this.logger.warn(
+          `[Scheduler] 401 received for integration=${pi.integration.id}, attempting token refresh...`,
+        );
+        try {
+          const refreshed = await provider.refreshToken(refreshToken);
+          await this.prisma.integration.update({
+            where: { id: pi.integration.id },
+            data: {
+              accessToken: refreshed.accessToken,
+              ...(refreshed.refreshToken && { refreshToken: refreshed.refreshToken }),
+              ...(refreshed.tokenExpiry && { tokenExpiry: refreshed.tokenExpiry }),
+            },
+          });
+          this.logger.log(`[Scheduler] Token refreshed, retrying post for integration=${pi.integration.id}`);
+
+          const result = await provider.post(refreshed.accessToken, {
+            text: pi.post.content,
+            mediaUrls: pi.post.media.map((m) => m.url),
+            mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
+          });
+
+          await this.prisma.postIntegration.update({
+            where: { id: postIntegrationId },
+            data: {
+              status: 'PUBLISHED',
+              platformPostId: result.platformPostId,
+              publishedAt: new Date(),
+            },
+          });
+
+          await this.updatePostStatus(pi.postId);
+          this.logger.log(`Published to ${pi.integration.platform} after token refresh: ${result.platformPostId}`);
+          return;
+        } catch (refreshErr) {
+          this.logger.error(
+            `[Scheduler] Token refresh and retry failed for integration=${pi.integration.id}: ${(refreshErr as Error).message}`,
+          );
+          finalError = refreshErr as Error;
+        }
+      }
+
       const retryCount = pi.post.retryCount + 1;
       const maxRetries = 3;
 
@@ -103,7 +179,7 @@ export class PostSchedulerProcessor extends WorkerHost {
         where: { id: postIntegrationId },
         data: {
           status: retryCount >= maxRetries ? 'ERROR' : 'PENDING',
-          errorMessage: (error as Error).message,
+          errorMessage: finalError.message,
         },
       });
 
@@ -113,7 +189,7 @@ export class PostSchedulerProcessor extends WorkerHost {
       });
 
       this.logger.error(
-        `Failed to publish to ${pi.integration.platform}: ${(error as Error).message}`,
+        `Failed to publish to ${pi.integration.platform}: ${finalError.message}`,
       );
 
       if (retryCount >= maxRetries) {
