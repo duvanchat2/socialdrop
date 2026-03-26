@@ -230,8 +230,28 @@ export class TiktokProvider extends SocialAbstract {
   }
 
   private async postVideo(accessToken: string, content: PostContent): Promise<PublishResult> {
-    this.logger.debug(`[TikTok] Initiating video publish (token=${accessToken.substring(0, 10)}...)`);
+    const videoUrl = content.mediaUrls![0];
+    this.logger.debug(`[TikTok] Downloading video from ${videoUrl}`);
 
+    // Download video — FILE_UPLOAD avoids TikTok's URL domain verification requirement
+    const videoFetch = await fetch(videoUrl);
+    if (!videoFetch.ok) {
+      throw new Error(`Failed to fetch video (${videoFetch.status}): ${videoUrl}`);
+    }
+    const videoBuffer = Buffer.from(await videoFetch.arrayBuffer());
+    const videoSize   = videoBuffer.length;
+
+    // Use at most 64 MB per chunk; small videos upload as a single chunk
+    const MAX_CHUNK    = 64 * 1024 * 1024;
+    const chunkSize    = Math.min(videoSize, MAX_CHUNK);
+    const totalChunks  = Math.ceil(videoSize / chunkSize);
+
+    this.logger.log(
+      `[TikTok] Video ready — size=${videoSize}B chunks=${totalChunks} ` +
+      `(token=${accessToken.substring(0, 10)}...)`,
+    );
+
+    // Init upload
     const initRes = await fetch(`${this.API_BASE}/v2/post/publish/video/init/`, {
       method: 'POST',
       headers: {
@@ -247,8 +267,10 @@ export class TiktokProvider extends SocialAbstract {
           disable_stitch:  false,
         },
         source_info: {
-          source:    'PULL_FROM_URL',
-          video_url: content.mediaUrls![0],
+          source:            'FILE_UPLOAD',
+          video_size:        videoSize,
+          chunk_size:        chunkSize,
+          total_chunk_count: totalChunks,
         },
       }),
     });
@@ -258,13 +280,41 @@ export class TiktokProvider extends SocialAbstract {
     if (initRes.status === 401) throw new RefreshTokenError();
 
     const initData = await initRes.json() as {
-      data?: { publish_id: string };
+      data?: { publish_id: string; upload_url: string };
       error?: { code?: string; message?: string };
     };
 
-    if (!initData.data?.publish_id) {
+    if (!initData.data?.publish_id || !initData.data?.upload_url) {
       this.logger.error(`[TikTok] Video init failed — full response: ${JSON.stringify(initData)}`);
       throw new Error(`TikTok video init failed: ${initData.error?.message ?? JSON.stringify(initData)}`);
+    }
+
+    // Upload chunks
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize;
+      const end   = Math.min(start + chunkSize, videoSize);
+      const chunk = videoBuffer.subarray(start, end);
+
+      this.logger.debug(`[TikTok] Uploading chunk ${i + 1}/${totalChunks} bytes ${start}-${end - 1}/${videoSize}`);
+
+      const uploadRes = await fetch(initData.data.upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type':   'video/mp4',
+          'Content-Range':  `bytes ${start}-${end - 1}/${videoSize}`,
+          'Content-Length': String(chunk.length),
+        },
+        body: chunk,
+      });
+
+      if (!uploadRes.ok) {
+        const errBody = await uploadRes.text().catch(() => '');
+        throw new Error(
+          `TikTok video upload chunk ${i + 1}/${totalChunks} failed (${uploadRes.status}): ${errBody}`,
+        );
+      }
+
+      this.logger.log(`[TikTok] Chunk ${i + 1}/${totalChunks} uploaded (${uploadRes.status})`);
     }
 
     return this.pollPublishStatus(accessToken, initData.data.publish_id, 30);
