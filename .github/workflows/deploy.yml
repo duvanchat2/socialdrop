@@ -10,7 +10,7 @@ jobs:
   deploy:
     name: Build & Deploy socialdrop
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Deploy via SSH
@@ -31,6 +31,9 @@ jobs:
 
             echo "=== Building API ==="
             npx nx build api --skip-nx-cache
+
+            echo "=== Building Web ==="
+            npx nx build web --skip-nx-cache
 
             echo "=== Restarting socialdrop services ==="
             pm2 restart socialdrop-api socialdrop-web
