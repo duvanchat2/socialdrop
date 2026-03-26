@@ -56,7 +56,7 @@ export class TiktokProvider extends SocialAbstract {
     const params = new URLSearchParams({
       client_key:            this.config.get<string>('TIKTOK_CLIENT_KEY', ''),
       redirect_uri:          this.config.get<string>('TIKTOK_REDIRECT_URI', ''),
-      scope:                 'user.info.basic,video.upload,video.list',
+      scope:                 'user.info.basic,video.publish,video.upload,video.list',
       response_type:         'code',
       state:                 userId,
       code_challenge:        codeChallenge,
@@ -64,7 +64,7 @@ export class TiktokProvider extends SocialAbstract {
     });
 
     const url = `${this.AUTH_BASE}/v2/auth/authorize?${params}`;
-    this.logger.log(`[TikTok] Auth URL generated for userId=${userId} (PKCE S256) scopes=user.info.basic,video.upload,video.list`);
+    this.logger.log(`[TikTok] Auth URL generated for userId=${userId} (PKCE S256) scopes=user.info.basic,video.publish,video.upload,video.list`);
     return url;
   }
 
@@ -251,6 +251,20 @@ export class TiktokProvider extends SocialAbstract {
       `(token=${accessToken.substring(0, 10)}...)`,
     );
 
+    // Query creator info to get allowed privacy levels for this account
+    const creatorRes = await fetch(`${this.API_BASE}/v2/post/publish/creator_info/query/`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const creatorData = await creatorRes.json() as {
+      data?: { privacy_level_options?: string[] };
+      error?: { code?: string; message?: string };
+    };
+    const privacyOptions = creatorData.data?.privacy_level_options ?? [];
+    const privacyLevel = privacyOptions.includes('PUBLIC_TO_EVERYONE')
+      ? 'PUBLIC_TO_EVERYONE'
+      : (privacyOptions[0] ?? 'SELF_ONLY');
+    this.logger.log(`[TikTok] Creator privacy options: ${JSON.stringify(privacyOptions)}, using: ${privacyLevel}`);
+
     // Init upload
     const initRes = await fetch(`${this.API_BASE}/v2/post/publish/video/init/`, {
       method: 'POST',
@@ -261,7 +275,7 @@ export class TiktokProvider extends SocialAbstract {
       body: JSON.stringify({
         post_info: {
           title:           content.text,
-          privacy_level:   'PUBLIC_TO_EVERYONE',
+          privacy_level:   privacyLevel,
           disable_duet:    false,
           disable_comment: false,
           disable_stitch:  false,
