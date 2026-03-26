@@ -56,7 +56,7 @@ export class TiktokProvider extends SocialAbstract {
     const params = new URLSearchParams({
       client_key:            this.config.get<string>('TIKTOK_CLIENT_KEY', ''),
       redirect_uri:          this.config.get<string>('TIKTOK_REDIRECT_URI', ''),
-      scope:                 'user.info.basic,video.upload,video.list',
+      scope:                 'user.info.basic,video.publish,video.upload,video.list',
       response_type:         'code',
       state:                 userId,
       code_challenge:        codeChallenge,
@@ -64,7 +64,7 @@ export class TiktokProvider extends SocialAbstract {
     });
 
     const url = `${this.AUTH_BASE}/v2/auth/authorize?${params}`;
-    this.logger.log(`[TikTok] Auth URL generated for userId=${userId} (PKCE S256) scopes=user.info.basic,video.upload,video.list`);
+    this.logger.log(`[TikTok] Auth URL generated for userId=${userId} (PKCE S256) scopes=user.info.basic,video.publish,video.upload,video.list`);
     return url;
   }
 
