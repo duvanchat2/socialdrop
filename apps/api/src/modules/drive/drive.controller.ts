@@ -72,6 +72,7 @@ export class DriveController {
 
     try {
       await this.driveService.handleOAuthCallback(code, userId);
+      this.logger.log(`[Drive] OAuth callback OK — token saved to DB for userId=${userId}`);
       res.redirect(`${frontendUrl}/drive?connected=true`);
     } catch (err: any) {
       this.logger.error(`Drive OAuth callback error for user ${userId}`, err);

@@ -1,26 +1,42 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, API_URL } from '@/lib/api';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-interface DriveStatus {
+interface DriveConfig {
   id: string; folderId: string; folderName?: string;
   syncEnabled: boolean; lastSyncAt?: string; pollingInterval: number;
+}
+interface DriveStatus {
+  isConnected: boolean;
+  configs: DriveConfig[];
 }
 
 export default function DrivePage() {
   const qc = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [folderId, setFolderId] = useState('');
   const [userId] = useState('demo-user');
 
   const statusQuery = useQuery({
     queryKey: ['drive-status'],
-    queryFn: () => apiFetch<DriveStatus[]>(`/api/drive/status?userId=${userId}`),
+    queryFn: () => apiFetch<DriveStatus>(`/api/drive/status?userId=${userId}`),
   });
+
+  // After OAuth redirect back with ?connected=true, refetch status and clean URL
+  useEffect(() => {
+    if (searchParams.get('connected') === 'true') {
+      qc.invalidateQueries({ queryKey: ['drive-status'] });
+      toast.success('Google Drive conectado correctamente');
+      router.replace('/drive');
+    }
+  }, [searchParams, qc, router]);
 
   const configureMutation = useMutation({
     mutationFn: (data: { folderId: string }) =>
@@ -41,7 +57,7 @@ export default function DrivePage() {
     onError: (e) => toast.error(`Error: ${e.message}`),
   });
 
-  const connected = (statusQuery.data?.length ?? 0) > 0;
+  const connected = statusQuery.data?.isConnected ?? false;
 
   const CSV_EXAMPLE = `caption,scheduled_date,platforms,media_files
 "¡Nuevo producto disponible! 🎉",2026-04-01T10:00:00Z,"instagram,facebook","photo1.jpg,photo2.jpg"
@@ -61,7 +77,7 @@ export default function DrivePage() {
             <p className="font-medium">{connected ? 'Google Drive conectado' : 'No conectado'}</p>
             <p className="text-xs text-gray-400">
               {connected
-                ? statusQuery.data?.[0]?.folderName ?? statusQuery.data?.[0]?.folderId
+                ? statusQuery.data?.configs[0]?.folderName ?? statusQuery.data?.configs[0]?.folderId ?? 'Autenticado — configura una carpeta'
                 : 'Conecta tu Google Drive para importar posts'}
             </p>
           </div>
@@ -101,7 +117,7 @@ export default function DrivePage() {
       )}
 
       {/* Sync status */}
-      {statusQuery.data?.map(config => (
+      {statusQuery.data?.configs.map(config => (
         <div key={config.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
           <div className="flex justify-between items-center">
             <h2 className="font-semibold">Estado del Sync</h2>

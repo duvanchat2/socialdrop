@@ -121,17 +121,21 @@ export class DriveService {
   }
 
   async getSyncStatus(userId: string) {
-    return this.prisma.driveConfig.findMany({
-      where: { userId, syncEnabled: true },
-      select: {
-        id: true,
-        folderId: true,
-        folderName: true,
-        syncEnabled: true,
-        lastSyncAt: true,
-        pollingInterval: true,
-      },
-    });
+    const [configs, anyConfig] = await Promise.all([
+      this.prisma.driveConfig.findMany({
+        where: { userId, syncEnabled: true },
+        select: {
+          id: true,
+          folderId: true,
+          folderName: true,
+          syncEnabled: true,
+          lastSyncAt: true,
+          pollingInterval: true,
+        },
+      }),
+      this.prisma.driveConfig.findFirst({ where: { userId } }),
+    ]);
+    return { isConnected: !!anyConfig, configs };
   }
 
   async triggerManualSync(configId: string) {
