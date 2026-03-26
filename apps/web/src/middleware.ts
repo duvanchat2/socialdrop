@@ -3,7 +3,7 @@ import { createHmac } from 'crypto';
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'change-this-secret';
 const COOKIE_NAME = 'sd_sess';
-const PUBLIC_PATHS = ['/login', '/api/auth'];
+const PUBLIC_PATHS = ['/login', '/auth'];
 
 function expectedToken(): string {
   return createHmac('sha256', SESSION_SECRET).update('authenticated').digest('hex');
