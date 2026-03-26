@@ -260,47 +260,53 @@ export class TiktokProvider extends SocialAbstract {
       error?: { code?: string; message?: string };
     };
     const privacyOptions = creatorData.data?.privacy_level_options ?? [];
-    const privacyLevel = privacyOptions.includes('PUBLIC_TO_EVERYONE')
+    let privacyLevel = privacyOptions.includes('PUBLIC_TO_EVERYONE')
       ? 'PUBLIC_TO_EVERYONE'
       : (privacyOptions[0] ?? 'SELF_ONLY');
     this.logger.log(`[TikTok] Creator privacy options: ${JSON.stringify(privacyOptions)}, using: ${privacyLevel}`);
 
-    // Init upload
-    const initRes = await fetch(`${this.API_BASE}/v2/post/publish/video/init/`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8',
-      },
-      body: JSON.stringify({
-        post_info: {
-          title:           content.text,
-          privacy_level:   privacyLevel,
-          disable_duet:    false,
-          disable_comment: false,
-          disable_stitch:  false,
+    // Init upload — may retry once with SELF_ONLY if app is unaudited
+    let initData: { data?: { publish_id: string; upload_url: string }; error?: { code?: string; message?: string } };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const initRes = await fetch(`${this.API_BASE}/v2/post/publish/video/init/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json; charset=UTF-8',
         },
-        source_info: {
-          source:            'FILE_UPLOAD',
-          video_size:        videoSize,
-          chunk_size:        chunkSize,
-          total_chunk_count: totalChunks,
-        },
-      }),
-    });
+        body: JSON.stringify({
+          post_info: {
+            title:           content.text,
+            privacy_level:   privacyLevel,
+            disable_duet:    false,
+            disable_comment: false,
+            disable_stitch:  false,
+          },
+          source_info: {
+            source:            'FILE_UPLOAD',
+            video_size:        videoSize,
+            chunk_size:        chunkSize,
+            total_chunk_count: totalChunks,
+          },
+        }),
+      });
 
-    this.logger.log(`[TikTok] Video init response status: ${initRes.status}`);
+      this.logger.log(`[TikTok] Video init response status: ${initRes.status} (privacy=${privacyLevel})`);
+      if (initRes.status === 401) throw new RefreshTokenError();
 
-    if (initRes.status === 401) throw new RefreshTokenError();
+      initData = await initRes.json() as typeof initData;
 
-    const initData = await initRes.json() as {
-      data?: { publish_id: string; upload_url: string };
-      error?: { code?: string; message?: string };
-    };
+      if (initData.error?.code === 'unaudited_client_can_only_post_to_private_accounts' && privacyLevel !== 'SELF_ONLY') {
+        this.logger.warn('[TikTok] App is unaudited — retrying with SELF_ONLY privacy');
+        privacyLevel = 'SELF_ONLY';
+        continue;
+      }
+      break;
+    }
 
-    if (!initData.data?.publish_id || !initData.data?.upload_url) {
-      this.logger.error(`[TikTok] Video init failed — full response: ${JSON.stringify(initData)}`);
-      throw new Error(`TikTok video init failed: ${initData.error?.message ?? JSON.stringify(initData)}`);
+    if (!initData!.data?.publish_id || !initData!.data?.upload_url) {
+      this.logger.error(`[TikTok] Video init failed — full response: ${JSON.stringify(initData!)}`);
+      throw new Error(`TikTok video init failed: ${initData!.error?.message ?? JSON.stringify(initData!)}`);
     }
 
     // Upload chunks
@@ -311,7 +317,7 @@ export class TiktokProvider extends SocialAbstract {
 
       this.logger.debug(`[TikTok] Uploading chunk ${i + 1}/${totalChunks} bytes ${start}-${end - 1}/${videoSize}`);
 
-      const uploadRes = await fetch(initData.data.upload_url, {
+      const uploadRes = await fetch(initData!.data!.upload_url, {
         method: 'PUT',
         headers: {
           'Content-Type':   'video/mp4',
@@ -331,7 +337,7 @@ export class TiktokProvider extends SocialAbstract {
       this.logger.log(`[TikTok] Chunk ${i + 1}/${totalChunks} uploaded (${uploadRes.status})`);
     }
 
-    return this.pollPublishStatus(accessToken, initData.data.publish_id, 30);
+    return this.pollPublishStatus(accessToken, initData!.data!.publish_id, 30);
   }
 
   private async postPhoto(accessToken: string, content: PostContent): Promise<PublishResult> {
