@@ -95,37 +95,37 @@ export class TiktokProvider extends SocialAbstract {
 
     if (res.status === 401) throw new RefreshTokenError();
 
+    // TikTok /v2/oauth/token/ returns a flat response (no nested "data" wrapper)
     const data = await res.json() as {
-      data?: {
-        access_token: string;
-        refresh_token: string;
-        open_id: string;
-        expires_in: number;
-        refresh_expires_in?: number;
-        scope?: string;
-      };
+      access_token?: string;
+      refresh_token?: string;
+      open_id?: string;
+      expires_in?: number;
+      refresh_expires_in?: number;
+      scope?: string;
+      token_type?: string;
       error?: string;
       error_description?: string;
     };
 
-    if (!data.data?.access_token) {
+    if (!data.access_token) {
       this.logger.error(`[TikTok] Token exchange failed — full response: ${JSON.stringify(data)}`);
       throw new Error(`TikTok auth failed: ${data.error_description ?? data.error ?? JSON.stringify(data)}`);
     }
 
     this.logger.log(
-      `[TikTok] Token exchange OK — access_token=${data.data.access_token.substring(0, 10)}... ` +
-      `refresh_token=${data.data.refresh_token ? 'present' : 'MISSING'} ` +
-      `open_id=${data.data.open_id} ` +
-      `expires_in=${data.data.expires_in}s ` +
-      `scope=${data.data.scope ?? 'not returned'}`,
+      `[TikTok] Token exchange OK — access_token=${data.access_token.substring(0, 10)}... ` +
+      `refresh_token=${data.refresh_token ? 'present' : 'MISSING'} ` +
+      `open_id=${data.open_id} ` +
+      `expires_in=${data.expires_in}s ` +
+      `scope=${data.scope ?? 'not returned'}`,
     );
 
     // Fetch user display name
-    this.logger.debug(`[TikTok] Fetching user info with access_token=${data.data.access_token.substring(0, 10)}...`);
+    this.logger.debug(`[TikTok] Fetching user info with access_token=${data.access_token.substring(0, 10)}...`);
     const userRes = await fetch(
       `${this.API_BASE}/v2/user/info/?fields=display_name,username`,
-      { headers: { Authorization: `Bearer ${data.data.access_token}` } },
+      { headers: { Authorization: `Bearer ${data.access_token}` } },
     );
 
     this.logger.log(`[TikTok] User info response status: ${userRes.status}`);
@@ -141,16 +141,16 @@ export class TiktokProvider extends SocialAbstract {
     const displayName =
       userData.data?.user?.display_name ??
       userData.data?.user?.username ??
-      data.data.open_id;
+      data.open_id!;
 
-    this.logger.log(`[TikTok] ✓ Authenticated as ${displayName} (open_id=${data.data.open_id})`);
+    this.logger.log(`[TikTok] ✓ Authenticated as ${displayName} (open_id=${data.open_id})`);
 
     return {
-      accessToken:  data.data.access_token,
-      refreshToken: data.data.refresh_token,
-      profileId:    data.data.open_id,
+      accessToken:  data.access_token,
+      refreshToken: data.refresh_token,
+      profileId:    data.open_id!,
       accountName:  displayName,
-      tokenExpiry:  new Date(Date.now() + data.data.expires_in * 1000),
+      tokenExpiry:  new Date(Date.now() + data.expires_in! * 1000),
     };
   }
 
@@ -172,26 +172,29 @@ export class TiktokProvider extends SocialAbstract {
 
     if (res.status === 401) throw new RefreshTokenError();
 
+    // TikTok /v2/oauth/token/ returns a flat response (no nested "data" wrapper)
     const data = await res.json() as {
-      data?: { access_token: string; expires_in: number; refresh_token?: string };
+      access_token?: string;
+      expires_in?: number;
+      refresh_token?: string;
       error?: string;
       error_description?: string;
     };
 
-    if (!data.data?.access_token) {
+    if (!data.access_token) {
       this.logger.error(`[TikTok] Token refresh failed — full response: ${JSON.stringify(data)}`);
       throw new RefreshTokenError(`TikTok token refresh failed: ${data.error_description ?? data.error}`);
     }
 
     this.logger.log(
-      `[TikTok] Token refresh OK — new access_token=${data.data.access_token.substring(0, 10)}... ` +
-      `expires_in=${data.data.expires_in}s`,
+      `[TikTok] Token refresh OK — new access_token=${data.access_token.substring(0, 10)}... ` +
+      `expires_in=${data.expires_in}s`,
     );
 
     return {
-      accessToken:  data.data.access_token,
-      refreshToken: data.data.refresh_token,
-      tokenExpiry:  new Date(Date.now() + data.data.expires_in * 1000),
+      accessToken:  data.access_token,
+      refreshToken: data.refresh_token,
+      tokenExpiry:  new Date(Date.now() + data.expires_in! * 1000),
     };
   }
 
