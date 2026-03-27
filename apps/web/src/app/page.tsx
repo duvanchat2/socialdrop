@@ -4,10 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { PlatformIcon, Platform } from '@/components/PlatformIcon';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { Loader2, X, RefreshCw, AlertCircle } from 'lucide-react';
+import { EditPostModal, EditablePost } from '@/components/EditPostModal';
+import { Loader2, X, RefreshCw, AlertCircle, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+
+function fmtBogota(iso: string) {
+  return new Date(iso).toLocaleString('es-CO', {
+    timeZone: 'America/Bogota',
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
 
 interface StatsOverview { published: number; pending: number; failed: number; total: number; today: number; }
 
@@ -31,6 +38,7 @@ export default function DashboardPage() {
   const userId = 'demo-user';
   const qc = useQueryClient();
   const [showFailedDrawer, setShowFailedDrawer] = useState(false);
+  const [editPost, setEditPost] = useState<EditablePost | null>(null);
 
   const stats = useQuery({
     queryKey: ['stats'],
@@ -106,13 +114,14 @@ export default function DashboardPage() {
               <tr className="text-gray-400 text-left">
                 <th className="px-4 py-3 font-medium">Caption</th>
                 <th className="px-4 py-3 font-medium hidden md:table-cell">Plataformas</th>
-                <th className="px-4 py-3 font-medium hidden lg:table-cell">Fecha</th>
+                <th className="px-4 py-3 font-medium hidden lg:table-cell">Fecha (Bogotá)</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
               {(posts.data ?? []).map(post => (
-                <tr key={post.id} className="border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer">
+                <tr key={post.id} className="border-t border-gray-800 hover:bg-gray-800/50">
                   <td className="px-4 py-3 max-w-xs truncate">{post.content}</td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <div className="flex gap-1 flex-wrap">
@@ -122,15 +131,28 @@ export default function DashboardPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell text-gray-400">
-                    {format(new Date(post.scheduledAt), 'dd MMM yyyy HH:mm', { locale: es })}
+                    {fmtBogota(post.scheduledAt)}
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={post.status} /></td>
+                  <td className="px-4 py-3">
+                    {(post.status === 'SCHEDULED' || post.status === 'ERROR' || post.status === 'PENDING') && (
+                      <button
+                        onClick={() => setEditPost(post as EditablePost)}
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      <EditPostModal post={editPost} onClose={() => setEditPost(null)} />
 
       {/* ── Failed Posts Drawer ── */}
       {showFailedDrawer && (
@@ -220,7 +242,7 @@ export default function DashboardPage() {
                     {/* Date & Retry */}
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-xs text-gray-500">
-                        {format(new Date(post.scheduledAt), 'dd MMM yyyy HH:mm', { locale: es })}
+                        {fmtBogota(post.scheduledAt)}
                       </span>
                       <button
                         onClick={() => retryMutation.mutate(post.id)}

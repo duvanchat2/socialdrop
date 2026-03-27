@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
-import { X } from 'lucide-react';
+import { EditPostModal, EditablePost } from '@/components/EditPostModal';
+import { X, Pencil } from 'lucide-react';
 
 const PLATFORM_COLORS: Record<string, string> = {
   FACEBOOK: '#1877F2', INSTAGRAM: '#E1306C', TWITTER: '#1DA1F2',
@@ -62,6 +63,7 @@ function FullCalendarWrapper({ events, onEventClick }: { events: CalendarEvent[]
 export default function CalendarPage() {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Post | null>(null);
+  const [editPost, setEditPost]  = useState<EditablePost | null>(null);
 
   const { data: posts = [] } = useQuery({
     queryKey: ['posts-all'],
@@ -111,9 +113,23 @@ export default function CalendarPage() {
             <p className="text-gray-300 text-sm">{selected.content}</p>
             <div className="flex items-center gap-2">
               <StatusBadge status={selected.status} />
-              <span className="text-xs text-gray-400">{new Date(selected.scheduledAt).toLocaleString('es')}</span>
+              <span className="text-xs text-gray-400">
+                {new Date(selected.scheduledAt).toLocaleString('es-CO', {
+                  timeZone: 'America/Bogota',
+                  day: '2-digit', month: 'short', year: 'numeric',
+                  hour: '2-digit', minute: '2-digit',
+                })}
+              </span>
             </div>
             <div className="flex gap-2 pt-2">
+              {(selected.status === 'SCHEDULED' || selected.status === 'ERROR' || selected.status === 'PENDING') && (
+                <button
+                  onClick={() => { setEditPost(selected as EditablePost); setSelected(null); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 rounded-lg text-sm font-medium"
+                >
+                  <Pencil size={14} /> Editar
+                </button>
+              )}
               {selected.status === 'ERROR' && (
                 <button
                   onClick={() => retryMutation.mutate(selected.id)}
@@ -132,6 +148,7 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+      <EditPostModal post={editPost} onClose={() => setEditPost(null)} />
     </div>
   );
 }

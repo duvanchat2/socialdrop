@@ -1,5 +1,5 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { PrismaService } from '@socialdrop/prisma';
@@ -11,7 +11,7 @@ interface SchedulerJobData {
 }
 
 @Processor('post-scheduler')
-export class PostSchedulerProcessor extends WorkerHost {
+export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
   private readonly logger = new Logger(PostSchedulerProcessor.name);
 
   constructor(
@@ -20,6 +20,16 @@ export class PostSchedulerProcessor extends WorkerHost {
     @InjectQueue('post-scheduler') private readonly schedulerQueue: Queue,
   ) {
     super();
+  }
+
+  async onModuleInit() {
+    const jobs = await this.schedulerQueue.getRepeatableJobs();
+    if (!jobs.some(j => j.name === 'scan')) {
+      await this.schedulerQueue.add('scan', { type: 'scan' }, { repeat: { every: 60_000 } });
+      this.logger.log('[Scheduler] Recurring scan job registered (every 60s)');
+    } else {
+      this.logger.log('[Scheduler] Recurring scan job already active');
+    }
   }
 
   async process(job: Job<SchedulerJobData>): Promise<unknown> {
@@ -35,6 +45,7 @@ export class PostSchedulerProcessor extends WorkerHost {
   }
 
   private async scanScheduledPosts() {
+    this.logger.log(`[Scheduler] Scanning at ${new Date().toISOString()}, checking pending posts...`);
     const pendingPosts = await this.prisma.postIntegration.findMany({
       where: {
         status: 'PENDING',

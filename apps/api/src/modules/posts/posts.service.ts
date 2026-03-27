@@ -63,7 +63,7 @@ export class PostsService {
     await this.schedulerQueue.add(
       'scan',
       { type: 'scan' },
-      { repeat: { every: 60000 }, jobId: 'global-scan', deduplication: { id: 'global-scan' } },
+      { repeat: { every: 60_000 } },
     );
 
     this.logger.log(`Post created: ${post.id} scheduled for ${post.scheduledAt}`);
