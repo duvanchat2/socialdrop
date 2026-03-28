@@ -5,27 +5,51 @@ import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import {
-  LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid,
+  LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid, Upload, Briefcase, BarChart2,
 } from 'lucide-react';
 
 const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
   ssr: false,
 });
 
-const NAV = [
+const NAV_MAIN = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/calendar', label: 'Calendario', icon: Calendar },
   { href: '/posts/new', label: 'Nuevo Post', icon: PlusSquare },
   { href: '/content', label: 'Contenido', icon: LayoutGrid },
+  { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
   { href: '/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/integrations', label: 'Integraciones', icon: Settings },
+];
+
+const NAV_SETTINGS = [
+  { href: '/settings/brand', label: 'Perfil de marca', icon: Briefcase },
+  { href: '/settings/strategy', label: 'Estrategia', icon: BarChart2 },
 ];
 
 function NavLinks({ onClose }: { onClose: () => void }) {
   const pathname = usePathname();
   return (
     <>
-      {NAV.map(({ href, label, icon: Icon }) => (
+      {NAV_MAIN.map(({ href, label, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          onClick={onClose}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            pathname === href
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+          }`}
+        >
+          <Icon size={16} />
+          {label}
+        </Link>
+      ))}
+      <div className="pt-4 pb-1">
+        <p className="px-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Configuración</p>
+      </div>
+      {NAV_SETTINGS.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}

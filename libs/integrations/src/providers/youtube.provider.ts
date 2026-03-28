@@ -76,15 +76,15 @@ export class YoutubeProvider extends SocialAbstract {
   }
 
   async post(accessToken: string, content: PostContent): Promise<PublishResult> {
+    if (!content.mediaUrls || content.mediaUrls.length === 0) {
+      throw new Error('YouTube requires a video URL to post');
+    }
+
     const delays = [1000, 5000, 15000];
     let lastError: Error = new Error('Unknown error');
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        if (!content.mediaUrls || content.mediaUrls.length === 0) {
-          throw new Error('YouTube requires a video URL to post');
-        }
-
         const result = await this.uploadVideo(accessToken, content);
         this.logger.log(`[YouTube] ✓ Published postId=${result.platformPostId}`);
         return result;
@@ -107,11 +107,13 @@ export class YoutubeProvider extends SocialAbstract {
 
     const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
-    // Determine if this is a Short (title hint: include #Shorts)
-    const isShort = content.text?.toLowerCase().includes('#short') ?? false;
-    const title = isShort && !content.text.includes('#Shorts')
-      ? `${content.text} #Shorts`
-      : content.text;
+    // Use metadata.youtube fields if provided, otherwise fall back to content.text
+    const ytMeta = content.metadata?.youtube;
+    const rawTitle = ytMeta?.title ?? content.text;
+    const isShort = rawTitle.toLowerCase().includes('#short') ?? false;
+    const title = isShort && !rawTitle.includes('#Shorts')
+      ? `${rawTitle} #Shorts`
+      : rawTitle;
 
     // Fetch the video from URL and stream it
     const videoUrl = content.mediaUrls![0];
@@ -128,8 +130,9 @@ export class YoutubeProvider extends SocialAbstract {
       requestBody: {
         snippet: {
           title: title.substring(0, 100),
-          description: content.text,
+          description: ytMeta?.description ?? content.text,
           categoryId: '22', // People & Blogs
+          ...(ytMeta?.tags?.length ? { tags: ytMeta.tags } : {}),
         },
         status: {
           privacyStatus: 'public',

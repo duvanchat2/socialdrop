@@ -83,6 +83,7 @@ export default function DashboardPage() {
         {STAT_CARDS.map(({ label, value, color, clickable }) => (
           <div
             key={label}
+            data-testid={`stat-card-${label.toLowerCase().replace(/\s+/g, '-')}`}
             onClick={() => clickable && setShowFailedDrawer(true)}
             className={`bg-gray-900 border border-gray-800 rounded-xl p-4 transition-all ${
               clickable ? 'cursor-pointer hover:border-red-800 hover:bg-gray-800/80' : ''
@@ -137,6 +138,7 @@ export default function DashboardPage() {
                   <td className="px-4 py-3">
                     {(post.status === 'SCHEDULED' || post.status === 'ERROR' || post.status === 'PENDING') && (
                       <button
+                        data-testid={`edit-post-btn-${post.id}`}
                         onClick={() => setEditPost(post as EditablePost)}
                         className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
                         title="Editar"

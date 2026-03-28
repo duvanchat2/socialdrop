@@ -95,7 +95,7 @@ export function EditPostModal({ post, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div data-testid="edit-post-modal" className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="font-semibold text-lg">Editar Post</h3>
@@ -166,6 +166,7 @@ export function EditPostModal({ post, onClose }: Props) {
           </button>
           {canEdit && (
             <button
+              data-testid="save-post-btn"
               onClick={handleSave}
               disabled={updateMutation.isPending}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium"
