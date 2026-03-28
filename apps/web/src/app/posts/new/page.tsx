@@ -152,6 +152,7 @@ export default function NewPostPage() {
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">Caption</label>
           <textarea
+            data-testid="caption-input"
             className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
             rows={5}
             placeholder="Escribe tu caption aquí..."
@@ -249,6 +250,7 @@ export default function NewPostPage() {
               <button
                 type="button"
                 key={p.id}
+                data-testid={`platform-${p.id.toLowerCase()}`}
                 onClick={() => togglePlatform(p.id)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                   selectedPlatforms.includes(p.id)
@@ -271,6 +273,7 @@ export default function NewPostPage() {
               <input
                 type="checkbox"
                 className="rounded"
+                data-testid="publish-now-checkbox"
                 checked={publishNow}
                 onChange={e => setPublishNow(e.target.checked)}
               />
@@ -289,6 +292,7 @@ export default function NewPostPage() {
 
         <button
           type="submit"
+          data-testid="submit-post-btn"
           disabled={createPost.isPending || uploadingCount > 0}
           className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl font-medium text-sm transition-colors"
         >

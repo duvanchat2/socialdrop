@@ -18,6 +18,13 @@ export interface PostContent {
   text: string;
   mediaUrls?: string[];
   mediaType?: MediaType;
+  metadata?: {
+    youtube?: {
+      title?: string;
+      description?: string;
+      tags?: string[];
+    };
+  };
 }
 
 export interface PublishResult {

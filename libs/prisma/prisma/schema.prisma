@@ -137,6 +137,39 @@ enum ContentType {
   YT_LONG
 }
 
+enum Tone {
+  CASUAL
+  FORMAL
+  FUNNY
+  INSPIRATIONAL
+}
+
+model BrandProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  brandName      String   @default("")
+  niche          String   @default("")
+  tone           Tone     @default(CASUAL)
+  alwaysUseWords String[]
+  neverUseWords  String[]
+  fixedHashtags  String[]
+  optimalTimes   Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ContentStrategy {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  dayConfigs Json     @default("[]")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
 model ContentItem {
   id            String      @id @default(cuid())
   type          ContentType

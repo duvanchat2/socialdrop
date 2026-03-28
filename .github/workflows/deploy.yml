@@ -7,10 +7,83 @@ on:
       - main
 
 jobs:
+  # ── Layer 3: Unit tests (Vitest) ─────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Run PostsService unit tests
+        run: cd apps/api && ../../node_modules/.bin/vitest run --config vitest.config.ts
+
+      - name: Run YoutubeProvider unit tests
+        run: cd libs/integrations && ../../node_modules/.bin/vitest run --config vitest.config.ts
+
+  # ── Layer 2: API integration tests (bash) ───────────────────────────────────
+  api-tests:
+    name: API Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: unit-tests
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=libs/prisma/prisma/schema.prisma
+
+      - name: Build API
+        run: npx nx build api --skip-nx-cache
+
+      - name: Start API in background
+        run: |
+          export DATABASE_URL="file:./test.db"
+          export REDIS_HOST=localhost
+          export REDIS_PORT=6379
+          export PORT=3333
+          export UPLOAD_DIRECTORY=./uploads
+          npx prisma migrate deploy --schema=libs/prisma/prisma/schema.prisma || true
+          node dist/apps/api/main.js &
+          echo "API_PID=$!" >> $GITHUB_ENV
+        env:
+          DATABASE_URL: file:./test.db
+
+      - name: Wait and run API tests
+        run: bash scripts/test-api.sh http://localhost:3333
+
+  # ── Deploy (only after tests pass) ──────────────────────────────────────────
   deploy:
     name: Build & Deploy socialdrop
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: [unit-tests, api-tests]
 
     steps:
       - name: Deploy via SSH

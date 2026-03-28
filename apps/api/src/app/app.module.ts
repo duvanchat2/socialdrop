@@ -15,6 +15,9 @@ import { IntegrationsModule } from '../modules/integrations/integrations.module.
 import { MediaModule } from '../modules/media/media.module.js';
 import { StatsModule } from '../modules/stats/stats.module.js';
 import { ContentModule } from '../modules/content/content.module.js';
+import { BrandModule } from '../modules/brand/brand.module.js';
+import { StrategyModule } from '../modules/strategy/strategy.module.js';
+import { BulkModule } from '../modules/bulk/bulk.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -46,6 +49,9 @@ import redisConfig from '../config/redis.config.js';
     MediaModule,
     StatsModule,
     ContentModule,
+    BrandModule,
+    StrategyModule,
+    BulkModule,
   ],
   controllers: [AppController],
   providers: [
