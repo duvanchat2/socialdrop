@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { BrandService, BrandProfileDto } from './brand.service.js';
+import { BrandService } from './brand.service.js';
+import type { BrandProfileDto } from './brand.service.js';
 
 @ApiTags('brand')
 @Controller('brand')

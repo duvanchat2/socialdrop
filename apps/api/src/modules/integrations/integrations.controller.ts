@@ -1,7 +1,7 @@
 import {
-  Controller, Get, Post, Delete, Query, Param, Res, HttpException, HttpStatus,
+  Controller, Get, Delete, Query, Param, Res, HttpException, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { PrismaService } from '@socialdrop/prisma';
 import { IntegrationManager } from '@socialdrop/integrations';

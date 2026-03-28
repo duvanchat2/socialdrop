@@ -31,14 +31,6 @@ export class StatsService {
   }
 
   async getByPlatform(userId: string) {
-    const results = await this.prisma.postIntegration.groupBy({
-      by: ['status'],
-      where: {
-        integration: { userId },
-      },
-      _count: { _all: true },
-    });
-
     const byPlatform = await this.prisma.integration.findMany({
       where: { userId },
       include: {
