@@ -9,5 +9,17 @@
   },
   "enabledPlugins": {
     "nx@nx-claude-plugins": true
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 C:/Users/duvan/OneDrive/Documentos/socialdrop/.claude/hooks/carl-hook.py"
+          }
+        ]
+      }
+    ]
   }
 }

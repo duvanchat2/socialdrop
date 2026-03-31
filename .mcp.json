@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "carl-mcp": {
+      "command": "node",
+      "args": [
+        "C:/Users/duvan/OneDrive/Documentos/socialdrop/.carl/carl-mcp/index.js"
+      ],
+      "type": "stdio"
+    }
+  }
+}

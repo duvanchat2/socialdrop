@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "last_modified": "2026-03-31T05:54:08.608Z",
+  "config": {
+    "devmode": false,
+    "post_compact_gate": true,
+    "global_exclude": [],
+    "context_brackets": {
+      "FRESH": {
+        "enabled": true,
+        "rules": []
+      },
+      "MODERATE": {
+        "enabled": true,
+        "rules": [
+          "Keep responses focused — avoid unnecessary exploration",
+          "Prefer targeted edits over full file rewrites"
+        ]
+      },
+      "DEPLETED": {
+        "enabled": true,
+        "rules": [
+          "Minimize tool calls — batch aggressively",
+          "Skip verbose explanations — action over narration",
+          "Consider suggesting /compact or spawning a subagent for remaining work"
+        ]
+      }
+    },
+    "commands": {}
+  },
+  "domains": {
+    "GLOBAL": {
+      "state": "active",
+      "always_on": true,
+      "recall": [
+        "universal"
+      ],
+      "exclude": [],
+      "rules": [
+        {
+          "id": 0,
+          "text": "NEVER use relative paths in code — use absolute. NEVER use absolute paths when referencing files to user — use relative.",
+          "added": null,
+          "last_reviewed": null,
+          "source": "template"
+        },
+        {
+          "id": 1,
+          "text": "NEVER run independent tool calls sequentially — batch them in parallel.",
+          "added": null,
+          "last_reviewed": null,
+          "source": "template"
+        },
+        {
+          "id": 2,
+          "text": "NEVER mark tasks complete without validation — test everything, require proof.",
+          "added": null,
+          "last_reviewed": null,
+          "source": "template"
+        }
+      ],
+      "decisions": []
+    },
+    "DEVELOPMENT": {
+      "state": "active",
+      "always_on": false,
+      "recall": [
+        "write code for",
+        "fix this bug",
+        "implement this feature",
+        "build this component",
+        "refactor this",
+        "add this endpoint",
+        "programming task",
+        "code review"
+      ],
+      "exclude": [],
+      "rules": [],
+      "decisions": []
+    },
+    "NESTJS": {
+      "state": "active",
+      "always_on": false,
+      "recall": [
+        "api",
+        "controller",
+        "service",
+        "module",
+        "nestjs",
+        "backend",
+        "endpoint"
+      ],
+      "exclude": [],
+      "rules": [
+        {
+          "id": 0,
+          "text": "Always validate DTOs with class-validator",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 1,
+          "text": "Use @ApiTags and @ApiOperation Swagger decorators",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 2,
+          "text": "After changes run: npx nx build api --skip-nx-cache",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 3,
+          "text": "Register new modules in AppModule before testing",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        }
+      ],
+      "decisions": []
+    },
+    "NEXTJS": {
+      "state": "active",
+      "always_on": false,
+      "recall": [
+        "frontend",
+        "page",
+        "component",
+        "ui",
+        "web",
+        "nextjs",
+        "react"
+      ],
+      "exclude": [],
+      "rules": [
+        {
+          "id": 0,
+          "text": "Use suppressHydrationWarning on body tag",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 1,
+          "text": "Dynamic imports for browser-only components (ssr:false)",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 2,
+          "text": "After changes run: npx nx build web --skip-nx-cache",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 3,
+          "text": "NEXT_PUBLIC_ prefix required for client-side env vars",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        }
+      ],
+      "decisions": []
+    },
+    "DEPLOY": {
+      "state": "active",
+      "always_on": false,
+      "recall": [
+        "deploy",
+        "vps",
+        "production",
+        "pm2",
+        "nginx",
+        "solokids.shop"
+      ],
+      "exclude": [],
+      "rules": [
+        {
+          "id": 0,
+          "text": "VPS is at /opt/socialdrop, SSH as root",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 1,
+          "text": "After push: git pull && nx build && pm2 restart all",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 2,
+          "text": "Never touch other apps: n8n, chatwoot, openclaw",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 3,
+          "text": "APP_URL=https://solokids.shop in production .env",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        }
+      ],
+      "decisions": []
+    },
+    "PRISMA": {
+      "state": "active",
+      "always_on": false,
+      "recall": [
+        "schema",
+        "migration",
+        "model",
+        "database",
+        "prisma"
+      ],
+      "exclude": [],
+      "rules": [
+        {
+          "id": 0,
+          "text": "Schema is at libs/prisma/prisma/schema.prisma",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 1,
+          "text": "After schema changes: prisma migrate dev",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        },
+        {
+          "id": 2,
+          "text": "Client generated in libs/prisma/src/",
+          "added": "2026-03-31",
+          "last_reviewed": null,
+          "source": "manual"
+        }
+      ],
+      "decisions": []
+    }
+  },
+  "staging": []
+}

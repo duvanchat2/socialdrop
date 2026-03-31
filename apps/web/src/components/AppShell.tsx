@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import {
-  LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid, Upload, Briefcase, BarChart2,
+  LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid,
+  Upload, Briefcase, BarChart2, BotMessageSquare,
 } from 'lucide-react';
 
 const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
@@ -20,6 +21,7 @@ const NAV_MAIN = [
   { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
   { href: '/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/integrations', label: 'Integraciones', icon: Settings },
+  { href: '/assistant', label: 'Asistente IA', icon: BotMessageSquare },
 ];
 
 const NAV_SETTINGS = [

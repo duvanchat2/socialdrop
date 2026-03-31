@@ -18,6 +18,7 @@ import { ContentModule } from '../modules/content/content.module.js';
 import { BrandModule } from '../modules/brand/brand.module.js';
 import { StrategyModule } from '../modules/strategy/strategy.module.js';
 import { BulkModule } from '../modules/bulk/bulk.module.js';
+import { AssistantModule } from '../modules/assistant/assistant.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -52,6 +53,7 @@ import redisConfig from '../config/redis.config.js';
     BrandModule,
     StrategyModule,
     BulkModule,
+    AssistantModule,
   ],
   controllers: [AppController],
   providers: [

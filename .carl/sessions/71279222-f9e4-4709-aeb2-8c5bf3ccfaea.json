@@ -1,0 +1,19 @@
+{
+  "uuid": "71279222-f9e4-4709-aeb2-8c5bf3ccfaea",
+  "started": "2026-03-31T01:24:25.437893",
+  "cwd": "C:\\Users\\duvan\\OneDrive\\Documentos\\socialdrop",
+  "label": "socialdrop",
+  "title": null,
+  "prompt_count": 1,
+  "last_activity": "2026-03-31T01:24:25.439246",
+  "overrides": {
+    "DEVMODE": null,
+    "GLOBAL_STATE": null,
+    "DEVELOPMENT_STATE": null,
+    "NESTJS_STATE": null,
+    "NEXTJS_STATE": null,
+    "DEPLOY_STATE": null,
+    "PRISMA_STATE": null
+  },
+  "last_context_signature": "b:FRESH|d:False|a:GLOBAL|m:NESTJS,NEXTJS|c:"
+}

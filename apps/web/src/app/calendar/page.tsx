@@ -7,8 +7,19 @@ import { EditPostModal, EditablePost } from '@/components/EditPostModal';
 import { X, Pencil } from 'lucide-react';
 
 const PLATFORM_COLORS: Record<string, string> = {
-  FACEBOOK: '#1877F2', INSTAGRAM: '#E1306C', TWITTER: '#1DA1F2',
-  TIKTOK: '#69C9D0', YOUTUBE: '#FF0000',
+  FACEBOOK: '#1877F2',
+  INSTAGRAM: '#E1306C',
+  TWITTER: '#1DA1F2',
+  TIKTOK: '#000000',
+  YOUTUBE: '#FF0000',
+};
+
+const PLATFORM_LABELS: Record<string, string> = {
+  FACEBOOK: 'Facebook',
+  INSTAGRAM: 'Instagram',
+  TWITTER: 'Twitter / X',
+  TIKTOK: 'TikTok',
+  YOUTUBE: 'YouTube',
 };
 
 interface Post {
@@ -25,12 +36,18 @@ interface CalendarEvent {
   extendedProps: Post;
 }
 
+function getSavedView(): string {
+  if (typeof window === 'undefined') return 'dayGridMonth';
+  return localStorage.getItem('calendar-view') ?? 'dayGridMonth';
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function FullCalendarWrapper({ events, onEventClick }: { events: CalendarEvent[]; onEventClick: (info: any) => void }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [FullCalCmp, setFC] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [plugins, setPlugins] = useState<any[]>([]);
+  const [initialView] = useState<string>(getSavedView);
 
   useEffect(() => {
     Promise.all([
@@ -50,12 +67,31 @@ function FullCalendarWrapper({ events, onEventClick }: { events: CalendarEvent[]
   return (
     <FullCalCmp
       plugins={plugins}
-      initialView="dayGridMonth"
+      initialView={initialView}
       events={events}
       eventClick={onEventClick}
       locale="es"
       height="auto"
+      dayMaxEvents={3}
+      moreLinkContent={(args: { num: number }) => `+${args.num} más`}
       headerToolbar={{ left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek' }}
+      datesSet={(info: { view: { type: string } }) => {
+        localStorage.setItem('calendar-view', info.view.type);
+      }}
+      eventDidMount={(info: { el: HTMLElement; event: { extendedProps: Post; start: Date | null } }) => {
+        const post = info.event.extendedProps as Post;
+        const platform = post.integrations[0]?.integration?.platform ?? 'FACEBOOK';
+        const platformLabel = PLATFORM_LABELS[platform] ?? platform;
+        const time = info.event.start
+          ? new Date(info.event.start).toLocaleString('es-CO', {
+              timeZone: 'America/Bogota',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : '';
+        const caption = post.content?.slice(0, 80) ?? '';
+        info.el.title = `${platformLabel} · ${time} · ${caption}`;
+      }}
     />
   );
 }
