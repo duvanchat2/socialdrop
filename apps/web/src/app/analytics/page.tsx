@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import dynamic from 'next/dynamic';
+import { RefreshCw } from 'lucide-react';
 
 // ── Recharts (dynamic, browser-only) ──────────────────────────────────────────
 const RechartsBundle = dynamic(() => import('./RechartsBundle'), { ssr: false });
@@ -12,6 +13,10 @@ interface OverviewStats { published: number; pending: number; failed: number; to
 interface PlatformStat  { platform: string; accountName: string; published: number; pending: number; failed: number; }
 interface Post          { id: string; content: string; status: string; scheduledAt: string; integrations: { integration: { platform: string } }[]; }
 interface Integration   { id: string; platform: string; accountName: string; }
+
+interface MetricFollower  { id: string; platform: string; followersCount: number; followingCount?: number; postsCount?: number; recordedAt: string; }
+interface MetricPost      { id: string; platform: string; platformPostId: string; caption?: string; mediaUrl?: string; likes: number; comments: number; shares: number; saves: number; reach: number; impressions: number; views: number; publishedAt?: string; }
+interface MetricsOverview { totalFollowers: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
 
 type Tab = 'overview' | 'engagement' | 'community' | 'reach' | 'content';
 type Range = '7d' | '14d' | '30d' | '90d';
@@ -101,23 +106,58 @@ const HEATMAP = DAYS.map(d => ({ day: d, hours: HOURS.map(() => Math.round(Math.
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
+  const qc = useQueryClient();
   const [tab, setTab]           = useState<Tab>('overview');
   const [range, setRange]       = useState<Range>('30d');
   const [platform, setPlatform] = useState<string>('ALL');
   const [mounted, setMounted]   = useState(false);
+  const [syncMsg, setSyncMsg]   = useState('');
 
   useEffect(() => { setMounted(true); }, []);
 
-  const { data: overview }            = useQuery({ queryKey: ['stats-overview'],  queryFn: () => apiFetch<OverviewStats>('/api/stats/overview?userId=demo-user') });
-  const { data: byPlatform = [] }     = useQuery({ queryKey: ['stats-platform'],  queryFn: () => apiFetch<PlatformStat[]>('/api/stats/by-platform?userId=demo-user') });
-  const { data: posts = [] }          = useQuery({ queryKey: ['posts-all'],       queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
-  const { data: integrations = [] }   = useQuery({ queryKey: ['integrations'],    queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
+  // ── Existing queries ───────────────────────────────────────────────────────
+  const { data: overview }          = useQuery({ queryKey: ['stats-overview'],  queryFn: () => apiFetch<OverviewStats>('/api/stats/overview?userId=demo-user') });
+  const { data: byPlatform = [] }   = useQuery({ queryKey: ['stats-platform'],  queryFn: () => apiFetch<PlatformStat[]>('/api/stats/by-platform?userId=demo-user') });
+  const { data: posts = [] }        = useQuery({ queryKey: ['posts-all'],       queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
+  const { data: integrations = [] } = useQuery({ queryKey: ['integrations'],    queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
 
+  // ── Real metrics queries ───────────────────────────────────────────────────
+  const { data: metricsFollowers = [] } = useQuery({
+    queryKey: ['metrics-followers'],
+    queryFn: () => apiFetch<MetricFollower[]>('/api/metrics/followers?userId=demo-user'),
+  });
+  const { data: metricsPosts = [] } = useQuery({
+    queryKey: ['metrics-posts', platform],
+    queryFn: () => apiFetch<MetricPost[]>(
+      `/api/metrics/posts?userId=demo-user${platform !== 'ALL' ? `&platform=${platform}` : ''}&limit=25`,
+    ),
+  });
+  const { data: metricsOverview } = useQuery({
+    queryKey: ['metrics-overview', range],
+    queryFn: () => apiFetch<MetricsOverview>(`/api/metrics/overview?userId=demo-user&period=${range}`),
+  });
+
+  // ── Sync mutation ──────────────────────────────────────────────────────────
+  const syncMutation = useMutation({
+    mutationFn: () => apiFetch<{ queued: boolean }>('/api/metrics/sync?userId=demo-user', { method: 'POST' }),
+    onSuccess: () => {
+      setSyncMsg('Sync en cola ✓');
+      setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: ['metrics-followers'] });
+        void qc.invalidateQueries({ queryKey: ['metrics-posts'] });
+        void qc.invalidateQueries({ queryKey: ['metrics-overview'] });
+        setSyncMsg('');
+      }, 3000);
+    },
+    onError: () => setSyncMsg('Error al sincronizar'),
+  });
+
+  // ── Derived data ───────────────────────────────────────────────────────────
   const published      = overview?.published ?? 0;
   const total          = overview?.total ?? 0;
-  const followerData   = makeDays(30, 1240, 80);
+  const followerData   = makeDays(30, metricsOverview?.totalFollowers || 1240, 80);
   const engagementData = makeDays(30, 3.8, 1.5);
-  const reachData      = makeDays(30, 4200, 600);
+  const reachData      = makeDays(30, metricsOverview?.totalReach || 4200, 600);
   const likesData      = makeDays(30, 48, 20);
   const commentsData   = makeDays(30, 12, 8);
   const savesData      = makeDays(30, 22, 10);
@@ -192,6 +232,16 @@ export default function AnalyticsPage() {
               ))}
         </div>
 
+        {/* Sync button */}
+        <button
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-60"
+        >
+          <RefreshCw size={12} className={syncMutation.isPending ? 'animate-spin' : ''} />
+          {syncMsg || 'Sync ahora'}
+        </button>
+
         {/* Date range */}
         <div className="ml-auto flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
           {RANGES.map(r => (
@@ -256,6 +306,9 @@ export default function AnalyticsPage() {
             SectionTitle={SectionTitle}
             PostCard={PostCard}
             HeatCell={HeatCell}
+            metricsFollowers={metricsFollowers}
+            metricsPosts={metricsPosts}
+            metricsOverview={metricsOverview}
           />
         )}
       </div>

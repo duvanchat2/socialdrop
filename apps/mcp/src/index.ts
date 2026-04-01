@@ -173,6 +173,45 @@ const TOOLS: Tool[] = [
       required: ['configId'],
     },
   },
+  {
+    name: 'get_followers',
+    description: 'Get real follower counts per platform from the database (synced from Instagram, Facebook, YouTube)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        platform: { type: 'string', description: 'Optional platform filter: INSTAGRAM | FACEBOOK | YOUTUBE | TIKTOK | TWITTER' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_post_analytics',
+    description: 'Get real post metrics (likes, reach, impressions, comments, shares) synced from social platforms',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        platform: { type: 'string', description: 'Optional platform filter: INSTAGRAM | FACEBOOK | YOUTUBE' },
+        limit: { type: 'number', description: 'Max results to return (default 25)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_metrics_overview',
+    description: 'Get aggregated metrics summary: total followers, reach, engagement, posts for a time period',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['7d', '30d', '90d'], description: 'Time period (default 30d)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'trigger_sync',
+    description: 'Manually trigger a metrics sync from all connected social platforms (Instagram, Facebook, YouTube)',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
 ];
 
 // ─── Server ──────────────────────────────────────────────────────────────────
@@ -259,6 +298,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'sync_drive': {
         const { configId } = args as { configId: string };
         result = await apiPost(`/drive/sync/${configId}`);
+        break;
+      }
+
+      case 'get_followers': {
+        const { platform } = args as { platform?: string };
+        const path = platform ? `/metrics/followers?platform=${platform}` : '/metrics/followers';
+        result = await apiGet(path);
+        break;
+      }
+
+      case 'get_post_analytics': {
+        const { platform, limit } = args as { platform?: string; limit?: number };
+        let path = '/metrics/posts';
+        const params: string[] = [];
+        if (platform) params.push(`platform=${platform}`);
+        if (limit) params.push(`limit=${limit}`);
+        if (params.length) path += `?${params.join('&')}`;
+        result = await apiGet(path);
+        break;
+      }
+
+      case 'get_metrics_overview': {
+        const { period } = args as { period?: string };
+        result = await apiGet(`/metrics/overview${period ? `?period=${period}` : ''}`);
+        break;
+      }
+
+      case 'trigger_sync': {
+        result = await apiPost('/metrics/sync');
         break;
       }
 

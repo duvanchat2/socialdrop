@@ -12,6 +12,10 @@ interface OverviewStats { published: number; pending: number; failed: number; to
 interface PlatformStat  { platform: string; accountName: string; published: number; pending: number; failed: number; }
 interface Post          { id: string; content: string; status: string; scheduledAt: string; integrations: { integration: { platform: string } }[]; }
 
+interface MetricFollower  { id: string; platform: string; followersCount: number; followingCount?: number; postsCount?: number; recordedAt: string; }
+interface MetricPost      { id: string; platform: string; platformPostId: string; caption?: string; mediaUrl?: string; likes: number; comments: number; shares: number; saves: number; reach: number; impressions: number; views: number; publishedAt?: string; }
+interface MetricsOverview { totalFollowers: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
+
 interface Props {
   tab: Tab;
   overview?: OverviewStats;
@@ -34,6 +38,10 @@ interface Props {
   SectionTitle: React.ComponentType<{ children: React.ReactNode }>;
   PostCard: React.ComponentType<{ post: Post }>;
   HeatCell: React.ComponentType<{ value: number }>;
+  // Real metrics from DB
+  metricsFollowers?: MetricFollower[];
+  metricsPosts?: MetricPost[];
+  metricsOverview?: MetricsOverview;
 }
 
 const HOURS_LABELS = ['00', '03', '06', '09', '12', '15', '18', '21'];
@@ -84,13 +92,22 @@ function MiniChart({ data, color, height = 200 }: { data: { date: string; value:
 }
 
 // ── TAB 1: Overview ────────────────────────────────────────────────────────────
-function OverviewTab({ overview, byPlatform, posts, followerData, published, KpiCard, SectionTitle, PostCard }: Props) {
+function OverviewTab({ overview, byPlatform, posts, followerData, published, KpiCard, SectionTitle, PostCard, metricsFollowers, metricsOverview }: Props) {
   const { gridStroke, tooltipStyle } = useChartTheme();
+  const totalFollowers = metricsOverview?.totalFollowers
+    ?? (metricsFollowers && metricsFollowers.length > 0 ? metricsFollowers.reduce((s, m) => s + m.followersCount, 0) : null);
+  const followersDisplay = totalFollowers !== null ? totalFollowers.toLocaleString('es-CO') : '1,247';
+  const totalReach = metricsOverview?.totalReach;
+  const totalImpressions = metricsOverview?.totalImpressions;
+  const engRate = metricsOverview?.avgEngagementRate;
+  const totalLikes = metricsOverview?.totalLikes;
+  const totalComments = metricsOverview?.totalComments;
+
   return (
     <div className="space-y-6">
       <SectionTitle>Audiencia</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon="👥" iconBg="bg-purple-100" label="Seguidores"        value="1,247" sub="+12 esta semana" />
+        <KpiCard icon="👥" iconBg="bg-purple-100" label="Seguidores"        value={followersDisplay} sub={totalFollowers !== null ? 'real · sincronizado' : undefined} />
         <KpiCard icon="📈" iconBg="bg-green-100"  label="Seguidores nuevos" value="124"   sub="+8.3% vs semana ant." />
         <KpiCard icon="🚀" iconBg="bg-teal-100"   label="% Crecimiento"     value="9.9%"  sub="últimos 30 días" />
       </div>
@@ -102,15 +119,15 @@ function OverviewTab({ overview, byPlatform, posts, followerData, published, Kpi
       <SectionTitle>Publicaciones</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard icon="📝" iconBg="bg-indigo-100" label="Posts publicados"      value={published || '--'} />
-        <KpiCard icon="👁️" iconBg="bg-purple-100" label="Vistas / Impresiones"  value="18,420" />
-        <KpiCard icon="📡" iconBg="bg-yellow-100" label="Alcance"               value="9,840" />
+        <KpiCard icon="👁️" iconBg="bg-purple-100" label="Vistas / Impresiones"  value={totalImpressions ? totalImpressions.toLocaleString('es-CO') : '18,420'} />
+        <KpiCard icon="📡" iconBg="bg-yellow-100" label="Alcance"               value={totalReach ? totalReach.toLocaleString('es-CO') : '9,840'} />
       </div>
 
       <SectionTitle>Engagement</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon="💬" iconBg="bg-pink-100"  label="Interacciones en posts"    value="842" />
-        <KpiCard icon="📊" iconBg="bg-green-100" label="Tasa de eng. promedio"     value="3.8%" />
-        <KpiCard icon="🎯" iconBg="bg-teal-100"  label="Eng. promedio en alcance"  value="8.6%" />
+        <KpiCard icon="💬" iconBg="bg-pink-100"  label="Interacciones en posts"   value={totalLikes != null && totalComments != null ? (totalLikes + totalComments).toLocaleString('es-CO') : '842'} />
+        <KpiCard icon="📊" iconBg="bg-green-100" label="Tasa de eng. promedio"    value={engRate ? `${engRate.toFixed(1)}%` : '3.8%'} />
+        <KpiCard icon="🎯" iconBg="bg-teal-100"  label="Eng. promedio en alcance" value="8.6%" />
       </div>
 
       <SectionTitle>Stories</SectionTitle>

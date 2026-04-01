@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { PrismaModule } from '@socialdrop/prisma';
 import { AppController } from './app.controller';
@@ -19,6 +20,7 @@ import { BrandModule } from '../modules/brand/brand.module.js';
 import { StrategyModule } from '../modules/strategy/strategy.module.js';
 import { BulkModule } from '../modules/bulk/bulk.module.js';
 import { AssistantModule } from '../modules/assistant/assistant.module.js';
+import { MetricsModule } from '../modules/metrics/metrics.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -28,6 +30,7 @@ import redisConfig from '../config/redis.config.js';
       isGlobal: true,
       load: [googleConfig, redisConfig],
     }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -54,6 +57,7 @@ import redisConfig from '../config/redis.config.js';
     StrategyModule,
     BulkModule,
     AssistantModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [

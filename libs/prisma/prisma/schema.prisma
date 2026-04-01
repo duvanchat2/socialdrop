@@ -170,6 +170,46 @@ model ContentStrategy {
   @@index([userId])
 }
 
+model PlatformMetrics {
+  id               String   @id @default(cuid())
+  userId           String
+  platform         String
+  followersCount   Int
+  followingCount   Int?
+  postsCount       Int?
+  reachTotal       Int?
+  impressionsTotal Int?
+  engagementRate   Float?
+  recordedAt       DateTime @default(now())
+
+  @@index([userId, platform])
+  @@index([recordedAt])
+}
+
+model PostAnalytics {
+  id             String    @id @default(cuid())
+  postId         String?
+  userId         String
+  platform       String
+  platformPostId String
+  caption        String?
+  mediaUrl       String?
+  likes          Int       @default(0)
+  comments       Int       @default(0)
+  shares         Int       @default(0)
+  saves          Int       @default(0)
+  reach          Int       @default(0)
+  impressions    Int       @default(0)
+  views          Int       @default(0)
+  engagementRate Float?
+  publishedAt    DateTime?
+  recordedAt     DateTime  @default(now())
+
+  @@unique([userId, platform, platformPostId])
+  @@index([userId, platform])
+  @@index([recordedAt])
+}
+
 model ContentItem {
   id            String      @id @default(cuid())
   type          ContentType
