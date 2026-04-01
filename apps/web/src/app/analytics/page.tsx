@@ -28,13 +28,13 @@ const PLATFORM_EMOJI: Record<string, string> = {
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 function KpiCard({ icon, iconBg, label, value, sub }: { icon: string; iconBg: string; label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
       <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl flex-shrink-0 ${iconBg}`}>
         {icon}
       </div>
       <div className="min-w-0">
-        <div className="text-2xl font-bold text-gray-900 leading-tight">{value}</div>
-        <div className="text-sm text-gray-500 font-medium truncate">{label}</div>
+        <div className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">{value}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400 font-medium truncate">{label}</div>
         {sub && <div className="text-xs text-green-500 font-medium">{sub}</div>}
       </div>
     </div>
@@ -43,7 +43,11 @@ function KpiCard({ icon, iconBg, label, value, sub }: { icon: string; iconBg: st
 
 // ── Section header ─────────────────────────────────────────────────────────────
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">{children}</h3>;
+  return (
+    <h3 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">
+      {children}
+    </h3>
+  );
 }
 
 // ── Post thumbnail card ────────────────────────────────────────────────────────
@@ -51,12 +55,12 @@ function PostCard({ post }: { post: Post }) {
   const platform = post.integrations[0]?.integration?.platform ?? 'FACEBOOK';
   const color = PLATFORM_COLORS[platform] ?? '#6366f1';
   return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       <div className="h-28 flex items-center justify-center text-3xl" style={{ background: `${color}22` }}>
         {PLATFORM_EMOJI[platform] ?? '📄'}
       </div>
       <div className="p-3">
-        <p className="text-xs text-gray-600 line-clamp-2">{post.content}</p>
+        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">{post.content}</p>
         <div className="mt-2 flex items-center justify-between">
           <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${color}22`, color }}>
             {platform}
@@ -72,7 +76,7 @@ function PostCard({ post }: { post: Post }) {
 
 // ── Heatmap cell ──────────────────────────────────────────────────────────────
 function HeatCell({ value }: { value: number }) {
-  const bg = value > 70 ? 'bg-red-400' : value > 40 ? 'bg-yellow-300' : value > 10 ? 'bg-green-200' : 'bg-gray-100';
+  const bg = value > 70 ? 'bg-red-400' : value > 40 ? 'bg-yellow-300' : value > 10 ? 'bg-green-200' : 'bg-gray-100 dark:bg-gray-700';
   return <div className={`w-6 h-6 rounded-sm ${bg}`} title={`${value}%`} />;
 }
 
@@ -97,56 +101,61 @@ const HEATMAP = DAYS.map(d => ({ day: d, hours: HOURS.map(() => Math.round(Math.
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const [tab, setTab]         = useState<Tab>('overview');
-  const [range, setRange]     = useState<Range>('30d');
+  const [tab, setTab]           = useState<Tab>('overview');
+  const [range, setRange]       = useState<Range>('30d');
   const [platform, setPlatform] = useState<string>('ALL');
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted]   = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
-  const { data: overview }  = useQuery({ queryKey: ['stats-overview'],  queryFn: () => apiFetch<OverviewStats>('/api/stats/overview?userId=demo-user') });
-  const { data: byPlatform = [] } = useQuery({ queryKey: ['stats-platform'], queryFn: () => apiFetch<PlatformStat[]>('/api/stats/by-platform?userId=demo-user') });
-  const { data: posts = [] }      = useQuery({ queryKey: ['posts-all'],      queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
-  const { data: integrations = [] } = useQuery({ queryKey: ['integrations'], queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
+  const { data: overview }            = useQuery({ queryKey: ['stats-overview'],  queryFn: () => apiFetch<OverviewStats>('/api/stats/overview?userId=demo-user') });
+  const { data: byPlatform = [] }     = useQuery({ queryKey: ['stats-platform'],  queryFn: () => apiFetch<PlatformStat[]>('/api/stats/by-platform?userId=demo-user') });
+  const { data: posts = [] }          = useQuery({ queryKey: ['posts-all'],       queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
+  const { data: integrations = [] }   = useQuery({ queryKey: ['integrations'],    queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
 
-  const published = overview?.published ?? 0;
-  const total     = overview?.total ?? 0;
-  const followerData = makeDays(30, 1240, 80);
+  const published      = overview?.published ?? 0;
+  const total          = overview?.total ?? 0;
+  const followerData   = makeDays(30, 1240, 80);
   const engagementData = makeDays(30, 3.8, 1.5);
-  const reachData = makeDays(30, 4200, 600);
-  const likesData = makeDays(30, 48, 20);
-  const commentsData = makeDays(30, 12, 8);
-  const savesData = makeDays(30, 22, 10);
-  const sharesData = makeDays(30, 8, 5);
-  const gainedLost = DAYS.map(d => ({ day: d, gained: Math.round(Math.random() * 60 + 10), lost: -Math.round(Math.random() * 20) }));
-  const postTypeData = [
-    { type: 'Posts', value: Math.round(total * 0.5) || 4 },
+  const reachData      = makeDays(30, 4200, 600);
+  const likesData      = makeDays(30, 48, 20);
+  const commentsData   = makeDays(30, 12, 8);
+  const savesData      = makeDays(30, 22, 10);
+  const sharesData     = makeDays(30, 8, 5);
+  const gainedLost     = DAYS.map(d => ({ day: d, gained: Math.round(Math.random() * 60 + 10), lost: -Math.round(Math.random() * 20) }));
+  const postTypeData   = [
+    { type: 'Posts',    value: Math.round(total * 0.5) || 4 },
     { type: 'Carrusel', value: Math.round(total * 0.3) || 2 },
-    { type: 'Reels', value: Math.round(total * 0.2) || 1 },
+    { type: 'Reels',    value: Math.round(total * 0.2) || 1 },
   ];
   const postsByDay = DAYS.map(d => ({ day: d, posts: Math.floor(Math.random() * 5) }));
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'overview', label: 'Vista general' },
+    { id: 'overview',   label: 'Vista general' },
     { id: 'engagement', label: 'Engagement' },
-    { id: 'community', label: 'Comunidad' },
-    { id: 'reach', label: 'Alcance' },
-    { id: 'content', label: 'Contenido' },
+    { id: 'community',  label: 'Comunidad' },
+    { id: 'reach',      label: 'Alcance' },
+    { id: 'content',    label: 'Contenido' },
   ];
 
   const RANGES: Range[] = ['7d', '14d', '30d', '90d'];
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #f8f6ff 0%, #f0fff4 100%)' }}>
-      {/* Top bar */}
-      <div className="bg-white border-b border-gray-100 px-6 py-4 flex flex-wrap items-center gap-4 shadow-sm sticky top-0 z-10">
-        <h1 className="text-xl font-bold text-gray-900 mr-4">Analytics</h1>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+
+      {/* ── Top bar ── */}
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-4 flex flex-wrap items-center gap-4 shadow-sm sticky top-0 z-10">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white mr-4">Analytics</h1>
 
         {/* Platform selector */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setPlatform('ALL')}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${platform === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              platform === 'ALL'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
           >
             Todas
           </button>
@@ -155,7 +164,11 @@ export default function AnalyticsPage() {
                 <button
                   key={i.id}
                   onClick={() => setPlatform(i.platform)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${platform === i.platform ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    platform === i.platform
+                      ? 'text-white'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
                   style={platform === i.platform ? { background: PLATFORM_COLORS[i.platform] ?? '#6366f1' } : {}}
                 >
                   <span>{PLATFORM_EMOJI[i.platform]}</span>
@@ -166,7 +179,11 @@ export default function AnalyticsPage() {
                 <button
                   key={p}
                   onClick={() => setPlatform(p)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${platform === p ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                    platform === p
+                      ? 'text-white'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
                   style={platform === p ? { background: PLATFORM_COLORS[p] } : {}}
                 >
                   <span>{PLATFORM_EMOJI[p]}</span>
@@ -176,12 +193,16 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Date range */}
-        <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="ml-auto flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
           {RANGES.map(r => (
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${range === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                range === r
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
             >
               {r}
             </button>
@@ -189,62 +210,54 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="flex">
-        {/* Left sub-nav */}
-        <aside className="w-48 flex-shrink-0 bg-white border-r border-gray-100 min-h-[calc(100vh-65px)] p-3 hidden md:block">
-          <nav className="space-y-1">
-            {TABS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.id ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        {/* Mobile tab bar */}
-        <div className="md:hidden flex overflow-x-auto gap-1 px-4 py-2 bg-white border-b border-gray-100 w-full">
+      {/* ── Horizontal tab bar ── */}
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6">
+        <nav className="flex gap-0 overflow-x-auto">
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${tab === t.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                tab === t.id
+                  ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+              }`}
+            >
               {t.label}
             </button>
           ))}
-        </div>
+        </nav>
+      </div>
 
-        {/* Main content */}
-        <main className="flex-1 p-6 space-y-8 min-w-0">
-          {!mounted ? (
-            <div className="flex items-center justify-center h-64 text-gray-400">Cargando analytics...</div>
-          ) : (
-            <RechartsBundle
-              tab={tab}
-              overview={overview}
-              byPlatform={byPlatform}
-              posts={posts}
-              followerData={followerData}
-              engagementData={engagementData}
-              reachData={reachData}
-              likesData={likesData}
-              commentsData={commentsData}
-              savesData={savesData}
-              sharesData={sharesData}
-              gainedLost={gainedLost}
-              postTypeData={postTypeData}
-              postsByDay={postsByDay}
-              heatmap={HEATMAP}
-              published={published}
-              total={total}
-              KpiCard={KpiCard}
-              SectionTitle={SectionTitle}
-              PostCard={PostCard}
-              HeatCell={HeatCell}
-            />
-          )}
-        </main>
+      {/* ── Content ── */}
+      <div className="p-6 space-y-8 max-w-screen-xl mx-auto">
+        {!mounted ? (
+          <div className="flex items-center justify-center h-64 text-gray-400">Cargando analytics...</div>
+        ) : (
+          <RechartsBundle
+            tab={tab}
+            overview={overview}
+            byPlatform={byPlatform}
+            posts={posts}
+            followerData={followerData}
+            engagementData={engagementData}
+            reachData={reachData}
+            likesData={likesData}
+            commentsData={commentsData}
+            savesData={savesData}
+            sharesData={sharesData}
+            gainedLost={gainedLost}
+            postTypeData={postTypeData}
+            postsByDay={postsByDay}
+            heatmap={HEATMAP}
+            published={published}
+            total={total}
+            KpiCard={KpiCard}
+            SectionTitle={SectionTitle}
+            PostCard={PostCard}
+            HeatCell={HeatCell}
+          />
+        )}
       </div>
     </div>
   );

@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid,
-  Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp,
+  Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon,
 } from 'lucide-react';
+import { useTheme } from './ThemeProvider';
 
 const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
   ssr: false,
@@ -42,7 +43,7 @@ function NavLinks({ onClose }: { onClose: () => void }) {
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
             pathname === href
               ? 'bg-indigo-600 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
           }`}
         >
           <Icon size={16} />
@@ -50,7 +51,9 @@ function NavLinks({ onClose }: { onClose: () => void }) {
         </Link>
       ))}
       <div className="pt-4 pb-1">
-        <p className="px-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Configuración</p>
+        <p className="px-3 text-xs font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+          Configuración
+        </p>
       </div>
       {NAV_SETTINGS.map(({ href, label, icon: Icon }) => (
         <Link
@@ -60,7 +63,7 @@ function NavLinks({ onClose }: { onClose: () => void }) {
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
             pathname === href
               ? 'bg-indigo-600 text-white'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
           }`}
         >
           <Icon size={16} />
@@ -81,18 +84,18 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
         />
       )}
       <aside
-        className={`fixed top-0 left-0 h-full w-56 bg-gray-900 border-r border-gray-800 z-30 flex flex-col transform transition-transform ${
+        className={`fixed top-0 left-0 h-full w-56 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 z-30 flex flex-col transform transition-transform ${
           open ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
-        <div className="p-4 border-b border-gray-800">
-          <span className="text-xl font-bold text-white">SocialDrop</span>
-          <span className="text-xs text-gray-500 ml-1">scheduler</span>
+        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+          <span className="text-xl font-bold text-gray-900 dark:text-white">SocialDrop</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">scheduler</span>
         </div>
         <nav className="flex-1 p-3 space-y-1">
           <NavLinks onClose={onClose} />
         </nav>
-        <div className="p-4 border-t border-gray-800 text-xs text-gray-600">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400 dark:text-gray-600">
           v1.0.0
         </div>
       </aside>
@@ -100,26 +103,41 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <button
+      onClick={toggle}
+      className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+    >
+      {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [queryClient] = useState(() => new QueryClient());
+  const { theme } = useTheme();
 
   return (
     <QueryClientProvider client={queryClient}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="lg:ml-56 min-h-screen flex flex-col">
-        <header className="h-14 border-b border-gray-800 flex items-center px-4 gap-3 bg-gray-900">
+        <header className="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 bg-white dark:bg-gray-900">
           <button
-            className="lg:hidden text-gray-400"
+            className="lg:hidden text-gray-500 dark:text-gray-400"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu size={20} />
           </button>
-          <span className="text-sm text-gray-400 ml-auto">SocialDrop</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-1">SocialDrop</span>
+          <ThemeToggle />
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>
-      <Toaster theme="dark" position="bottom-right" />
+      <Toaster theme={theme} position="bottom-right" />
     </QueryClientProvider>
   );
 }
