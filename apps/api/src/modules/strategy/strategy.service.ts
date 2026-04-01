@@ -30,15 +30,17 @@ export class StrategyService {
     }
     return {
       ...strategy,
-      dayConfigs: strategy.dayConfigs as DayConfig[],
+      dayConfigs: strategy.dayConfigs as unknown as DayConfig[],
     };
   }
 
   async save(userId: string, dayConfigs: DayConfig[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json = dayConfigs as any;
     return this.prisma.contentStrategy.upsert({
       where: { userId },
-      update: { dayConfigs },
-      create: { userId, dayConfigs },
+      update: { dayConfigs: json },
+      create: { userId, dayConfigs: json },
     });
   }
 }
