@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid,
-  Upload, Briefcase, BarChart2, BotMessageSquare,
+  Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp,
 } from 'lucide-react';
 
 const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
@@ -16,6 +16,7 @@ const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
 const NAV_MAIN = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/calendar', label: 'Calendario', icon: Calendar },
+  { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/posts/new', label: 'Nuevo Post', icon: PlusSquare },
   { href: '/content', label: 'Contenido', icon: LayoutGrid },
   { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
