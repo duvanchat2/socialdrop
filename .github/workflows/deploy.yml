@@ -108,6 +108,9 @@ jobs:
             echo "=== Building Web ==="
             npx nx build web --skip-nx-cache
 
+            echo "=== Building MCP server ==="
+            npx nx build mcp --skip-nx-cache
+
             echo "=== Restarting socialdrop services ==="
             pm2 restart socialdrop-api socialdrop-web
             pm2 save

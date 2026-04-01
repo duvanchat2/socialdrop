@@ -1,0 +1,33 @@
+{
+  "name": "mcp",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/mcp/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "target": "node",
+        "compiler": "tsc",
+        "outputPath": "dist/apps/mcp",
+        "main": "apps/mcp/src/index.ts",
+        "tsConfig": "apps/mcp/tsconfig.app.json",
+        "webpackConfig": "apps/mcp/webpack.config.js",
+        "generatePackageJson": false,
+        "outputHashing": "none",
+        "optimization": false
+      },
+      "configurations": {
+        "production": {
+          "optimization": true
+        },
+        "development": {
+          "optimization": false
+        }
+      }
+    }
+  },
+  "tags": []
+}

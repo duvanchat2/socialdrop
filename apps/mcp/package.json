@@ -1,0 +1,11 @@
+{
+  "name": "@org/mcp",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "name": "mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

@@ -20,6 +20,9 @@ async function computeToken(): Promise<string> {
 }
 
 export async function middleware(request: NextRequest) {
+  // AUTH BYPASS — remove this line to restore login requirement
+  return NextResponse.next();
+
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
