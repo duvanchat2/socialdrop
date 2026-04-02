@@ -1,0 +1,49 @@
+name: Night Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      tasks:
+        description: 'Tasks to run (comma separated)'
+        required: true
+        default: 'debug,docs,summary,tests,issues'
+        type: string
+
+jobs:
+  night-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run night agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TASKS: ${{ inputs.tasks }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: node scripts/night-agent.js
+
+      - name: Commit generated docs
+        run: |
+          git config user.name "SocialDrop Night Agent"
+          git config user.email "agent@socialdrop.app"
+          git add CLAUDE.md docs/ || true
+          git diff --staged --quiet || git commit -m "docs(agent): nightly update $(date +%Y-%m-%d)"
+          git push || true
