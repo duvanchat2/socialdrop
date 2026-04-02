@@ -327,18 +327,20 @@ export class MetricsService {
     });
   }
 
-  async getOverview(userId: string, period: string) {
+  async getOverview(userId: string, period: string, platform?: string) {
     const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
     const since = new Date();
     since.setDate(since.getDate() - days);
 
+    const platformFilter = platform ? { platform } : {};
+
     const [metricsRows, postRows] = await Promise.all([
       this.prisma.platformMetrics.findMany({
-        where: { userId, recordedAt: { gte: since } },
+        where: { userId, ...platformFilter, recordedAt: { gte: since } },
         orderBy: { recordedAt: 'desc' },
       }),
       this.prisma.postAnalytics.findMany({
-        where: { userId, recordedAt: { gte: since } },
+        where: { userId, ...platformFilter, recordedAt: { gte: since } },
       }),
     ]);
 

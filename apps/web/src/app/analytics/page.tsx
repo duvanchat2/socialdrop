@@ -30,6 +30,21 @@ const PLATFORM_EMOJI: Record<string, string> = {
   INSTAGRAM: '📸', TIKTOK: '🎵', FACEBOOK: '👥', YOUTUBE: '▶️', TWITTER: '🐦',
 };
 
+const PLATFORM_LABELS: Record<string, string> = {
+  INSTAGRAM: 'Instagram', TIKTOK: 'TikTok', FACEBOOK: 'Facebook',
+  YOUTUBE: 'YouTube', TWITTER: 'Twitter',
+};
+
+// Returns a clean display name — falls back to platform label if accountName is a raw token
+function displayName(accountName: string | null | undefined, platform: string): string {
+  if (!accountName) return PLATFORM_LABELS[platform] ?? platform;
+  // Token strings: start with '-', are very long, contain no spaces, or are all hex/base64-ish
+  if (accountName.startsWith('-') || accountName.length > 40 || /^[A-Za-z0-9+/=_-]{30,}$/.test(accountName)) {
+    return PLATFORM_LABELS[platform] ?? platform;
+  }
+  return accountName;
+}
+
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 function KpiCard({ icon, iconBg, label, value, sub }: { icon: string; iconBg: string; label: string; value: string | number; sub?: string }) {
   return (
@@ -121,20 +136,24 @@ export default function AnalyticsPage() {
   const { data: posts = [] }        = useQuery({ queryKey: ['posts-all'],       queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
   const { data: integrations = [] } = useQuery({ queryKey: ['integrations'],    queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
 
-  // ── Real metrics queries ───────────────────────────────────────────────────
+  // ── Real metrics queries — all filtered by selected platform ──────────────
+  const platformParam = platform !== 'ALL' ? `&platform=${platform}` : '';
+
   const { data: metricsFollowers = [] } = useQuery({
-    queryKey: ['metrics-followers'],
-    queryFn: () => apiFetch<MetricFollower[]>('/api/metrics/followers?userId=demo-user'),
+    queryKey: ['metrics-followers', platform],
+    queryFn: () => apiFetch<MetricFollower[]>(`/api/metrics/followers?userId=demo-user${platformParam}`),
   });
   const { data: metricsPosts = [] } = useQuery({
     queryKey: ['metrics-posts', platform],
     queryFn: () => apiFetch<MetricPost[]>(
-      `/api/metrics/posts?userId=demo-user${platform !== 'ALL' ? `&platform=${platform}` : ''}&limit=25`,
+      `/api/metrics/posts?userId=demo-user${platformParam}&limit=25`,
     ),
   });
   const { data: metricsOverview } = useQuery({
-    queryKey: ['metrics-overview', range],
-    queryFn: () => apiFetch<MetricsOverview>(`/api/metrics/overview?userId=demo-user&period=${range}`),
+    queryKey: ['metrics-overview', range, platform],
+    queryFn: () => apiFetch<MetricsOverview>(
+      `/api/metrics/overview?userId=demo-user&period=${range}${platformParam}`,
+    ),
   });
 
   // ── Sync mutation ──────────────────────────────────────────────────────────
@@ -146,6 +165,7 @@ export default function AnalyticsPage() {
         void qc.invalidateQueries({ queryKey: ['metrics-followers'] });
         void qc.invalidateQueries({ queryKey: ['metrics-posts'] });
         void qc.invalidateQueries({ queryKey: ['metrics-overview'] });
+        void qc.invalidateQueries({ queryKey: ['integrations'] });
         setSyncMsg('');
       }, 3000);
     },
@@ -200,21 +220,26 @@ export default function AnalyticsPage() {
             Todas
           </button>
           {integrations.length > 0
-            ? integrations.map(i => (
-                <button
-                  key={i.id}
-                  onClick={() => setPlatform(i.platform)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                    platform === i.platform
-                      ? 'text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                  style={platform === i.platform ? { background: PLATFORM_COLORS[i.platform] ?? '#6366f1' } : {}}
-                >
-                  <span>{PLATFORM_EMOJI[i.platform]}</span>
-                  {i.accountName || i.platform}
-                </button>
-              ))
+            ? integrations.map(i => {
+                const isActive = platform === i.platform;
+                const label = displayName(i.accountName, i.platform);
+                return (
+                  <button
+                    key={i.id}
+                    onClick={() => setPlatform(i.platform)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                      isActive
+                        ? 'text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                    style={isActive ? { background: PLATFORM_COLORS[i.platform] ?? '#6366f1' } : {}}
+                    title={i.platform}
+                  >
+                    <span>{PLATFORM_EMOJI[i.platform]}</span>
+                    {label}
+                  </button>
+                );
+              })
             : ['INSTAGRAM', 'TIKTOK', 'FACEBOOK'].map(p => (
                 <button
                   key={p}
@@ -227,7 +252,7 @@ export default function AnalyticsPage() {
                   style={platform === p ? { background: PLATFORM_COLORS[p] } : {}}
                 >
                   <span>{PLATFORM_EMOJI[p]}</span>
-                  {p}
+                  {PLATFORM_LABELS[p] ?? p}
                 </button>
               ))}
         </div>

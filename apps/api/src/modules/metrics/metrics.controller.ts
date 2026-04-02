@@ -52,11 +52,13 @@ export class MetricsController {
   @ApiOperation({ summary: 'Get aggregated metrics summary: followers, posts, reach, engagement' })
   @ApiQuery({ name: 'userId', required: true })
   @ApiQuery({ name: 'period', required: false, description: '7d | 30d | 90d' })
+  @ApiQuery({ name: 'platform', required: false, description: 'Filter by platform: INSTAGRAM | FACEBOOK | YOUTUBE | TIKTOK | TWITTER' })
   async getOverview(
     @Query('userId') userId: string,
     @Query('period') period = '30d',
+    @Query('platform') platform?: string,
   ) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    return this.metricsService.getOverview(userId, period);
+    return this.metricsService.getOverview(userId, period, platform);
   }
 }
