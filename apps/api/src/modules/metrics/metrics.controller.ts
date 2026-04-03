@@ -15,11 +15,18 @@ export class MetricsController {
   ) {}
 
   @Post('sync')
-  @ApiOperation({ summary: 'Trigger a manual metrics sync for all platforms' })
+  @ApiOperation({ summary: 'Trigger a direct sync and return results immediately' })
   @ApiQuery({ name: 'userId', required: false })
   async triggerSync(@Query('userId') userId = 'demo-user') {
-    await this.syncQueue.add('sync-all', { userId });
-    return { queued: true, userId, message: 'Sync job enqueued' };
+    const results = await this.metricsService.syncAll(userId);
+    return { ok: true, userId, results };
+  }
+
+  @Get('sync-status')
+  @ApiOperation({ summary: 'Get per-platform integration and sync status' })
+  @ApiQuery({ name: 'userId', required: false })
+  async getSyncStatus(@Query('userId') userId = 'demo-user') {
+    return this.metricsService.getSyncStatus(userId);
   }
 
   @Get('followers')

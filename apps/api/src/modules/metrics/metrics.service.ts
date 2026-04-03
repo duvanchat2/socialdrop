@@ -363,6 +363,41 @@ export class MetricsService {
     });
   }
 
+  // ── Sync status diagnostic ────────────────────────────────────────────────
+  async getSyncStatus(userId: string) {
+    const platforms = ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'TIKTOK', 'TWITTER'];
+    const results = await Promise.all(
+      platforms.map(async (platform) => {
+        const integration = await this.prisma.integration.findFirst({
+          where: { userId, platform },
+          select: { id: true, accountName: true, profileId: true, tokenExpiry: true, createdAt: true },
+        });
+        const lastMetric = await this.prisma.platformMetrics.findFirst({
+          where: { userId, platform },
+          orderBy: { recordedAt: 'desc' },
+          select: { recordedAt: true, followersCount: true },
+        });
+        const postCount = await this.prisma.postAnalytics.count({
+          where: { userId, platform },
+        });
+        return {
+          platform,
+          connected: !!integration,
+          hasProfileId: !!integration?.profileId,
+          accountName: integration?.accountName ?? null,
+          tokenExpiry: integration?.tokenExpiry ?? null,
+          tokenExpired: integration?.tokenExpiry
+            ? integration.tokenExpiry.getTime() < Date.now()
+            : false,
+          lastSync: lastMetric?.recordedAt ?? null,
+          followers: lastMetric?.followersCount ?? 0,
+          postCount,
+        };
+      }),
+    );
+    return results;
+  }
+
   // ── Goals ─────────────────────────────────────────────────────────────────
   async getGoals(userId: string) {
     return this.prisma.growthGoal.findMany({ where: { userId }, orderBy: { deadline: 'asc' } });

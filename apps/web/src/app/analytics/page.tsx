@@ -174,18 +174,20 @@ export default function AnalyticsPage() {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const syncMutation = useMutation({
-    mutationFn: () => apiFetch<{ queued: boolean }>('/api/metrics/sync?userId=demo-user', { method: 'POST' }),
-    onSuccess: () => {
-      setSyncMsg('Sync en cola ✓');
-      setTimeout(() => {
-        void qc.invalidateQueries({ queryKey: ['metrics-followers'] });
-        void qc.invalidateQueries({ queryKey: ['metrics-posts'] });
-        void qc.invalidateQueries({ queryKey: ['metrics-overview'] });
-        void qc.invalidateQueries({ queryKey: ['integrations'] });
-        setSyncMsg('');
-      }, 3000);
+    mutationFn: () => apiFetch<{ ok: boolean; results: Record<string, string> }>('/api/metrics/sync?userId=demo-user', { method: 'POST' }),
+    onSuccess: (data) => {
+      const r = data.results ?? {};
+      const parts = Object.entries(r)
+        .filter(([, v]) => v !== 'skipped')
+        .map(([k, v]) => `${k}: ${v}`);
+      setSyncMsg(parts.length ? parts.join(' | ') : 'Sin integraciones activas');
+      void qc.invalidateQueries({ queryKey: ['metrics-followers'] });
+      void qc.invalidateQueries({ queryKey: ['metrics-posts'] });
+      void qc.invalidateQueries({ queryKey: ['metrics-overview'] });
+      void qc.invalidateQueries({ queryKey: ['integrations'] });
+      setTimeout(() => setSyncMsg(''), 8000);
     },
-    onError: () => setSyncMsg('Error al sincronizar'),
+    onError: (e: Error) => setSyncMsg(`Error: ${e.message}`),
   });
 
   const createGoalMutation = useMutation({
@@ -299,10 +301,11 @@ export default function AnalyticsPage() {
         <button
           onClick={() => syncMutation.mutate()}
           disabled={syncMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-60"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-60 max-w-xs truncate"
+          title={syncMsg || 'Sincronizar todas las plataformas'}
         >
-          <RefreshCw size={12} className={syncMutation.isPending ? 'animate-spin' : ''} />
-          {syncMsg || 'Sync ahora'}
+          <RefreshCw size={12} className={syncMutation.isPending ? 'animate-spin flex-shrink-0' : 'flex-shrink-0'} />
+          {syncMutation.isPending ? 'Sincronizando...' : (syncMsg || 'Sync ahora')}
         </button>
 
         {/* Date range */}
