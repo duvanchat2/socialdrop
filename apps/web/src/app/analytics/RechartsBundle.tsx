@@ -14,12 +14,12 @@ interface PlatformStat  { platform: string; accountName: string; published: numb
 interface Post          { id: string; content: string; status: string; scheduledAt: string; integrations: { integration: { platform: string } }[]; }
 interface MetricFollower  { id: string; platform: string; followersCount: number; followingCount?: number; postsCount?: number; recordedAt: string; }
 interface MetricPost      { id: string; platform: string; platformPostId: string; caption?: string; mediaUrl?: string; likes: number; comments: number; shares: number; saves: number; reach: number; impressions: number; views: number; engagementRate?: number; publishedAt?: string; recordedAt: string; }
-interface MetricsOverview { totalFollowers: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
+interface MetricsOverview { totalFollowers: number; newFollowers: number; growthPct: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
 interface GrowthGoal      { id: string; userId: string; platform: string; metric: string; target: number; deadline: string; }
 
 interface Props {
   tab: Tab;
-  range: string;
+  range: string; // '7d' | '14d' | '30d' | '90d'
   overview?: OverviewStats;
   byPlatform: PlatformStat[];
   posts: Post[];
@@ -103,39 +103,48 @@ function MiniChart({ data, color, height = 200 }: { data: { date: string; value:
 }
 
 // ── TAB 1: Overview ────────────────────────────────────────────────────────────
-function OverviewTab({ overview, byPlatform, posts, followerData, published, KpiCard, SectionTitle, PostCard, metricsFollowers, metricsOverview }: Props) {
+function OverviewTab({ overview, byPlatform, posts, followerData, range, published, KpiCard, SectionTitle, PostCard, metricsFollowers, metricsOverview }: Props) {
   const { gridStroke, tooltipStyle } = useChartTheme();
   const totalFollowers = metricsOverview?.totalFollowers
     ?? (metricsFollowers && metricsFollowers.length > 0 ? metricsFollowers.reduce((s, m) => s + m.followersCount, 0) : null);
-  const followersDisplay = totalFollowers !== null ? totalFollowers.toLocaleString('es-CO') : '1,247';
-  const totalReach = metricsOverview?.totalReach;
-  const totalImpressions = metricsOverview?.totalImpressions;
-  const engRate = metricsOverview?.avgEngagementRate;
-  const totalLikes = metricsOverview?.totalLikes;
-  const totalComments = metricsOverview?.totalComments;
+  const followersDisplay  = totalFollowers != null ? totalFollowers.toLocaleString('es-CO') : '--';
+  const newFollowers      = metricsOverview?.newFollowers;
+  const growthPct         = metricsOverview?.growthPct;
+  const totalReach        = metricsOverview?.totalReach;
+  const totalImpressions  = metricsOverview?.totalImpressions;
+  const engRate           = metricsOverview?.avgEngagementRate;
+  const totalLikes        = metricsOverview?.totalLikes;
+  const totalComments     = metricsOverview?.totalComments;
+  const totalPostsPeriod  = metricsOverview?.totalPosts;
+
+  const growthSign = newFollowers != null && newFollowers >= 0 ? '+' : '';
+  const periodLabel = range === '7d' ? 'últimos 7 días'
+    : range === '14d' ? 'últimos 14 días'
+    : range === '90d' ? 'últimos 90 días'
+    : 'últimos 30 días';
 
   return (
     <div className="space-y-6">
       <SectionTitle>Audiencia</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon="👥" iconBg="bg-purple-100" label="Seguidores"        value={followersDisplay} sub={totalFollowers !== null ? 'real · sincronizado' : undefined} />
-        <KpiCard icon="📈" iconBg="bg-green-100"  label="Seguidores nuevos" value="124"   sub="+8.3% vs semana ant." />
-        <KpiCard icon="🚀" iconBg="bg-teal-100"   label="% Crecimiento"     value="9.9%"  sub="últimos 30 días" />
+        <KpiCard icon="👥" iconBg="bg-purple-100" label="Seguidores totales"  value={followersDisplay} sub={totalFollowers != null ? 'real · sincronizado' : undefined} />
+        <KpiCard icon="📈" iconBg="bg-green-100"  label="Seguidores nuevos"   value={newFollowers != null ? `${growthSign}${newFollowers.toLocaleString('es-CO')}` : '--'} sub={periodLabel} />
+        <KpiCard icon="🚀" iconBg="bg-teal-100"   label="% Crecimiento"       value={growthPct != null ? `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%` : '--'} sub={periodLabel} />
       </div>
       <ChartCard title="Crecimiento de seguidores">
         <MiniChart data={followerData} color="#6366f1" height={220} />
       </ChartCard>
       <SectionTitle>Publicaciones</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon="📝" iconBg="bg-indigo-100" label="Posts publicados"      value={published || '--'} />
-        <KpiCard icon="👁️" iconBg="bg-purple-100" label="Vistas / Impresiones"  value={totalImpressions ? totalImpressions.toLocaleString('es-CO') : '18,420'} />
-        <KpiCard icon="📡" iconBg="bg-yellow-100" label="Alcance"               value={totalReach ? totalReach.toLocaleString('es-CO') : '9,840'} />
+        <KpiCard icon="📝" iconBg="bg-indigo-100" label="Posts publicados"     value={totalPostsPeriod != null ? totalPostsPeriod : (published || '--')} sub={periodLabel} />
+        <KpiCard icon="👁️" iconBg="bg-purple-100" label="Vistas / Impresiones" value={totalImpressions ? totalImpressions.toLocaleString('es-CO') : '0'} sub={periodLabel} />
+        <KpiCard icon="📡" iconBg="bg-yellow-100" label="Alcance"              value={totalReach ? totalReach.toLocaleString('es-CO') : '0'} sub={periodLabel} />
       </div>
       <SectionTitle>Engagement</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon="💬" iconBg="bg-pink-100"  label="Interacciones"         value={totalLikes != null && totalComments != null ? (totalLikes + totalComments).toLocaleString('es-CO') : '842'} />
-        <KpiCard icon="📊" iconBg="bg-green-100" label="Tasa de eng. promedio" value={engRate ? `${engRate.toFixed(1)}%` : '3.8%'} />
-        <KpiCard icon="🎯" iconBg="bg-teal-100"  label="Eng. en alcance"       value="8.6%" />
+        <KpiCard icon="💬" iconBg="bg-pink-100"  label="Interacciones"         value={totalLikes != null && totalComments != null ? (totalLikes + totalComments).toLocaleString('es-CO') : '0'} sub={periodLabel} />
+        <KpiCard icon="📊" iconBg="bg-green-100" label="Tasa de eng. promedio" value={engRate ? `${engRate.toFixed(1)}%` : '0%'} />
+        <KpiCard icon="🎯" iconBg="bg-teal-100"  label="Eng. en alcance"       value="—" />
       </div>
       {byPlatform.length > 0 && (
         <>

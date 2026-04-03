@@ -16,7 +16,7 @@ interface Integration   { id: string; platform: string; accountName: string; }
 
 interface MetricFollower  { id: string; platform: string; followersCount: number; followingCount?: number; postsCount?: number; recordedAt: string; }
 interface MetricPost      { id: string; platform: string; platformPostId: string; caption?: string; mediaUrl?: string; likes: number; comments: number; shares: number; saves: number; reach: number; impressions: number; views: number; engagementRate?: number; publishedAt?: string; recordedAt: string; }
-interface MetricsOverview { totalFollowers: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
+interface MetricsOverview { totalFollowers: number; newFollowers: number; growthPct: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
 interface GrowthGoal      { id: string; userId: string; platform: string; metric: string; target: number; deadline: string; createdAt: string; }
 
 type Tab = 'overview' | 'engagement' | 'community' | 'reach' | 'content' | 'goals' | 'top' | 'insights';

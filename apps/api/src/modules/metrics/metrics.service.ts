@@ -371,48 +371,84 @@ export class MetricsService {
     this.logger.log(`[Metrics] getOverview userId=${userId} period=${period} days=${days} since=${since.toISOString()}`);
 
     const platformFilter = platform ? { platform } : {};
+    const platforms = platform
+      ? [platform]
+      : ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'TIKTOK', 'TWITTER'];
 
-    const [metricsRows, postRows] = await Promise.all([
-      this.prisma.platformMetrics.findMany({
-        where: { userId, ...platformFilter, recordedAt: { gte: since } },
-        orderBy: { recordedAt: 'desc' },
-      }),
-      // Filter by publishedAt (when the post was actually published),
-      // NOT recordedAt (when we synced it — always recent, breaks period filtering)
+    // Run all queries in parallel
+    const [postRows, currentMetrics, startMetrics] = await Promise.all([
+      // Posts published within the period
       this.prisma.postAnalytics.findMany({
-        where: {
-          userId,
-          ...platformFilter,
-          publishedAt: { gte: since },
-        },
+        where: { userId, ...platformFilter, publishedAt: { gte: since } },
       }),
+      // Current (latest-ever) follower count per platform — not date-filtered
+      Promise.all(
+        platforms.map((p) =>
+          this.prisma.platformMetrics.findFirst({
+            where: { userId, platform: p },
+            orderBy: { recordedAt: 'desc' },
+          }),
+        ),
+      ),
+      // Oldest record per platform within the period — used as the start baseline
+      Promise.all(
+        platforms.map((p) =>
+          this.prisma.platformMetrics.findFirst({
+            where: { userId, platform: p, recordedAt: { gte: since } },
+            orderBy: { recordedAt: 'asc' }, // oldest in period = baseline
+          }),
+        ),
+      ),
     ]);
 
-    const latestByPlatform = new Map<string, typeof metricsRows[0]>();
-    for (const m of metricsRows) {
-      if (!latestByPlatform.has(m.platform)) latestByPlatform.set(m.platform, m);
+    // Build per-platform maps
+    const currentMap = new Map<string, number>();
+    const startMap   = new Map<string, number>();
+    for (let i = 0; i < platforms.length; i++) {
+      const cur  = currentMetrics[i];
+      const start = startMetrics[i];
+      if (cur)   currentMap.set(platforms[i], cur.followersCount);
+      if (start) startMap.set(platforms[i], start.followersCount);
     }
 
-    const totalFollowers = [...latestByPlatform.values()].reduce((s, m) => s + m.followersCount, 0);
-    const totalPosts = postRows.length;
-    const totalLikes = postRows.reduce((s, p) => s + p.likes, 0);
-    const totalComments = postRows.reduce((s, p) => s + p.comments, 0);
-    const totalReach = postRows.reduce((s, p) => s + p.reach, 0);
-    const totalImpressions = postRows.reduce((s, p) => s + p.impressions, 0);
-    const avgEngagement = totalPosts > 0
+    // Follower totals
+    const totalFollowers = [...currentMap.values()].reduce((s, v) => s + v, 0);
+    const startFollowers = [...startMap.values()].reduce((s, v) => s + v, 0);
+    const newFollowers   = totalFollowers - startFollowers;
+    const growthPct      = startFollowers > 0
+      ? +((newFollowers / startFollowers) * 100).toFixed(2)
+      : 0;
+
+    // Post aggregates
+    const totalPosts      = postRows.length;
+    const totalLikes      = postRows.reduce((s, p) => s + p.likes, 0);
+    const totalComments   = postRows.reduce((s, p) => s + p.comments, 0);
+    const totalReach      = postRows.reduce((s, p) => s + p.reach, 0);
+    const totalImpressions= postRows.reduce((s, p) => s + p.impressions, 0);
+    const avgEngagement   = totalPosts > 0
       ? postRows.reduce((s, p) => s + (p.engagementRate ?? 0), 0) / totalPosts
       : 0;
+
+    this.logger.log(
+      `[Metrics] overview result: totalFollowers=${totalFollowers} newFollowers=${newFollowers} growthPct=${growthPct}% totalPosts=${totalPosts}`,
+    );
 
     return {
       period,
       totalFollowers,
+      newFollowers,
+      growthPct,
       totalPosts,
       totalLikes,
       totalComments,
       totalReach,
       totalImpressions,
       avgEngagementRate: avgEngagement,
-      byPlatform: Object.fromEntries(latestByPlatform),
+      byPlatform: Object.fromEntries(
+        platforms
+          .filter((p) => currentMap.has(p))
+          .map((p) => [p, { platform: p, followersCount: currentMap.get(p)! }]),
+      ),
     };
   }
 }
