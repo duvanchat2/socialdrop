@@ -17,10 +17,8 @@ interface IgMedia {
   timestamp?: string;
   like_count?: number;
   comments_count?: number;
-  shares_count?: number;
-  saved?: number;
-  reach?: number;
-  impressions?: number;
+  media_type?: string;
+  error?: { message: string };
 }
 
 interface FbPage {
@@ -93,42 +91,42 @@ export class MetricsService {
         });
       }
 
-      // Media posts
+      // Media posts — only use fields valid for /{ig-user-id}/media
+      // reach/impressions/saved/shares are NOT valid media fields; they require separate /insights calls
       const mediaRes = await fetch(
-        `https://graph.facebook.com/v19.0/${igId}/media?fields=id,caption,media_url,timestamp,like_count,comments_count,shares_count,saved,reach,impressions&limit=25&access_token=${token}`,
+        `https://graph.facebook.com/v19.0/${igId}/media?fields=id,caption,media_url,timestamp,like_count,comments_count,media_type&limit=25&access_token=${token}`,
       );
-      if (mediaRes.ok) {
-        const mediaData = (await mediaRes.json()) as { data?: IgMedia[] };
-        const posts = mediaData.data ?? [];
-        for (const p of posts) {
-          await this.prisma.postAnalytics.upsert({
-            where: { userId_platform_platformPostId: { userId, platform: 'INSTAGRAM', platformPostId: p.id } },
-            update: {
-              likes: p.like_count ?? 0,
-              comments: p.comments_count ?? 0,
-              shares: p.shares_count ?? 0,
-              saves: p.saved ?? 0,
-              reach: p.reach ?? 0,
-              impressions: p.impressions ?? 0,
-              recordedAt: new Date(),
-            },
-            create: {
-              userId,
-              platform: 'INSTAGRAM',
-              platformPostId: p.id,
-              caption: p.caption ?? null,
-              mediaUrl: p.media_url ?? null,
-              likes: p.like_count ?? 0,
-              comments: p.comments_count ?? 0,
-              shares: p.shares_count ?? 0,
-              saves: p.saved ?? 0,
-              reach: p.reach ?? 0,
-              impressions: p.impressions ?? 0,
-              publishedAt: p.timestamp ? new Date(p.timestamp) : null,
-            },
-          });
+      if (!mediaRes.ok) {
+        const errBody = await mediaRes.text();
+        this.logger.warn(`[Metrics] Instagram media fetch failed (${mediaRes.status}): ${errBody}`);
+      } else {
+        const mediaData = (await mediaRes.json()) as { data?: IgMedia[]; error?: { message: string } };
+        if (mediaData.error) {
+          this.logger.warn(`[Metrics] Instagram media API error: ${mediaData.error.message}`);
+        } else {
+          const posts = mediaData.data ?? [];
+          for (const p of posts) {
+            await this.prisma.postAnalytics.upsert({
+              where: { userId_platform_platformPostId: { userId, platform: 'INSTAGRAM', platformPostId: p.id } },
+              update: {
+                likes: p.like_count ?? 0,
+                comments: p.comments_count ?? 0,
+                recordedAt: new Date(),
+              },
+              create: {
+                userId,
+                platform: 'INSTAGRAM',
+                platformPostId: p.id,
+                caption: p.caption ?? null,
+                mediaUrl: p.media_url ?? null,
+                likes: p.like_count ?? 0,
+                comments: p.comments_count ?? 0,
+                publishedAt: p.timestamp ? new Date(p.timestamp) : null,
+              },
+            });
+          }
+          this.logger.log(`[Metrics] Instagram: synced ${posts.length} posts for user ${userId}`);
         }
-        this.logger.log(`[Metrics] Instagram: synced ${posts.length} posts for user ${userId}`);
       }
     } catch (err) {
       this.logger.error(`[Metrics] Instagram sync failed for ${userId}: ${(err as Error).message}`);
