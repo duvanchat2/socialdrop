@@ -23,6 +23,9 @@
     },
     {
       "path": "./libs/integrations"
+    },
+    {
+      "path": "./apps/mcp"
     }
   ]
 }

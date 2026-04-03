@@ -5,6 +5,7 @@
       "name": "web",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["next", "dev", "--port", "3000"],
+      "cwd": "apps/web",
       "port": 3000
     }
   ]

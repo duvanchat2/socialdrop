@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid,
-  Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon,
+  Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -23,6 +23,7 @@ const NAV_MAIN = [
   { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
   { href: '/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/integrations', label: 'Integraciones', icon: Settings },
+  { href: '/competitors', label: 'Competencia', icon: Users },
   { href: '/assistant', label: 'Asistente IA', icon: BotMessageSquare },
 ];
 

@@ -15,10 +15,11 @@ interface Post          { id: string; content: string; status: string; scheduled
 interface Integration   { id: string; platform: string; accountName: string; }
 
 interface MetricFollower  { id: string; platform: string; followersCount: number; followingCount?: number; postsCount?: number; recordedAt: string; }
-interface MetricPost      { id: string; platform: string; platformPostId: string; caption?: string; mediaUrl?: string; likes: number; comments: number; shares: number; saves: number; reach: number; impressions: number; views: number; publishedAt?: string; }
+interface MetricPost      { id: string; platform: string; platformPostId: string; caption?: string; mediaUrl?: string; likes: number; comments: number; shares: number; saves: number; reach: number; impressions: number; views: number; engagementRate?: number; publishedAt?: string; recordedAt: string; }
 interface MetricsOverview { totalFollowers: number; totalPosts: number; totalLikes: number; totalComments: number; totalReach: number; totalImpressions: number; avgEngagementRate: number; period: string; }
+interface GrowthGoal      { id: string; userId: string; platform: string; metric: string; target: number; deadline: string; createdAt: string; }
 
-type Tab = 'overview' | 'engagement' | 'community' | 'reach' | 'content';
+type Tab = 'overview' | 'engagement' | 'community' | 'reach' | 'content' | 'goals' | 'top' | 'insights';
 type Range = '7d' | '14d' | '30d' | '90d';
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -35,10 +36,8 @@ const PLATFORM_LABELS: Record<string, string> = {
   YOUTUBE: 'YouTube', TWITTER: 'Twitter',
 };
 
-// Returns a clean display name — falls back to platform label if accountName is a raw token
 function displayName(accountName: string | null | undefined, platform: string): string {
   if (!accountName) return PLATFORM_LABELS[platform] ?? platform;
-  // Token strings: start with '-', are very long, contain no spaces, or are all hex/base64-ish
   if (accountName.startsWith('-') || accountName.length > 40 || /^[A-Za-z0-9+/=_-]{30,}$/.test(accountName)) {
     return PLATFORM_LABELS[platform] ?? platform;
   }
@@ -61,7 +60,6 @@ function KpiCard({ icon, iconBg, label, value, sub }: { icon: string; iconBg: st
   );
 }
 
-// ── Section header ─────────────────────────────────────────────────────────────
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h3 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">
@@ -70,7 +68,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Post thumbnail card ────────────────────────────────────────────────────────
 function PostCard({ post }: { post: Post }) {
   const platform = post.integrations[0]?.integration?.platform ?? 'FACEBOOK';
   const color = PLATFORM_COLORS[platform] ?? '#6366f1';
@@ -94,13 +91,11 @@ function PostCard({ post }: { post: Post }) {
   );
 }
 
-// ── Heatmap cell ──────────────────────────────────────────────────────────────
 function HeatCell({ value }: { value: number }) {
   const bg = value > 70 ? 'bg-red-400' : value > 40 ? 'bg-yellow-300' : value > 10 ? 'bg-green-200' : 'bg-gray-100 dark:bg-gray-700';
   return <div className={`w-6 h-6 rounded-sm ${bg}`} title={`${value}%`} />;
 }
 
-// ── Mock data generators ──────────────────────────────────────────────────────
 function makeDays(n: number, base: number, variance: number) {
   const out = [];
   const now = new Date();
@@ -128,25 +123,27 @@ export default function AnalyticsPage() {
   const [mounted, setMounted]   = useState(false);
   const [syncMsg, setSyncMsg]   = useState('');
 
+  // Goal form state
+  const [goalForm, setGoalForm] = useState({ platform: 'INSTAGRAM', metric: 'followers', target: '', deadline: '' });
+
   useEffect(() => { setMounted(true); }, []);
 
-  // ── Existing queries ───────────────────────────────────────────────────────
   const { data: overview }          = useQuery({ queryKey: ['stats-overview'],  queryFn: () => apiFetch<OverviewStats>('/api/stats/overview?userId=demo-user') });
   const { data: byPlatform = [] }   = useQuery({ queryKey: ['stats-platform'],  queryFn: () => apiFetch<PlatformStat[]>('/api/stats/by-platform?userId=demo-user') });
   const { data: posts = [] }        = useQuery({ queryKey: ['posts-all'],       queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
   const { data: integrations = [] } = useQuery({ queryKey: ['integrations'],    queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
 
-  // ── Real metrics queries — all filtered by selected platform ──────────────
   const platformParam = platform !== 'ALL' ? `&platform=${platform}` : '';
 
+  // ── Real metrics queries — all filtered by selected platform AND range ──────
   const { data: metricsFollowers = [] } = useQuery({
-    queryKey: ['metrics-followers', platform],
-    queryFn: () => apiFetch<MetricFollower[]>(`/api/metrics/followers?userId=demo-user${platformParam}`),
+    queryKey: ['metrics-followers', platform, range],
+    queryFn: () => apiFetch<MetricFollower[]>(`/api/metrics/followers?userId=demo-user${platformParam}&period=${range}`),
   });
   const { data: metricsPosts = [] } = useQuery({
-    queryKey: ['metrics-posts', platform],
+    queryKey: ['metrics-posts', platform, range],
     queryFn: () => apiFetch<MetricPost[]>(
-      `/api/metrics/posts?userId=demo-user${platformParam}&limit=25`,
+      `/api/metrics/posts?userId=demo-user${platformParam}&limit=25&period=${range}`,
     ),
   });
   const { data: metricsOverview } = useQuery({
@@ -156,7 +153,26 @@ export default function AnalyticsPage() {
     ),
   });
 
-  // ── Sync mutation ──────────────────────────────────────────────────────────
+  // Top content queries by different sortBy
+  const { data: topByEngagement = [] } = useQuery({
+    queryKey: ['metrics-top-engagement', platform, range],
+    queryFn: () => apiFetch<MetricPost[]>(`/api/metrics/posts?userId=demo-user${platformParam}&limit=10&period=${range}&sortBy=engagement`),
+    enabled: tab === 'top',
+  });
+  const { data: topByViews = [] } = useQuery({
+    queryKey: ['metrics-top-views', platform, range],
+    queryFn: () => apiFetch<MetricPost[]>(`/api/metrics/posts?userId=demo-user${platformParam}&limit=10&period=${range}&sortBy=views`),
+    enabled: tab === 'top',
+  });
+
+  // Goals
+  const { data: goals = [], refetch: refetchGoals } = useQuery({
+    queryKey: ['metrics-goals'],
+    queryFn: () => apiFetch<GrowthGoal[]>('/api/metrics/goals?userId=demo-user'),
+    enabled: tab === 'goals',
+  });
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const syncMutation = useMutation({
     mutationFn: () => apiFetch<{ queued: boolean }>('/api/metrics/sync?userId=demo-user', { method: 'POST' }),
     onSuccess: () => {
@@ -172,16 +188,35 @@ export default function AnalyticsPage() {
     onError: () => setSyncMsg('Error al sincronizar'),
   });
 
+  const createGoalMutation = useMutation({
+    mutationFn: (data: { platform: string; metric: string; target: number; deadline: string }) =>
+      apiFetch('/api/metrics/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, userId: 'demo-user' }),
+      }),
+    onSuccess: () => {
+      setGoalForm({ platform: 'INSTAGRAM', metric: 'followers', target: '', deadline: '' });
+      void refetchGoals();
+    },
+  });
+
+  const deleteGoalMutation = useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/metrics/goals/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void refetchGoals(),
+  });
+
   // ── Derived data ───────────────────────────────────────────────────────────
   const published      = overview?.published ?? 0;
   const total          = overview?.total ?? 0;
-  const followerData   = makeDays(30, metricsOverview?.totalFollowers || 1240, 80);
-  const engagementData = makeDays(30, 3.8, 1.5);
-  const reachData      = makeDays(30, metricsOverview?.totalReach || 4200, 600);
-  const likesData      = makeDays(30, 48, 20);
-  const commentsData   = makeDays(30, 12, 8);
-  const savesData      = makeDays(30, 22, 10);
-  const sharesData     = makeDays(30, 8, 5);
+  const nDays          = range === '7d' ? 7 : range === '14d' ? 14 : range === '90d' ? 90 : 30;
+  const followerData   = makeDays(nDays, metricsOverview?.totalFollowers || 1240, 80);
+  const engagementData = makeDays(nDays, 3.8, 1.5);
+  const reachData      = makeDays(nDays, metricsOverview?.totalReach || 4200, 600);
+  const likesData      = makeDays(nDays, 48, 20);
+  const commentsData   = makeDays(nDays, 12, 8);
+  const savesData      = makeDays(nDays, 22, 10);
+  const sharesData     = makeDays(nDays, 8, 5);
   const gainedLost     = DAYS.map(d => ({ day: d, gained: Math.round(Math.random() * 60 + 10), lost: -Math.round(Math.random() * 20) }));
   const postTypeData   = [
     { type: 'Posts',    value: Math.round(total * 0.5) || 4 },
@@ -196,6 +231,9 @@ export default function AnalyticsPage() {
     { id: 'community',  label: 'Comunidad' },
     { id: 'reach',      label: 'Alcance' },
     { id: 'content',    label: 'Contenido' },
+    { id: 'goals',      label: 'Metas' },
+    { id: 'top',        label: 'Top Contenido' },
+    { id: 'insights',   label: 'Insights' },
   ];
 
   const RANGES: Range[] = ['7d', '14d', '30d', '90d'];
@@ -311,6 +349,7 @@ export default function AnalyticsPage() {
         ) : (
           <RechartsBundle
             tab={tab}
+            range={range}
             overview={overview}
             byPlatform={byPlatform}
             posts={posts}
@@ -334,6 +373,13 @@ export default function AnalyticsPage() {
             metricsFollowers={metricsFollowers}
             metricsPosts={metricsPosts}
             metricsOverview={metricsOverview}
+            goals={goals}
+            goalForm={goalForm}
+            setGoalForm={setGoalForm}
+            onCreateGoal={(data) => createGoalMutation.mutate(data)}
+            onDeleteGoal={(id) => deleteGoalMutation.mutate(id)}
+            topByEngagement={topByEngagement}
+            topByViews={topByViews}
           />
         )}
       </div>

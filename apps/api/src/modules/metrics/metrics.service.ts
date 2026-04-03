@@ -162,7 +162,7 @@ export class MetricsService {
           data: {
             userId,
             platform: 'FACEBOOK',
-            followersCount: page.followers_count ?? page.fan_count ?? 0,
+            followersCount: page.fan_count ?? page.followers_count ?? 0,
           },
         });
       }
@@ -306,12 +306,25 @@ export class MetricsService {
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────
-  async getLatestFollowers(userId: string, platform?: string) {
+  private periodToSince(period?: string): Date | undefined {
+    if (!period) return undefined;
+    const days = period === '7d' ? 7 : period === '14d' ? 14 : period === '90d' ? 90 : 30;
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    return since;
+  }
+
+  async getLatestFollowers(userId: string, platform?: string, period?: string) {
     const platforms = platform ? [platform] : ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'TIKTOK', 'TWITTER'];
+    const since = this.periodToSince(period);
     const results = await Promise.all(
       platforms.map((p) =>
         this.prisma.platformMetrics.findFirst({
-          where: { userId, platform: p },
+          where: {
+            userId,
+            platform: p,
+            ...(since ? { recordedAt: { gte: since } } : {}),
+          },
           orderBy: { recordedAt: 'desc' },
         }),
       ),
@@ -319,12 +332,36 @@ export class MetricsService {
     return results.filter(Boolean);
   }
 
-  async getPostAnalytics(userId: string, platform?: string, limit = 25) {
+  async getPostAnalytics(userId: string, platform?: string, limit = 25, period?: string, sortBy?: string) {
+    const since = this.periodToSince(period);
+    const orderByField = sortBy === 'views' ? 'views'
+      : sortBy === 'likes' ? 'likes'
+      : sortBy === 'comments' ? 'comments'
+      : sortBy === 'shares' ? 'shares'
+      : sortBy === 'engagement' ? 'engagementRate'
+      : 'recordedAt';
     return this.prisma.postAnalytics.findMany({
-      where: { userId, ...(platform ? { platform } : {}) },
-      orderBy: { recordedAt: 'desc' },
+      where: {
+        userId,
+        ...(platform ? { platform } : {}),
+        ...(since ? { publishedAt: { gte: since } } : {}),
+      },
+      orderBy: { [orderByField]: 'desc' },
       take: limit,
     });
+  }
+
+  // ── Goals ─────────────────────────────────────────────────────────────────
+  async getGoals(userId: string) {
+    return this.prisma.growthGoal.findMany({ where: { userId }, orderBy: { deadline: 'asc' } });
+  }
+
+  async createGoal(userId: string, platform: string, metric: string, target: number, deadline: Date) {
+    return this.prisma.growthGoal.create({ data: { userId, platform, metric, target, deadline } });
+  }
+
+  async deleteGoal(id: string) {
+    return this.prisma.growthGoal.delete({ where: { id } });
   }
 
   async getOverview(userId: string, period: string, platform?: string) {
