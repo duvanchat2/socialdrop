@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '@socialdrop/prisma';
+import { Platform } from '@socialdrop/shared';
 
 interface IgAccountFields {
   followers_count?: number;
@@ -369,16 +370,16 @@ export class MetricsService {
     const results = await Promise.all(
       platforms.map(async (platform) => {
         const integration = await this.prisma.integration.findFirst({
-          where: { userId, platform },
+          where: { userId, platform: platform as Platform },
           select: { id: true, accountName: true, profileId: true, tokenExpiry: true, createdAt: true },
         });
         const lastMetric = await this.prisma.platformMetrics.findFirst({
-          where: { userId, platform },
+          where: { userId, platform: platform as Platform },
           orderBy: { recordedAt: 'desc' },
           select: { recordedAt: true, followersCount: true },
         });
         const postCount = await this.prisma.postAnalytics.count({
-          where: { userId, platform },
+          where: { userId, platform: platform as Platform },
         });
         return {
           platform,

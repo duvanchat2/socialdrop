@@ -2,17 +2,12 @@ import {
   Controller, Get, Post, Delete, Query, Param, Body, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { MetricsService } from './metrics.service.js';
 
 @ApiTags('metrics')
 @Controller('metrics')
 export class MetricsController {
-  constructor(
-    private readonly metricsService: MetricsService,
-    @InjectQueue('metrics-sync') private readonly syncQueue: Queue,
-  ) {}
+  constructor(private readonly metricsService: MetricsService) {}
 
   @Post('sync')
   @ApiOperation({ summary: 'Trigger a direct sync and return results immediately' })
