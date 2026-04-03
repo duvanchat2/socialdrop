@@ -365,9 +365,10 @@ export class MetricsService {
   }
 
   async getOverview(userId: string, period: string, platform?: string) {
-    const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+    const days = period === '7d' ? 7 : period === '14d' ? 14 : period === '90d' ? 90 : 30;
     const since = new Date();
     since.setDate(since.getDate() - days);
+    this.logger.log(`[Metrics] getOverview userId=${userId} period=${period} days=${days} since=${since.toISOString()}`);
 
     const platformFilter = platform ? { platform } : {};
 
@@ -376,8 +377,14 @@ export class MetricsService {
         where: { userId, ...platformFilter, recordedAt: { gte: since } },
         orderBy: { recordedAt: 'desc' },
       }),
+      // Filter by publishedAt (when the post was actually published),
+      // NOT recordedAt (when we synced it — always recent, breaks period filtering)
       this.prisma.postAnalytics.findMany({
-        where: { userId, ...platformFilter, recordedAt: { gte: since } },
+        where: {
+          userId,
+          ...platformFilter,
+          publishedAt: { gte: since },
+        },
       }),
     ]);
 
