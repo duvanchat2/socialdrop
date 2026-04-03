@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 
-const Anthropic = require('@anthropic-ai/sdk');
+const { OpenAI } = require('openai');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new OpenAI({
+  apiKey: process.env.ZAI_API_KEY,
+  baseURL: 'https://open.bigmodel.cn/api/paas/v4/',
+});
 const tasks = (process.env.TASKS || 'debug,docs,summary,tests,issues').split(',').map(t => t.trim());
 const REPO = 'duvanchat2/socialdrop';
 const GH_TOKEN = process.env.GITHUB_TOKEN || '';
@@ -34,12 +37,12 @@ function ghPost(path, data) {
 }
 
 async function ask(prompt, maxTokens = 2000) {
-  const res = await client.messages.create({
-    model: 'claude-opus-4-5',
+  const res = await client.chat.completions.create({
+    model: 'glm-4-plus',
     max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }],
   });
-  return res.content[0].type === 'text' ? res.content[0].text : '';
+  return res.choices[0].message.content ?? '';
 }
 
 // ── TASK 1: Debug analysis ────────────────────────────────────────────────────
