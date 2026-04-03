@@ -332,6 +332,18 @@ export class MetricsService {
     return results.filter(Boolean);
   }
 
+  private postDateFilter(since: Date | undefined) {
+    if (!since) return {};
+    // Some posts have null publishedAt (API didn't return timestamp).
+    // Fall back to recordedAt for those so they still appear in period filters.
+    return {
+      OR: [
+        { publishedAt: { gte: since } },
+        { publishedAt: null, recordedAt: { gte: since } },
+      ],
+    };
+  }
+
   async getPostAnalytics(userId: string, platform?: string, limit = 25, period?: string, sortBy?: string) {
     const since = this.periodToSince(period);
     const orderByField = sortBy === 'views' ? 'views'
@@ -344,7 +356,7 @@ export class MetricsService {
       where: {
         userId,
         ...(platform ? { platform } : {}),
-        ...(since ? { publishedAt: { gte: since } } : {}),
+        ...this.postDateFilter(since),
       },
       orderBy: { [orderByField]: 'desc' },
       take: limit,
@@ -377,9 +389,9 @@ export class MetricsService {
 
     // Run all queries in parallel
     const [postRows, currentMetrics, startMetrics] = await Promise.all([
-      // Posts published within the period
+      // Posts within the period — publishedAt preferred, falls back to recordedAt for null
       this.prisma.postAnalytics.findMany({
-        where: { userId, ...platformFilter, publishedAt: { gte: since } },
+        where: { userId, ...platformFilter, ...this.postDateFilter(since) },
       }),
       // Current (latest-ever) follower count per platform — not date-filtered
       Promise.all(
