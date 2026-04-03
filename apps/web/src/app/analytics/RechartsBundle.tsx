@@ -251,8 +251,15 @@ function EngagementTab({ engagementData, likesData, commentsData, savesData, sha
 }
 
 // ── TAB 3: Community ──────────────────────────────────────────────────────────
-function CommunityTab({ followerData, gainedLost, heatmap, KpiCard, SectionTitle, HeatCell }: Props) {
+function CommunityTab({ followerData, gainedLost, heatmap, range, KpiCard, SectionTitle, HeatCell, metricsOverview }: Props) {
   const { gridStroke, tooltipStyle } = useChartTheme();
+  const periodLabel = range === '7d' ? 'últimos 7 días'
+    : range === '14d' ? 'últimos 14 días'
+    : range === '90d' ? 'últimos 90 días'
+    : 'últimos 30 días';
+  const totalFollowers = metricsOverview?.totalFollowers;
+  const newFollowers   = metricsOverview?.newFollowers;
+  const growthPct      = metricsOverview?.growthPct;
   const ageGenderData = [
     { label: '13–17', women: 8,  men: 5 },
     { label: '18–24', women: 32, men: 22 },
@@ -269,9 +276,9 @@ function CommunityTab({ followerData, gainedLost, heatmap, KpiCard, SectionTitle
     <div className="space-y-6">
       <SectionTitle>Seguidores</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard icon="👥" iconBg="bg-purple-100" label="Seguidores totales" value="1,247" />
-        <KpiCard icon="📈" iconBg="bg-green-100"  label="Evolución"          value="+124"   sub="últimos 30 días" />
-        <KpiCard icon="🚀" iconBg="bg-teal-100"   label="% Evolución"        value="+11.1%" />
+        <KpiCard icon="👥" iconBg="bg-purple-100" label="Seguidores totales" value={totalFollowers != null ? totalFollowers.toLocaleString('es-CO') : '--'} sub="sincronizado" />
+        <KpiCard icon="📈" iconBg="bg-green-100"  label="Evolución"          value={newFollowers != null ? `${newFollowers >= 0 ? '+' : ''}${newFollowers.toLocaleString('es-CO')}` : '--'} sub={periodLabel} />
+        <KpiCard icon="🚀" iconBg="bg-teal-100"   label="% Evolución"        value={growthPct != null ? `${growthPct >= 0 ? '+' : ''}${growthPct.toFixed(1)}%` : '--'} sub={periodLabel} />
       </div>
       <ChartCard title="Crecimiento de seguidores">
         <MiniChart data={followerData} color="#8b5cf6" height={200} />
@@ -340,15 +347,21 @@ function CommunityTab({ followerData, gainedLost, heatmap, KpiCard, SectionTitle
 }
 
 // ── TAB 4: Reach ──────────────────────────────────────────────────────────────
-function ReachTab({ reachData, posts, KpiCard, SectionTitle, PostCard }: Props) {
+function ReachTab({ reachData, posts, range, KpiCard, SectionTitle, PostCard, metricsOverview }: Props) {
   const { gridStroke, tooltipStyle } = useChartTheme();
+  const periodLabel = range === '7d' ? 'últimos 7 días'
+    : range === '14d' ? 'últimos 14 días'
+    : range === '90d' ? 'últimos 90 días'
+    : 'últimos 30 días';
   const combined = reachData.map(d => ({ date: d.date, reach: d.value, views: Math.round(d.value * 1.9) }));
+  const totalImpressions = metricsOverview?.totalImpressions;
+  const totalReach       = metricsOverview?.totalReach;
   return (
     <div className="space-y-6">
       <SectionTitle>Totales</SectionTitle>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <KpiCard icon="👁️" iconBg="bg-purple-100" label="Total vistas / impresiones" value="18,420" sub="últimos 30 días" />
-        <KpiCard icon="📡" iconBg="bg-yellow-100" label="Alcance total"               value="9,840"  sub="únicos" />
+        <KpiCard icon="👁️" iconBg="bg-purple-100" label="Total vistas / impresiones" value={totalImpressions != null ? totalImpressions.toLocaleString('es-CO') : '0'} sub={periodLabel} />
+        <KpiCard icon="📡" iconBg="bg-yellow-100" label="Alcance total"               value={totalReach != null ? totalReach.toLocaleString('es-CO') : '0'} sub={periodLabel} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard icon="📷" iconBg="bg-indigo-100" label="Prom. vistas / post"  value="1,537" />
