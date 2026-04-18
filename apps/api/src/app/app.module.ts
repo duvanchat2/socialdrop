@@ -22,6 +22,7 @@ import { BulkModule } from '../modules/bulk/bulk.module.js';
 import { AssistantModule } from '../modules/assistant/assistant.module.js';
 import { MetricsModule } from '../modules/metrics/metrics.module.js';
 import { CompetitorsModule } from '../modules/competitors/competitors.module.js';
+import { QueueModule } from '../modules/queue/queue.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -60,6 +61,7 @@ import redisConfig from '../config/redis.config.js';
     AssistantModule,
     MetricsModule,
     CompetitorsModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [

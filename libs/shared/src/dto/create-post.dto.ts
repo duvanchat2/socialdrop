@@ -1,5 +1,5 @@
 import { IsString, IsDateString, IsArray, IsEnum, IsOptional } from 'class-validator';
-import { Platform } from '../enums/index.js';
+import { Platform, PostStatus } from '../enums/index.js';
 
 export class CreatePostDto {
   @IsString()
@@ -23,4 +23,9 @@ export class CreatePostDto {
   @IsArray()
   @IsString({ each: true })
   mediaUrls?: string[];
+
+  /** Override default 'SCHEDULED' status (used for DRAFT + queue-assigned posts) */
+  @IsOptional()
+  @IsEnum(PostStatus)
+  status?: PostStatus;
 }

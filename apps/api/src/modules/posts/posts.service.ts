@@ -33,7 +33,7 @@ export class PostsService {
         userId,
         content: dto.content,
         scheduledAt: new Date(dto.scheduledAt),
-        status: 'SCHEDULED',
+        status: (dto.status ?? 'SCHEDULED') as PostStatus,
         integrations: {
           create: integrations.map((int) => ({
             integrationId: int.id,
