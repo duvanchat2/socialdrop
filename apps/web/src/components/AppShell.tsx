@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import {
-  LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu, LayoutGrid,
+  LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
@@ -19,7 +19,6 @@ const NAV_MAIN = [
   { href: '/calendar', label: 'Calendario', icon: Calendar },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/posts/new', label: 'Nuevo Post', icon: PlusSquare },
-  { href: '/content', label: 'Contenido', icon: LayoutGrid },
   { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
   { href: '/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/integrations', label: 'Integraciones', icon: Settings },
