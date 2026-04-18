@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
+  ListOrdered,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -17,6 +18,7 @@ const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
 const NAV_MAIN = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/calendar', label: 'Calendario', icon: Calendar },
+  { href: '/queue', label: 'Cola', icon: ListOrdered },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/posts/new', label: 'Nuevo Post', icon: PlusSquare },
   { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
