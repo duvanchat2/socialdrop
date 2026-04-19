@@ -269,3 +269,17 @@ model CompetitorAnalysis {
   recommendations String[]
   createdAt       DateTime   @default(now())
 }
+
+model QueueSlot {
+  id        String   @id @default(cuid())
+  userId    String
+  platform  Platform
+  dayOfWeek Int      // 0=Sunday … 6=Saturday
+  hour      Int      // 0-23 local time
+  minute    Int      // 0-59
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([userId, platform])
+  @@index([userId, dayOfWeek, hour, minute])
+}

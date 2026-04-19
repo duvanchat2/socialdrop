@@ -1,27 +1,41 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, API_URL } from '@/lib/api';
+import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/api';
+import { uploadFile, UploadedFile } from '@/lib/uploadMedia';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Upload, X, Image as ImageIcon, Film, Loader2 } from 'lucide-react';
+import {
+  Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
+  CalendarClock, Send, FileText, ListOrdered,
+} from 'lucide-react';
 
-const PLATFORMS = [
-  { id: 'FACEBOOK', label: 'Facebook', color: '#1877F2', maxChars: 63206 },
-  { id: 'INSTAGRAM', label: 'Instagram', color: '#E1306C', maxChars: 2200 },
-  { id: 'TWITTER', label: 'X / Twitter', color: '#1DA1F2', maxChars: 280 },
-  { id: 'TIKTOK', label: 'TikTok', color: '#000', maxChars: 2200 },
-  { id: 'YOUTUBE', label: 'YouTube', color: '#FF0000', maxChars: 5000 },
-];
+const PLATFORM_LIMITS: Record<string, number> = {
+  FACEBOOK: 63206,
+  INSTAGRAM: 2200,
+  TWITTER: 280,
+  TIKTOK: 2200,
+  LINKEDIN: 3000,
+  YOUTUBE: 5000,
+};
 
-interface UploadedFile {
-  url: string;
-  fileName: string;
-  mimeType: string;
-  fileSize: number;
-  mediaType: 'IMAGE' | 'VIDEO';
-  preview?: string;
+const PLATFORM_COLORS: Record<string, string> = {
+  FACEBOOK: '#1877F2',
+  INSTAGRAM: '#E1306C',
+  TWITTER: '#1DA1F2',
+  TIKTOK: '#000000',
+  LINKEDIN: '#0A66C2',
+  YOUTUBE: '#FF0000',
+};
+
+interface Integration {
+  id: string;
+  platform: string;
+  accountName: string | null;
+  profileId: string | null;
 }
+
+const PLATFORM_ORDER = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'TWITTER', 'LINKEDIN', 'YOUTUBE'];
 
 export default function NewPostPage() {
   const router = useRouter();
@@ -30,65 +44,72 @@ export default function NewPostPage() {
 
   const [caption, setCaption] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
-  const [publishNow, setPublishNow] = useState(false);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
 
   const userId = 'demo-user';
 
-  const createPost = useMutation({
-    mutationFn: (data: object) =>
-      apiFetch(`/api/posts?userId=${userId}`, { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: () => {
-      toast.success('🎉 Post programado correctamente');
-      qc.invalidateQueries({ queryKey: ['posts'] });
-      qc.invalidateQueries({ queryKey: ['stats'] });
-      router.push('/');
-    },
-    onError: (e: Error) => toast.error(`Error: ${e.message}`),
+  const { data: integrations = [] } = useQuery({
+    queryKey: ['integrations', userId],
+    queryFn: () => apiFetch<Integration[]>(`/api/integrations?userId=${userId}`),
   });
 
-  const togglePlatform = (id: string) =>
-    setSelectedPlatforms(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id],
-    );
-
-  const uploadFile = async (file: File): Promise<UploadedFile | null> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const res = await fetch(`${API_URL}/api/media/upload-standalone`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.text().catch(() => res.statusText);
-        throw new Error(err);
-      }
-      const data = await res.json() as UploadedFile;
-      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-      return { ...data, preview };
-    } catch (e: unknown) {
-      toast.error(`Error subiendo ${file.name}: ${(e as Error).message}`);
-      return null;
+  const groupedByPlatform = useMemo(() => {
+    const map = new Map<string, Integration[]>();
+    for (const i of integrations) {
+      if (!map.has(i.platform)) map.set(i.platform, []);
+      map.get(i.platform)!.push(i);
     }
+    return PLATFORM_ORDER.filter((p) => map.has(p)).map((p) => ({
+      platform: p,
+      accounts: map.get(p)!,
+    }));
+  }, [integrations]);
+
+  const selectedPlatforms = useMemo(() => {
+    const platforms = new Set<string>();
+    for (const i of integrations) {
+      if (selectedAccountIds.has(i.id)) platforms.add(i.platform);
+    }
+    return Array.from(platforms);
+  }, [integrations, selectedAccountIds]);
+
+  const maxChars = useMemo(() => {
+    if (selectedPlatforms.length === 0) return 280;
+    return Math.min(...selectedPlatforms.map((p) => PLATFORM_LIMITS[p] ?? 2200));
+  }, [selectedPlatforms]);
+
+  const overLimit = caption.length > maxChars;
+
+  const toggleAccount = (id: string) => {
+    setSelectedAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
+  // --- Upload handling ---
   const handleFiles = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files);
     if (!arr.length) return;
-
-    setUploadingCount(c => c + arr.length);
-    const results = await Promise.all(arr.map(uploadFile));
-    setUploadingCount(c => c - arr.length);
-
-    const successful = results.filter((r): r is UploadedFile => r !== null);
-    if (successful.length) {
-      setUploadedFiles(prev => [...prev, ...successful]);
-      toast.success(`${successful.length} archivo(s) subido(s)`);
+    setUploadingCount((c) => c + arr.length);
+    try {
+      const results = await Promise.allSettled(arr.map(uploadFile));
+      const ok: UploadedFile[] = [];
+      for (const r of results) {
+        if (r.status === 'fulfilled') ok.push(r.value);
+        else toast.error(`Error subiendo archivo: ${(r.reason as Error).message}`);
+      }
+      if (ok.length) {
+        setUploadedFiles((prev) => [...prev, ...ok]);
+        toast.success(`${ok.length} archivo(s) subido(s)`);
+      }
+    } finally {
+      setUploadingCount((c) => c - arr.length);
     }
   }, []);
 
@@ -102,7 +123,7 @@ export default function NewPostPage() {
   );
 
   const removeFile = (idx: number) => {
-    setUploadedFiles(prev => {
+    setUploadedFiles((prev) => {
       const copy = [...prev];
       if (copy[idx]?.preview) URL.revokeObjectURL(copy[idx].preview!);
       copy.splice(idx, 1);
@@ -110,120 +131,190 @@ export default function NewPostPage() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent): void => {
-    e.preventDefault();
-    if (!caption) { toast.error('El caption es requerido'); return; }
-    if (!selectedPlatforms.length) { toast.error('Selecciona al menos una plataforma'); return; }
+  // --- Mutations ---
+  const createPost = useMutation({
+    mutationFn: (data: object) =>
+      apiFetch(`/api/posts?userId=${userId}`, { method: 'POST', body: JSON.stringify(data) }),
+  });
 
-    createPost.mutate({
-      content: caption,
-      scheduledAt: publishNow ? new Date().toISOString() : new Date(scheduledAt).toISOString(),
-      platforms: selectedPlatforms,
-      // f.url is already the full public URL returned by the API (includes APP_URL)
-      mediaUrls: uploadedFiles.map(f => f.url),
-    });
+  const assignToQueue = useMutation({
+    mutationFn: (postId: string) =>
+      apiFetch(`/api/queue/assign`, {
+        method: 'POST',
+        body: JSON.stringify({ postId }),
+      }),
+  });
+
+  const buildBasePayload = () => ({
+    content: caption,
+    platforms: selectedPlatforms,
+    mediaUrls: uploadedFiles.map((f) => f.url),
+  });
+
+  const commonGuards = (): boolean => {
+    if (!caption) { toast.error('Escribe el contenido del post'); return false; }
+    if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
+    if (overLimit) { toast.error(`El contenido excede ${maxChars} caracteres`); return false; }
+    return true;
   };
 
-  const twitterChars = 280 - caption.length;
-  const isThread = caption.length > 280;
+  const handlePublishNow = async () => {
+    if (!commonGuards()) return;
+    try {
+      await createPost.mutateAsync({
+        ...buildBasePayload(),
+        scheduledAt: new Date().toISOString(),
+      });
+      toast.success('Publicando ahora…');
+      qc.invalidateQueries({ queryKey: ['posts'] });
+      qc.invalidateQueries({ queryKey: ['posts-all'] });
+      router.push('/calendar');
+    } catch (e) {
+      toast.error(`Error: ${(e as Error).message}`);
+    }
+  };
+
+  const handleAddToQueue = async () => {
+    if (!commonGuards()) return;
+    try {
+      const post = await createPost.mutateAsync({
+        ...buildBasePayload(),
+        scheduledAt: new Date().toISOString(),
+        status: 'DRAFT',
+      }) as { id: string };
+      const result = await assignToQueue.mutateAsync(post.id) as { slot: { dayOfWeek: number; hour: number; minute: number } };
+      const { slot } = result;
+      toast.success(
+        `Añadido a la cola (día ${slot.dayOfWeek} - ${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')})`,
+      );
+      qc.invalidateQueries({ queryKey: ['posts-all'] });
+      router.push('/calendar');
+    } catch (e) {
+      toast.error(`Error: ${(e as Error).message}`);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!caption) { toast.error('Escribe el contenido del post'); return; }
+    if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return; }
+    try {
+      await createPost.mutateAsync({
+        ...buildBasePayload(),
+        scheduledAt: new Date().toISOString(),
+        status: 'DRAFT',
+      });
+      toast.success('Borrador guardado');
+      qc.invalidateQueries({ queryKey: ['posts-all'] });
+      router.push('/calendar');
+    } catch (e) {
+      toast.error(`Error: ${(e as Error).message}`);
+    }
+  };
+
+  const handleSchedule = async () => {
+    if (!commonGuards()) return;
+    if (!scheduledAt) { toast.error('Elige fecha y hora'); return; }
+    try {
+      await createPost.mutateAsync({
+        ...buildBasePayload(),
+        scheduledAt: new Date(scheduledAt).toISOString(),
+      });
+      toast.success('Post programado');
+      qc.invalidateQueries({ queryKey: ['posts-all'] });
+      router.push('/calendar');
+    } catch (e) {
+      toast.error(`Error: ${(e as Error).message}`);
+    }
+  };
+
+  const busy = createPost.isPending || assignToQueue.isPending || uploadingCount > 0;
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold">Nuevo Post</h1>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold">Create Post</h1>
+        <p className="text-sm text-gray-400">Compose and schedule your content.</p>
+      </header>
 
-      {/* Ngrok / public URL warning */}
-      <div className="bg-amber-950/60 border border-amber-700/60 rounded-xl px-4 py-3 text-sm space-y-1">
-        <p className="font-medium text-amber-300">⚠️ Instagram y TikTok requieren una URL pública</p>
-        <p className="text-amber-400/80 text-xs">
-          Los servidores de Instagram no pueden acceder a <code className="bg-amber-900/40 px-1 rounded">localhost</code>.
-          Para publicar en Instagram/TikTok desde local, necesitas exponer la API con <strong>ngrok</strong>:
-        </p>
-        <ol className="text-amber-400/80 text-xs list-decimal list-inside space-y-0.5 mt-1">
-          <li>Instala ngrok: <code className="bg-amber-900/40 px-1 rounded">npm install -g ngrok</code></li>
-          <li>Ejecuta: <code className="bg-amber-900/40 px-1 rounded">ngrok http 3333</code></li>
-          <li>Copia la URL tipo <code className="bg-amber-900/40 px-1 rounded">https://xxxx.ngrok-free.app</code></li>
-          <li>Actualiza <code className="bg-amber-900/40 px-1 rounded">APP_URL=https://xxxx.ngrok-free.app</code> en <code className="bg-amber-900/40 px-1 rounded">.env</code> y reinicia la API</li>
-        </ol>
-      </div>
+      {/* Card 1 — Content */}
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Edit3 size={16} className="text-indigo-400" />
+          <h2 className="font-semibold">Content</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">Write your post content and add media.</p>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-
-        {/* Caption */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Caption</label>
+        <div className="relative">
           <textarea
             data-testid="caption-input"
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
-            rows={5}
-            placeholder="Escribe tu caption aquí..."
+            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
+            rows={4}
+            placeholder="What's on your mind?"
             value={caption}
-            onChange={e => setCaption(e.target.value)}
+            onChange={(e) => setCaption(e.target.value)}
           />
-          <div className="flex gap-4 mt-1 text-xs text-gray-500">
-            {selectedPlatforms.includes('TWITTER') && (
-              <span className={twitterChars < 0 ? 'text-red-400' : twitterChars < 50 ? 'text-yellow-400' : ''}>
-                Twitter: {twitterChars} restantes {isThread && '(se publicará como hilo)'}
-              </span>
-            )}
-            {selectedPlatforms.includes('INSTAGRAM') && (
-              <span>Instagram: {2200 - caption.length} restantes</span>
-            )}
-          </div>
+          <span
+            className={`absolute bottom-2 right-3 text-xs ${overLimit ? 'text-red-400' : 'text-gray-500'}`}
+          >
+            {caption.length} / {maxChars}
+          </span>
         </div>
 
-        {/* Media Upload Zone */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Multimedia <span className="text-gray-500">(imágenes y videos)</span>
-          </label>
+        {/* Media section */}
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ImageIcon size={15} className="text-indigo-400" />
+            <span className="text-sm font-medium">Media</span>
+          </div>
 
-          {/* Drop zone */}
           <div
-            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
               isDragging
                 ? 'border-indigo-400 bg-indigo-950/30'
-                : 'border-gray-700 hover:border-gray-500 bg-gray-900'
+                : 'border-gray-800 hover:border-gray-600 bg-gray-950'
             }`}
           >
             <input
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime"
+              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm"
               className="hidden"
-              onChange={e => e.target.files && handleFiles(e.target.files)}
+              onChange={(e) => e.target.files && handleFiles(e.target.files)}
             />
             {uploadingCount > 0 ? (
               <div className="flex flex-col items-center gap-2 text-gray-400">
-                <Loader2 className="animate-spin" size={28} />
-                <p className="text-sm">Subiendo {uploadingCount} archivo(s)...</p>
+                <Loader2 className="animate-spin" size={24} />
+                <p className="text-sm">Subiendo {uploadingCount} archivo(s)…</p>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-2 text-gray-400">
-                <Upload size={28} />
-                <p className="text-sm">
-                  <span className="text-indigo-400 font-medium">Haz clic</span> o arrastra archivos aquí
+              <div className="flex flex-col items-center gap-1 text-gray-400">
+                <Upload size={22} />
+                <p className="text-sm">Drop files here or click to upload</p>
+                <p className="text-xs text-gray-600">
+                  Images (JPG, PNG, GIF, WebP) or Videos (MP4, MOV, WebM)
                 </p>
-                <p className="text-xs text-gray-600">JPG, PNG, GIF, WebP, MP4 · Máx. 500 MB</p>
               </div>
             )}
           </div>
 
-          {/* Previews */}
           {uploadedFiles.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 mt-3">
+            <div className="grid grid-cols-4 gap-2 mt-3">
               {uploadedFiles.map((f, i) => (
-                <div key={i} className="relative group rounded-lg overflow-hidden bg-gray-800 aspect-square">
+                <div
+                  key={`${f.url}-${i}`}
+                  className="relative group rounded-lg overflow-hidden bg-gray-800 aspect-square"
+                >
                   {f.mediaType === 'IMAGE' && f.preview ? (
                     <img src={f.preview} alt={f.fileName} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-full gap-1 text-gray-400">
-                      {f.mediaType === 'VIDEO' ? <Film size={24} /> : <ImageIcon size={24} />}
-                      <p className="text-xs truncate px-2 text-center w-full">{f.fileName}</p>
+                    <div className="flex flex-col items-center justify-center h-full gap-1 text-gray-400 p-1">
+                      {f.mediaType === 'VIDEO' ? <Film size={22} /> : <ImageIcon size={22} />}
+                      <p className="text-[10px] truncate w-full text-center">{f.fileName}</p>
                     </div>
                   )}
                   <button
@@ -233,78 +324,124 @@ export default function NewPostPage() {
                   >
                     <X size={12} className="text-white" />
                   </button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-xs text-gray-300 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                    {f.fileName}
-                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      </section>
 
-        {/* Platforms */}
+      {/* Card 2 — Select Accounts */}
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <UsersIcon size={16} className="text-indigo-400" />
+          <h2 className="font-semibold">Select Accounts</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">Choose which accounts to publish to.</p>
+
+        {groupedByPlatform.length === 0 && (
+          <p className="text-sm text-gray-500 py-6 text-center">
+            No hay cuentas conectadas.{' '}
+            <a href="/integrations" className="text-indigo-400 hover:underline">
+              Conecta una aquí.
+            </a>
+          </p>
+        )}
+
+        <div className="space-y-4">
+          {groupedByPlatform.map(({ platform, accounts }) => (
+            <div key={platform}>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: PLATFORM_COLORS[platform] }}
+                />
+                <span className="text-sm font-medium capitalize">{platform.toLowerCase()}</span>
+              </div>
+              <div className="space-y-2">
+                {accounts.map((acc) => {
+                  const selected = selectedAccountIds.has(acc.id);
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      data-testid={`account-${acc.id}`}
+                      onClick={() => toggleAccount(acc.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                        selected
+                          ? 'border-indigo-500 bg-indigo-950/40'
+                          : 'border-gray-800 bg-gray-950 hover:border-gray-700'
+                      }`}
+                    >
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+                        style={{ background: PLATFORM_COLORS[platform] }}
+                      >
+                        {(acc.accountName ?? acc.profileId ?? '?').slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-100 truncate">
+                          {acc.accountName ?? acc.profileId ?? 'Sin nombre'}
+                        </p>
+                        <p className="text-xs text-gray-500 capitalize">{platform.toLowerCase()}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Actions */}
+      <section className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Plataformas</label>
-          <div className="flex flex-wrap gap-2">
-            {PLATFORMS.map(p => (
-              <button
-                type="button"
-                key={p.id}
-                data-testid={`platform-${p.id.toLowerCase()}`}
-                onClick={() => togglePlatform(p.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                  selectedPlatforms.includes(p.id)
-                    ? 'border-indigo-500 bg-indigo-950 text-white'
-                    : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-500'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <label className="text-sm font-medium text-gray-300 flex items-center gap-2 mb-2">
+            <CalendarClock size={15} className="text-indigo-400" />
+            Programar (opcional)
+          </label>
+          <input
+            type="datetime-local"
+            className="bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+          />
         </div>
 
-        {/* Schedule */}
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <label className="text-sm font-medium text-gray-300">Publicación</label>
-            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                className="rounded"
-                data-testid="publish-now-checkbox"
-                checked={publishNow}
-                onChange={e => setPublishNow(e.target.checked)}
-              />
-              Publicar ahora
-            </label>
-          </div>
-          {!publishNow && (
-            <input
-              type="datetime-local"
-              className="bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-gray-100 focus:outline-none focus:border-indigo-500"
-              value={scheduledAt}
-              onChange={e => setScheduledAt(e.target.value)}
-            />
-          )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            data-testid="add-to-queue-btn"
+            onClick={handleAddToQueue}
+            disabled={busy || overLimit}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
+          >
+            <ListOrdered size={16} />
+            Añadir a la Cola
+          </button>
+          <button
+            type="button"
+            data-testid="submit-post-btn"
+            onClick={scheduledAt ? handleSchedule : handlePublishNow}
+            disabled={busy || overLimit}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors text-white"
+          >
+            <Send size={16} />
+            {scheduledAt ? 'Programar' : 'Publicar ahora'}
+          </button>
+          <button
+            type="button"
+            data-testid="save-draft-btn"
+            onClick={handleSaveDraft}
+            disabled={busy}
+            className="col-span-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors text-gray-200 border border-gray-700"
+          >
+            <FileText size={16} />
+            Guardar borrador
+          </button>
         </div>
-
-        <button
-          type="submit"
-          data-testid="submit-post-btn"
-          disabled={createPost.isPending || uploadingCount > 0}
-          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl font-medium text-sm transition-colors"
-        >
-          {createPost.isPending
-            ? 'Procesando...'
-            : uploadingCount > 0
-            ? 'Esperando uploads...'
-            : publishNow
-            ? 'Publicar ahora'
-            : 'Programar post'}
-        </button>
-      </form>
+      </section>
     </div>
   );
 }
