@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
-  ListOrdered,
+  ListOrdered, GitBranch, Inbox, Zap,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -28,6 +28,12 @@ const NAV_MAIN = [
   { href: '/assistant', label: 'Asistente IA', icon: BotMessageSquare },
 ];
 
+const NAV_AUTOMATION = [
+  { href: '/flows', label: 'Flujos', icon: GitBranch },
+  { href: '/inbox', label: 'Bandeja', icon: Inbox },
+  { href: '/sequences', label: 'Secuencias', icon: Zap },
+];
+
 const NAV_SETTINGS = [
   { href: '/settings/brand', label: 'Perfil de marca', icon: Briefcase },
   { href: '/settings/strategy', label: 'Estrategia', icon: BarChart2 },
@@ -38,6 +44,26 @@ function NavLinks({ onClose }: { onClose: () => void }) {
   return (
     <>
       {NAV_MAIN.map(({ href, label, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          onClick={onClose}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            pathname === href
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+          }`}
+        >
+          <Icon size={16} />
+          {label}
+        </Link>
+      ))}
+      <div className="pt-4 pb-1">
+        <p className="px-3 text-xs font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+          Automatización
+        </p>
+      </div>
+      {NAV_AUTOMATION.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}

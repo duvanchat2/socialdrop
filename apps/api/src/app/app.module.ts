@@ -23,6 +23,10 @@ import { AssistantModule } from '../modules/assistant/assistant.module.js';
 import { MetricsModule } from '../modules/metrics/metrics.module.js';
 import { CompetitorsModule } from '../modules/competitors/competitors.module.js';
 import { QueueModule } from '../modules/queue/queue.module.js';
+import { WebhooksModule } from '../modules/webhooks/webhook.module.js';
+import { FlowsModule } from '../modules/flows/flows.module.js';
+import { InboxModule } from '../modules/inbox/inbox.module.js';
+import { SequencesModule } from '../modules/sequences/sequences.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -62,6 +66,10 @@ import redisConfig from '../config/redis.config.js';
     MetricsModule,
     CompetitorsModule,
     QueueModule,
+    WebhooksModule,
+    FlowsModule,
+    InboxModule,
+    SequencesModule,
   ],
   controllers: [AppController],
   providers: [

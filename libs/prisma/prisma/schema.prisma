@@ -283,3 +283,48 @@ model QueueSlot {
   @@index([userId, platform])
   @@index([userId, dayOfWeek, hour, minute])
 }
+
+model Flow {
+  id         String          @id @default(cuid())
+  userId     String          @default("demo-user")
+  name       String
+  platform   String
+  trigger    String
+  keyword    String?
+  isActive   Boolean         @default(true)
+  nodes      Json            @default("[]")
+  edges      Json            @default("[]")
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  executions FlowExecution[]
+
+  @@index([userId])
+  @@index([userId, isActive])
+}
+
+model FlowExecution {
+  id          String   @id @default(cuid())
+  flowId      String
+  flow        Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  triggeredBy String
+  triggerType String
+  status      String   @default("RUNNING")
+  createdAt   DateTime @default(now())
+
+  @@index([flowId])
+  @@index([triggeredBy])
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  userId    String   @default("demo-user")
+  platform  String
+  accountId String
+  username  String?
+  name      String?
+  tags      String[]
+  createdAt DateTime @default(now())
+
+  @@unique([platform, accountId])
+  @@index([userId])
+}
