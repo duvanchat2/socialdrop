@@ -1,16 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@socialdrop/prisma';
 
-export interface CreateFlowDto {
-  name: string;
-  platform: string;
-  trigger: string;
+export class CreateFlowDto {
+  name!: string;
+  platform!: string;
+  trigger!: string;
   keyword?: string;
   nodes?: any[];
   edges?: any[];
 }
 
-export interface UpdateFlowDto {
+export class UpdateFlowDto {
   name?: string;
   platform?: string;
   trigger?: string;

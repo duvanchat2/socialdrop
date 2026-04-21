@@ -3,9 +3,9 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '@socialdrop/prisma';
 
-export interface CreateSequenceDto {
-  name: string;
-  steps: SequenceStep[];
+export class CreateSequenceDto {
+  name!: string;
+  steps!: SequenceStep[];
 }
 
 export interface SequenceStep {

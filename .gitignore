@@ -73,3 +73,6 @@ uploads/
 error.log
 *.log
 pending.patch
+.env.backup
+ecosystem.config.js
+pnpm-lock.yaml
