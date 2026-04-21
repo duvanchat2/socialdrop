@@ -1,22 +1,57 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { IsString, IsOptional, IsBoolean, IsArray } from 'class-validator';
 import { PrismaService } from '@socialdrop/prisma';
 
-export interface CreateFlowDto {
-  name: string;
-  platform: string;
-  trigger: string;
+export class CreateFlowDto {
+  @IsString()
+  name!: string;
+
+  @IsString()
+  platform!: string;
+
+  @IsString()
+  trigger!: string;
+
+  @IsOptional()
+  @IsString()
   keyword?: string;
+
+  @IsOptional()
+  @IsArray()
   nodes?: any[];
+
+  @IsOptional()
+  @IsArray()
   edges?: any[];
 }
 
-export interface UpdateFlowDto {
+export class UpdateFlowDto {
+  @IsOptional()
+  @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
   platform?: string;
+
+  @IsOptional()
+  @IsString()
   trigger?: string;
+
+  @IsOptional()
+  @IsString()
   keyword?: string;
+
+  @IsOptional()
+  @IsArray()
   nodes?: any[];
+
+  @IsOptional()
+  @IsArray()
   edges?: any[];
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 

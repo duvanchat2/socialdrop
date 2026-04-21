@@ -1,16 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { IsString, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PrismaService } from '@socialdrop/prisma';
-
-export interface CreateSequenceDto {
-  name: string;
-  steps: SequenceStep[];
-}
 
 export interface SequenceStep {
   message: string;
   delayHours: number;
+}
+
+export class CreateSequenceDto {
+  @IsString()
+  name!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => Object)
+  steps!: SequenceStep[];
 }
 
 // Sequences are stored as Flows with trigger = 'SEQUENCE'
