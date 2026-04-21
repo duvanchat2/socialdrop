@@ -22,6 +22,7 @@
     },
     {
       "plugin": "@nx/webpack/plugin",
+      "exclude": ["apps/api"],
       "options": {
         "buildTargetName": "build",
         "serveTargetName": "serve",
