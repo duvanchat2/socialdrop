@@ -4,6 +4,16 @@ import { Platform } from '@socialdrop/shared';
 import type { AuthResult, TokenResult, PostContent, PublishResult } from '@socialdrop/shared';
 import { SocialAbstract, RefreshTokenError } from '../social-abstract.js';
 
+interface IgApiResponse {
+  id?: string;
+  error?: {
+    message: string;
+    type: string;
+    code: number;
+    fbtrace_id?: string;
+  };
+}
+
 @Injectable()
 export class InstagramProvider extends SocialAbstract {
   private readonly logger = new Logger(InstagramProvider.name);
@@ -12,6 +22,39 @@ export class InstagramProvider extends SocialAbstract {
   private readonly BASE_URL = 'https://graph.facebook.com/v18.0';
 
   constructor(private readonly config: ConfigService) { super(); }
+
+  /**
+   * Fetch and parse JSON; throw with full API error body if the response contains
+   * an `error` field (Meta Graph API returns HTTP 200 even for errors sometimes).
+   */
+  private async igFetch(url: string, options: RequestInit = {}, step = 'request'): Promise<IgApiResponse> {
+    const res = await this.throttledFetch(url, options);
+    const body = await res.text();
+    let data: IgApiResponse;
+    try {
+      data = JSON.parse(body) as IgApiResponse;
+    } catch {
+      throw new Error(`[Instagram] ${step}: non-JSON response (HTTP ${res.status}): ${body.slice(0, 200)}`);
+    }
+
+    if (!res.ok) {
+      const msg = data.error?.message ?? body.slice(0, 200);
+      const code = data.error?.code ?? res.status;
+      const err = new Error(`[Instagram] ${step} HTTP ${res.status} (code ${code}): ${msg}`);
+      if (res.status === 401 || code === 190) throw new RefreshTokenError(err.message);
+      throw err;
+    }
+
+    if (data.error) {
+      const { message, code, type } = data.error;
+      const errMsg = `[Instagram] ${step} API error ${code} (${type}): ${message}`;
+      this.logger.error(errMsg);
+      if (code === 190 || code === 102) throw new RefreshTokenError(errMsg);
+      throw new Error(errMsg);
+    }
+
+    return data;
+  }
 
   generateAuthUrl(userId: string): string {
     const params = new URLSearchParams({
@@ -25,58 +68,54 @@ export class InstagramProvider extends SocialAbstract {
   }
 
   async authenticate(code: string, userId: string): Promise<AuthResult> {
-    // Exchange code for short-lived token
     const params = new URLSearchParams({
       client_id: this.config.get<string>('INSTAGRAM_APP_ID', ''),
       client_secret: this.config.get<string>('INSTAGRAM_APP_SECRET', ''),
       redirect_uri: this.config.get<string>('INSTAGRAM_REDIRECT_URI', ''),
       code,
     });
-    const res = await this.throttledFetch(`${this.BASE_URL}/oauth/access_token?${params}`, { method: 'GET' });
-    const data = await res.json() as { access_token: string };
+    const data = await this.igFetch(`${this.BASE_URL}/oauth/access_token?${params}`, { method: 'GET' }, 'short-lived token') as { access_token: string };
 
-    // Exchange for long-lived token
     const llParams = new URLSearchParams({
       grant_type: 'fb_exchange_token',
       client_id: this.config.get<string>('INSTAGRAM_APP_ID', ''),
       client_secret: this.config.get<string>('INSTAGRAM_APP_SECRET', ''),
       fb_exchange_token: data.access_token,
     });
-    const llRes = await this.throttledFetch(`${this.BASE_URL}/oauth/access_token?${llParams}`, { method: 'GET' });
-    const llData = await llRes.json() as { access_token: string; expires_in?: number };
+    const llData = await this.igFetch(`${this.BASE_URL}/oauth/access_token?${llParams}`, { method: 'GET' }, 'long-lived token') as { access_token: string; expires_in?: number };
 
-    // Get Instagram Business account linked to the page
     const igAccountId = this.config.get<string>('INSTAGRAM_ACCOUNT_ID', '');
-    const igRes = await this.throttledFetch(
+    const igData = await this.igFetch(
       `${this.BASE_URL}/${igAccountId}?fields=name,username&access_token=${llData.access_token}`,
-      { method: 'GET' },
-    );
-    const igData = await igRes.json() as { id?: string; name?: string; username?: string };
+      { method: 'GET' }, 'account info',
+    ) as { id?: string; name?: string; username?: string };
 
     return {
       accessToken: llData.access_token,
       profileId: igAccountId,
-      accountName: igData.username ?? igData.name ?? igAccountId,
-      tokenExpiry: llData.expires_in ? new Date(Date.now() + llData.expires_in * 1000) : undefined,
+      accountName: (igData as any).username ?? (igData as any).name ?? igAccountId,
+      tokenExpiry: (llData as any).expires_in ? new Date(Date.now() + (llData as any).expires_in * 1000) : undefined,
     };
   }
 
   async refreshToken(token: string): Promise<TokenResult> {
-    // Refresh long-lived Instagram token
     const params = new URLSearchParams({
       grant_type: 'ig_refresh_token',
       access_token: token,
     });
-    const res = await this.throttledFetch(`${this.BASE_URL}/refresh_access_token?${params}`, { method: 'GET' });
-    const data = await res.json() as { access_token: string; expires_in?: number };
+    const data = await this.igFetch(`${this.BASE_URL}/refresh_access_token?${params}`, { method: 'GET' }, 'refresh token') as { access_token: string; expires_in?: number };
     return {
-      accessToken: data.access_token,
-      tokenExpiry: data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : undefined,
+      accessToken: (data as any).access_token,
+      tokenExpiry: (data as any).expires_in ? new Date(Date.now() + (data as any).expires_in * 1000) : undefined,
     };
   }
 
   async post(accessToken: string, content: PostContent): Promise<PublishResult> {
     const igUserId = this.config.get<string>('INSTAGRAM_ACCOUNT_ID', '');
+    this.logger.log(`[Instagram] post() igUserId=${igUserId} mediaUrls=${JSON.stringify(content.mediaUrls)} mediaType=${content.mediaType}`);
+
+    if (!igUserId) throw new Error('[Instagram] INSTAGRAM_ACCOUNT_ID env var is not set');
+
     const delays = [1000, 5000, 15000];
     let lastError: Error = new Error('Unknown error');
 
@@ -84,33 +123,36 @@ export class InstagramProvider extends SocialAbstract {
       try {
         let result: PublishResult;
         if (content.mediaType === 'VIDEO') {
+          this.logger.log(`[Instagram] Attempt ${attempt + 1}: postReel`);
           result = await this.postReel(accessToken, igUserId, content);
         } else if (content.mediaUrls && content.mediaUrls.length > 1) {
+          this.logger.log(`[Instagram] Attempt ${attempt + 1}: postCarousel (${content.mediaUrls.length} images)`);
           result = await this.postCarousel(accessToken, igUserId, content);
         } else if (content.mediaUrls && content.mediaUrls.length === 1) {
+          this.logger.log(`[Instagram] Attempt ${attempt + 1}: postSingleImage url=${content.mediaUrls[0]}`);
           result = await this.postSingleImage(accessToken, igUserId, content);
         } else {
-          // Instagram requires media; fallback to single text-based image post attempt
-          throw new Error('Instagram requires at least one media URL');
+          throw new Error('[Instagram] No media URL provided — Instagram requires at least one media URL');
         }
-        this.logger.log(`[Instagram] ✓ Published postId=${result.platformPostId}`);
+        this.logger.log(`[Instagram] ✓ Published platformPostId=${result.platformPostId}`);
         return result;
       } catch (err) {
         lastError = err as Error;
+        this.logger.error(`[Instagram] Attempt ${attempt + 1} failed: ${lastError.message}`);
         if (err instanceof RefreshTokenError) throw err;
         if (attempt < 2) {
-          this.logger.warn(`[Instagram] Attempt ${attempt + 1} failed, retrying in ${delays[attempt]}ms`);
+          this.logger.warn(`[Instagram] Retrying in ${delays[attempt]}ms...`);
           await new Promise(r => setTimeout(r, delays[attempt]));
         }
       }
     }
-    this.logger.error(`[Instagram] ✗ Error: ${lastError.message}`);
+    this.logger.error(`[Instagram] ✗ All attempts failed: ${lastError.message}`);
     throw lastError;
   }
 
   private async postSingleImage(token: string, igUserId: string, content: PostContent): Promise<PublishResult> {
-    // Step 1: Create media container
-    const containerRes = await this.throttledFetch(
+    this.logger.log(`[Instagram] Step 1/2: create media container for image_url=${content.mediaUrls![0]}`);
+    const containerData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media`,
       {
         method: 'POST',
@@ -121,11 +163,12 @@ export class InstagramProvider extends SocialAbstract {
           access_token: token,
         }),
       },
+      'create image container',
     );
-    const containerData = await containerRes.json() as { id: string };
+    this.logger.log(`[Instagram] Step 1/2 done: containerId=${containerData.id}`);
 
-    // Step 2: Publish the container
-    const publishRes = await this.throttledFetch(
+    this.logger.log(`[Instagram] Step 2/2: publish container containerId=${containerData.id}`);
+    const publishData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media_publish`,
       {
         method: 'POST',
@@ -135,33 +178,33 @@ export class InstagramProvider extends SocialAbstract {
           access_token: token,
         }),
       },
+      'publish image container',
     );
-    const publishData = await publishRes.json() as { id: string };
-    return { platformPostId: publishData.id };
+    return { platformPostId: publishData.id! };
   }
 
   private async postCarousel(token: string, igUserId: string, content: PostContent): Promise<PublishResult> {
-    // Step 1: Create individual image containers
     const childIds: string[] = [];
-    for (const imageUrl of content.mediaUrls!) {
-      const res = await this.throttledFetch(
+    for (let i = 0; i < content.mediaUrls!.length; i++) {
+      this.logger.log(`[Instagram] Carousel: creating child container ${i + 1}/${content.mediaUrls!.length} url=${content.mediaUrls![i]}`);
+      const data = await this.igFetch(
         `${this.BASE_URL}/${igUserId}/media`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            image_url: imageUrl,
+            image_url: content.mediaUrls![i],
             is_carousel_item: true,
             access_token: token,
           }),
         },
+        `carousel child ${i + 1}`,
       );
-      const data = await res.json() as { id: string };
-      childIds.push(data.id);
+      childIds.push(data.id!);
     }
 
-    // Step 2: Create carousel container
-    const carouselRes = await this.throttledFetch(
+    this.logger.log(`[Instagram] Carousel: creating carousel container with children=${childIds.join(',')}`);
+    const carouselData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media`,
       {
         method: 'POST',
@@ -173,11 +216,11 @@ export class InstagramProvider extends SocialAbstract {
           access_token: token,
         }),
       },
+      'carousel container',
     );
-    const carouselData = await carouselRes.json() as { id: string };
 
-    // Step 3: Publish carousel
-    const publishRes = await this.throttledFetch(
+    this.logger.log(`[Instagram] Carousel: publishing containerId=${carouselData.id}`);
+    const publishData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media_publish`,
       {
         method: 'POST',
@@ -187,14 +230,14 @@ export class InstagramProvider extends SocialAbstract {
           access_token: token,
         }),
       },
+      'publish carousel',
     );
-    const publishData = await publishRes.json() as { id: string };
-    return { platformPostId: publishData.id };
+    return { platformPostId: publishData.id! };
   }
 
   private async postReel(token: string, igUserId: string, content: PostContent): Promise<PublishResult> {
-    // Step 1: Create reel container
-    const containerRes = await this.throttledFetch(
+    this.logger.log(`[Instagram] Reel: creating container for video_url=${content.mediaUrls![0]}`);
+    const containerData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media`,
       {
         method: 'POST',
@@ -207,33 +250,30 @@ export class InstagramProvider extends SocialAbstract {
           access_token: token,
         }),
       },
+      'create reel container',
     );
-    const containerData = await containerRes.json() as { id: string };
+    this.logger.log(`[Instagram] Reel: containerId=${containerData.id} — polling status...`);
 
-    // Step 2: Poll until status is FINISHED
     let status = '';
     let pollAttempts = 0;
     const maxPollAttempts = 20;
     while (status !== 'FINISHED' && pollAttempts < maxPollAttempts) {
       await new Promise(r => setTimeout(r, 5000));
-      const statusRes = await this.throttledFetch(
+      const statusData = await this.igFetch(
         `${this.BASE_URL}/${containerData.id}?fields=status_code&access_token=${token}`,
         { method: 'GET' },
-      );
-      const statusData = await statusRes.json() as { status_code: string };
-      status = statusData.status_code;
+        `poll status attempt ${pollAttempts + 1}`,
+      ) as { status_code?: string };
+      status = (statusData as any).status_code ?? '';
       pollAttempts++;
-      if (status === 'ERROR') {
-        throw new Error('Instagram reel processing failed');
-      }
+      this.logger.log(`[Instagram] Reel status poll ${pollAttempts}: ${status}`);
+      if (status === 'ERROR') throw new Error('[Instagram] Reel processing failed — Instagram returned ERROR status');
     }
 
-    if (status !== 'FINISHED') {
-      throw new Error('Instagram reel processing timed out');
-    }
+    if (status !== 'FINISHED') throw new Error('[Instagram] Reel processing timed out after 100s');
 
-    // Step 3: Publish the reel
-    const publishRes = await this.throttledFetch(
+    this.logger.log(`[Instagram] Reel: publishing containerId=${containerData.id}`);
+    const publishData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media_publish`,
       {
         method: 'POST',
@@ -243,8 +283,8 @@ export class InstagramProvider extends SocialAbstract {
           access_token: token,
         }),
       },
+      'publish reel',
     );
-    const publishData = await publishRes.json() as { id: string };
-    return { platformPostId: publishData.id };
+    return { platformPostId: publishData.id! };
   }
 }

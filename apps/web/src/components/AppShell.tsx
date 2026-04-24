@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
-  ListOrdered, GitBranch, Inbox, Zap,
+  ListOrdered, GitBranch, Inbox, Zap, Terminal,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -37,6 +37,7 @@ const NAV_AUTOMATION = [
 const NAV_SETTINGS = [
   { href: '/settings/brand', label: 'Perfil de marca', icon: Briefcase },
   { href: '/settings/strategy', label: 'Estrategia', icon: BarChart2 },
+  { href: '/debug', label: 'Debug Logs', icon: Terminal },
 ];
 
 function NavLinks({ onClose }: { onClose: () => void }) {

@@ -13,6 +13,7 @@ async function bootstrap() {
   mkdirSync(uploadDir, { recursive: true });
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useLogger(['log', 'error', 'warn', 'debug']);
 
   // Security headers
   app.use(helmet());

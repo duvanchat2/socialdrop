@@ -47,7 +47,19 @@ export default function FlowBuilderPage() {
 
   useEffect(() => {
     if (flow) {
-      setNodes(Array.isArray(flow.nodes) ? flow.nodes : []);
+      const savedNodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+      // If no nodes saved yet, seed with a default TRIGGER node
+      if (savedNodes.length === 0) {
+        const defaultTrigger = {
+          id: 'TRIGGER-default',
+          type: 'TRIGGER',
+          position: { x: 250, y: 100 },
+          data: { label: 'Trigger', keyword: flow.keyword ?? '' },
+        };
+        setNodes([defaultTrigger]);
+      } else {
+        setNodes(savedNodes);
+      }
       setEdges(Array.isArray(flow.edges) ? flow.edges : []);
     }
   }, [flow]);
@@ -64,10 +76,16 @@ export default function FlowBuilderPage() {
 
   const addNode = useCallback(
     (type: string) => {
+      // Stack vertically under existing nodes — center X, 150px gap
+      const COLS = 1;
+      const COL_WIDTH = 260;
+      const ROW_HEIGHT = 150;
+      const col = nodes.length % COLS;
+      const row = Math.floor(nodes.length / COLS);
       const newNode = {
         id: `${type}-${Date.now()}`,
         type,
-        position: { x: 100 + nodes.length * 50, y: 100 + nodes.length * 60 },
+        position: { x: 250 + col * COL_WIDTH, y: 100 + row * ROW_HEIGHT },
         data: { label: NODE_TYPES.find(n => n.type === type)?.label ?? type, message: '', tag: '', delayHours: 1 },
       };
       setNodes(prev => [...prev, newNode]);

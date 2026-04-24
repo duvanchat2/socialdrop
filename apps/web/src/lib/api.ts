@@ -9,5 +9,13 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     const err = await res.text().catch(() => res.statusText);
     throw new Error(err || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  // 204 No Content or empty body — return undefined cast to T
+  if (res.status === 204) return undefined as unknown as T;
+  const text = await res.text();
+  if (!text) return undefined as unknown as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Unexpected non-JSON response: ${text.slice(0, 100)}`);
+  }
 }
