@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
-  ListOrdered, GitBranch, Inbox, Zap, Terminal,
+  ListOrdered, GitBranch, Inbox, Zap, Terminal, Youtube,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -32,6 +32,7 @@ const NAV_AUTOMATION = [
   { href: '/flows', label: 'Flujos', icon: GitBranch },
   { href: '/inbox', label: 'Bandeja', icon: Inbox },
   { href: '/sequences', label: 'Secuencias', icon: Zap },
+  { href: '/youtube', label: 'YT Comentarios', icon: Youtube },
 ];
 
 const NAV_SETTINGS = [

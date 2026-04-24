@@ -328,3 +328,38 @@ model Contact {
   @@unique([platform, accountId])
   @@index([userId])
 }
+
+model YoutubeComment {
+  id              String    @id @default(cuid())
+  userId          String    @default("demo-user")
+  videoId         String
+  videoTitle      String?
+  commentId       String    @unique
+  authorName      String
+  authorChannelId String?
+  text            String
+  likeCount       Int       @default(0)
+  replyCount      Int       @default(0)
+  publishedAt     DateTime?
+  isShort         Boolean   @default(false)
+  replied         Boolean   @default(false)
+  repliedAt       DateTime?
+  replyText       String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([userId, replied])
+  @@index([videoId])
+}
+
+model YoutubeAutoReply {
+  id            String   @id @default(cuid())
+  userId        String   @default("demo-user")
+  keyword       String
+  replyTemplate String
+  isEnabled     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+}

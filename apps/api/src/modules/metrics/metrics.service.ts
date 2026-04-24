@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@socialdrop/prisma';
 import { Platform } from '@socialdrop/shared';
+import { google } from 'googleapis';
 
 interface IgAccountFields {
   followers_count?: number;
@@ -54,7 +56,10 @@ interface YtVideo {
 export class MetricsService {
   private readonly logger = new Logger(MetricsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ── Instagram ─────────────────────────────────────────────────────────────
   async syncInstagram(userId: string): Promise<void> {
@@ -202,84 +207,148 @@ export class MetricsService {
     }
   }
 
-  // ── YouTube ───────────────────────────────────────────────────────────────
-  async syncYouTube(userId: string): Promise<void> {
+  // ── YouTube helpers ───────────────────────────────────────────────────────
+
+  /** Build an OAuth2Client from stored integration credentials and auto-persist refreshed tokens. */
+  private async getYoutubeClient(userId: string) {
     const integration = await this.prisma.integration.findFirst({
       where: { userId, platform: 'YOUTUBE' },
     });
-    if (!integration) {
+    if (!integration) return null;
+
+    const oauth2Client = new google.auth.OAuth2(
+      this.config.get<string>('YOUTUBE_CLIENT_ID', ''),
+      this.config.get<string>('YOUTUBE_CLIENT_SECRET', ''),
+      this.config.get<string>('YOUTUBE_REDIRECT_URI', ''),
+    );
+
+    oauth2Client.setCredentials({
+      access_token: integration.accessToken,
+      refresh_token: integration.refreshToken ?? undefined,
+      expiry_date: integration.tokenExpiry?.getTime(),
+    });
+
+    // Save refreshed tokens back to DB automatically
+    oauth2Client.on('tokens', async (tokens) => {
+      this.logger.log(`[Metrics] YouTube token refreshed for integration=${integration.id}`);
+      await this.prisma.integration.update({
+        where: { id: integration.id },
+        data: {
+          accessToken: tokens.access_token ?? integration.accessToken,
+          ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+          ...(tokens.expiry_date ? { tokenExpiry: new Date(tokens.expiry_date) } : {}),
+        },
+      });
+    });
+
+    return { oauth2Client, integration };
+  }
+
+  // ── YouTube ───────────────────────────────────────────────────────────────
+  async syncYouTube(userId: string): Promise<void> {
+    const ctx = await this.getYoutubeClient(userId);
+    if (!ctx) {
       this.logger.log(`[Metrics] No YOUTUBE integration for user ${userId}`);
       return;
     }
-
-    const token = integration.accessToken;
+    const { oauth2Client, integration } = ctx;
 
     try {
-      // Channel stats
-      const channelRes = await fetch(
-        'https://www.googleapis.com/youtube/v3/channels?part=statistics&mine=true',
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (channelRes.ok) {
-        const channelData = (await channelRes.json()) as { items?: Array<{ statistics: YtChannelStats }> };
-        const stats = channelData.items?.[0]?.statistics;
-        if (stats && !stats.hiddenSubscriberCount) {
-          await this.prisma.platformMetrics.create({
-            data: {
-              userId,
-              platform: 'YOUTUBE',
-              followersCount: parseInt(stats.subscriberCount ?? '0', 10),
-              postsCount: parseInt(stats.videoCount ?? '0', 10),
-              reachTotal: parseInt(stats.viewCount ?? '0', 10),
-            },
-          });
+      const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+      // ── Channel stats ──────────────────────────────────────────────────
+      const channelRes = await youtube.channels.list({
+        part: ['statistics'],
+        mine: true,
+      });
+
+      const stats = channelRes.data.items?.[0]?.statistics as YtChannelStats | undefined;
+      if (stats) {
+        if (stats.hiddenSubscriberCount) {
+          this.logger.warn(`[Metrics] YouTube subscriberCount is hidden for integration=${integration.id} — storing 0`);
         }
+        await this.prisma.platformMetrics.create({
+          data: {
+            userId,
+            platform: 'YOUTUBE',
+            // When subscribers are hidden the API returns hiddenSubscriberCount=true and no subscriberCount
+            followersCount: stats.hiddenSubscriberCount ? 0 : parseInt(stats.subscriberCount ?? '0', 10),
+            postsCount: parseInt(stats.videoCount ?? '0', 10),
+            reachTotal: parseInt(stats.viewCount ?? '0', 10),
+          },
+        });
+        this.logger.log(
+          `[Metrics] YouTube channel: subscribers=${stats.hiddenSubscriberCount ? 'hidden' : stats.subscriberCount} ` +
+          `videos=${stats.videoCount} views=${stats.viewCount}`,
+        );
+      } else {
+        this.logger.warn(`[Metrics] YouTube channels.list returned no items for user ${userId}`);
       }
 
-      // Videos list + stats
-      const searchRes = await fetch(
-        'https://www.googleapis.com/youtube/v3/search?part=id&forMine=true&type=video&maxResults=25&order=date',
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (searchRes.ok) {
-        const searchData = (await searchRes.json()) as { items?: Array<{ id: { videoId: string } }> };
-        const videoIds = (searchData.items ?? []).map((i) => i.id.videoId).filter(Boolean);
-        if (videoIds.length > 0) {
-          const videosRes = await fetch(
-            `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet&id=${videoIds.join(',')}&maxResults=25`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          if (videosRes.ok) {
-            const videosData = (await videosRes.json()) as { items?: YtVideo[] };
-            const videos = videosData.items ?? [];
-            for (const v of videos) {
-              await this.prisma.postAnalytics.upsert({
-                where: { userId_platform_platformPostId: { userId, platform: 'YOUTUBE', platformPostId: v.id } },
-                update: {
-                  views: parseInt(v.statistics?.viewCount ?? '0', 10),
-                  likes: parseInt(v.statistics?.likeCount ?? '0', 10),
-                  comments: parseInt(v.statistics?.commentCount ?? '0', 10),
-                  recordedAt: new Date(),
-                },
-                create: {
-                  userId,
-                  platform: 'YOUTUBE',
-                  platformPostId: v.id,
-                  caption: v.snippet?.title ?? null,
-                  mediaUrl: v.snippet?.thumbnails?.default?.url ?? null,
-                  views: parseInt(v.statistics?.viewCount ?? '0', 10),
-                  likes: parseInt(v.statistics?.likeCount ?? '0', 10),
-                  comments: parseInt(v.statistics?.commentCount ?? '0', 10),
-                  publishedAt: v.snippet?.publishedAt ? new Date(v.snippet.publishedAt) : null,
-                },
-              });
-            }
-            this.logger.log(`[Metrics] YouTube: synced ${videos.length} videos for user ${userId}`);
-          }
-        }
+      // ── Uploads playlist → recent videos ──────────────────────────────
+      // Use uploads playlist (cheaper than search.list — costs 1 quota unit vs 100)
+      const channelDetailRes = await youtube.channels.list({
+        part: ['contentDetails'],
+        mine: true,
+      });
+      const uploadsPlaylistId =
+        channelDetailRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+
+      if (!uploadsPlaylistId) {
+        this.logger.warn(`[Metrics] YouTube: no uploads playlist found for user ${userId}`);
+        return;
       }
+
+      const playlistRes = await youtube.playlistItems.list({
+        part: ['contentDetails'],
+        playlistId: uploadsPlaylistId,
+        maxResults: 25,
+      });
+
+      const videoIds = (playlistRes.data.items ?? [])
+        .map((i) => i.contentDetails?.videoId)
+        .filter((id): id is string => !!id);
+
+      if (videoIds.length === 0) {
+        this.logger.log(`[Metrics] YouTube: no videos found for user ${userId}`);
+        return;
+      }
+
+      // ── Video stats ────────────────────────────────────────────────────
+      const videosRes = await youtube.videos.list({
+        part: ['statistics', 'snippet', 'contentDetails'],
+        id: videoIds,
+        maxResults: 25,
+      });
+
+      const videos = videosRes.data.items ?? [];
+      for (const v of videos) {
+        const vStats = v.statistics as YtVideo['statistics'];
+        const videoId = v.id ?? '';
+        await this.prisma.postAnalytics.upsert({
+          where: { userId_platform_platformPostId: { userId, platform: 'YOUTUBE', platformPostId: videoId } },
+          update: {
+            views: parseInt(vStats?.viewCount ?? '0', 10),
+            likes: parseInt(vStats?.likeCount ?? '0', 10),
+            comments: parseInt(vStats?.commentCount ?? '0', 10),
+            recordedAt: new Date(),
+          },
+          create: {
+            userId,
+            platform: 'YOUTUBE',
+            platformPostId: videoId,
+            caption: v.snippet?.title ?? null,
+            mediaUrl: v.snippet?.thumbnails?.default?.url ?? null,
+            views: parseInt(vStats?.viewCount ?? '0', 10),
+            likes: parseInt(vStats?.likeCount ?? '0', 10),
+            comments: parseInt(vStats?.commentCount ?? '0', 10),
+            publishedAt: v.snippet?.publishedAt ? new Date(v.snippet.publishedAt) : null,
+          },
+        });
+      }
+      this.logger.log(`[Metrics] YouTube: synced ${videos.length} videos for user ${userId}`);
     } catch (err) {
-      this.logger.error(`[Metrics] YouTube sync failed for ${userId}: ${(err as Error).message}`);
+      this.logger.error(`[Metrics] YouTube sync failed for ${userId}: ${(err as Error).message}`, (err as Error).stack);
     }
   }
 
