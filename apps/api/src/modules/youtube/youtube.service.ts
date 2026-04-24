@@ -163,7 +163,7 @@ export class YoutubeService {
               videoTitle: title,
               commentId,
               authorName: top.authorDisplayName ?? 'Unknown',
-              authorChannelId: top.authorChannelId ?? null,
+              authorChannelId: (top.authorChannelId as { value?: string } | null)?.value ?? null,
               text: top.textDisplay ?? top.textOriginal ?? '',
               likeCount: top.likeCount ?? 0,
               replyCount: thread.snippet?.totalReplyCount ?? 0,
