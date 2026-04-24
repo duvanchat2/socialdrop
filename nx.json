@@ -51,6 +51,7 @@
     }
   ],
   "nxCloudId": "69c092101c1c64e8873a1bed",
+  "useInferencePlugins": false,
   "analytics": false,
   "generators": {
     "@nx/next": {
