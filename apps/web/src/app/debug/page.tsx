@@ -1,8 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
-import { Terminal, RefreshCw, Trash2 } from 'lucide-react';
+import { apiFetch, API_URL } from '@/lib/api';
+import { Terminal, RefreshCw, Trash2, Zap } from 'lucide-react';
 
 interface LogEntry {
   timestamp: string;
@@ -143,6 +143,170 @@ export default function DebugPage() {
       <p className="text-xs text-gray-600 text-center">
         Auto-refresh cada 5 s · últimas 50 entradas · clave Redis: debug:logs:{userId}
       </p>
+
+      <SpeedTestPanel />
+    </div>
+  );
+}
+
+/* ─── Speed Test ──────────────────────────────────────────────────────────── */
+interface SpeedResult {
+  sizeMB: number;
+  mbps: number;
+  seconds: number;
+}
+
+function SpeedTestPanel() {
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<SpeedResult[]>([]);
+  const [currentLabel, setCurrentLabel] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+
+  const runTest = async () => {
+    setRunning(true);
+    setResults([]);
+    abortRef.current = new AbortController();
+
+    const sizes = [1, 5, 10]; // MB
+    const newResults: SpeedResult[] = [];
+
+    for (const sizeMB of sizes) {
+      if (abortRef.current.signal.aborted) break;
+      setCurrentLabel(`Probando ${sizeMB} MB…`);
+
+      try {
+        const bytes = new Uint8Array(sizeMB * 1024 * 1024);
+        // Fill with pseudo-random data (non-compressible for accurate test)
+        for (let i = 0; i < bytes.length; i += 4) bytes[i] = i & 0xff;
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+        const file = new File([blob], `speedtest-${sizeMB}mb.bin`);
+        const form = new FormData();
+        form.append('file', file);
+
+        const t0 = performance.now();
+        const res = await fetch(`${API_URL}/api/media/speed-test`, {
+          method: 'POST',
+          body: form,
+          signal: abortRef.current.signal,
+        });
+        const elapsed = (performance.now() - t0) / 1000;
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const mbps = (sizeMB * 8) / elapsed; // Mbps
+        newResults.push({ sizeMB, mbps, seconds: elapsed });
+        setResults([...newResults]);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          newResults.push({ sizeMB, mbps: 0, seconds: 0 });
+          setResults([...newResults]);
+        }
+      }
+    }
+
+    setCurrentLabel('');
+    setRunning(false);
+  };
+
+  const stop = () => {
+    abortRef.current?.abort();
+    setRunning(false);
+    setCurrentLabel('');
+  };
+
+  const avgMbps = results.length
+    ? results.filter(r => r.mbps > 0).reduce((s, r) => s + r.mbps, 0) /
+      Math.max(1, results.filter(r => r.mbps > 0).length)
+    : 0;
+
+  const estimateSeconds = (sizeMB: number) =>
+    avgMbps > 0 ? Math.ceil((sizeMB * 8) / avgMbps) : null;
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Zap size={18} className="text-yellow-400" />
+          <h2 className="font-semibold">Test de Velocidad de Subida</h2>
+        </div>
+        <div className="flex gap-2">
+          {running ? (
+            <button
+              onClick={stop}
+              className="px-3 py-1.5 text-sm rounded-lg bg-red-900/40 hover:bg-red-900/60 border border-red-800 text-red-300"
+            >
+              Detener
+            </button>
+          ) : (
+            <button
+              onClick={runTest}
+              className="px-3 py-1.5 text-sm rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-600/40 text-yellow-300 font-medium"
+            >
+              Iniciar test
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Live status */}
+      {running && currentLabel && (
+        <p className="text-sm text-yellow-400 animate-pulse">{currentLabel}</p>
+      )}
+
+      {/* Results table */}
+      {results.length > 0 && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-3 text-xs text-gray-500 px-1">
+            <span>Tamaño</span>
+            <span>Velocidad</span>
+            <span>Tiempo</span>
+          </div>
+          {results.map((r) => (
+            <div key={r.sizeMB} className="grid grid-cols-3 text-sm bg-gray-800 rounded-lg px-3 py-2">
+              <span className="text-gray-300">{r.sizeMB} MB</span>
+              <span className={r.mbps > 0 ? 'text-green-400 font-medium' : 'text-red-400'}>
+                {r.mbps > 0 ? `${r.mbps.toFixed(1)} Mbps` : 'Error'}
+              </span>
+              <span className="text-gray-400">
+                {r.seconds > 0 ? `${r.seconds.toFixed(1)}s` : '—'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {!running && avgMbps > 0 && (
+        <div className="bg-gray-800 rounded-lg p-3 space-y-1.5 text-sm">
+          <p className="text-gray-300 font-medium">
+            Velocidad promedio: <span className="text-green-400">{avgMbps.toFixed(1)} Mbps</span>
+          </p>
+          <div className="space-y-1 text-xs text-gray-400">
+            {[
+              { label: 'Video 50 MB', mb: 50 },
+              { label: 'Video 100 MB', mb: 100 },
+              { label: 'Video 200 MB', mb: 200 },
+            ].map(({ label, mb }) => {
+              const secs = estimateSeconds(mb);
+              return (
+                <p key={mb}>
+                  {label}: <span className="text-gray-200">~{secs}s</span>
+                  {secs != null && secs < 30 && <span className="text-green-400 ml-1">✓ rápido</span>}
+                  {secs != null && secs >= 30 && secs < 90 && <span className="text-yellow-400 ml-1">aceptable</span>}
+                  {secs != null && secs >= 90 && <span className="text-red-400 ml-1">lento</span>}
+                </p>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-500 pt-1">
+            Tu conexión soporta videos de hasta{' '}
+            <span className="text-white font-medium">
+              {Math.floor((avgMbps / 8) * 30)} MB
+            </span>{' '}
+            sin demoras mayores a 30 s.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

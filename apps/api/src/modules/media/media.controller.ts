@@ -1,9 +1,9 @@
 import {
-  Controller, Post, Delete, Param, Query, UseInterceptors, UploadedFile,
+  Controller, Get, Post, Delete, Param, Query, UseInterceptors, UploadedFile,
   HttpException, HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { extname, join } from 'path';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { MediaService } from './media.service.js';
@@ -84,6 +84,29 @@ export class MediaController {
   async uploadStandalone(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new HttpException('No file uploaded', HttpStatus.BAD_REQUEST);
     return this.mediaService.saveUploadStandalone(file);
+  }
+
+  /**
+   * Speed-test endpoint — accepts a file upload (memory storage, no disk write)
+   * and returns the received byte count so the client can measure upload speed.
+   */
+  @Post('speed-test')
+  @ApiOperation({ summary: 'Upload speed test — no disk write, returns bytes received' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ description: 'Test file (any size)' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB max for test files
+    }),
+  )
+  speedTest(@UploadedFile() file: Express.Multer.File) {
+    return {
+      ok: true,
+      receivedBytes: file?.buffer?.length ?? 0,
+      serverLocation: 'VPS Contabo',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   @Delete(':id')

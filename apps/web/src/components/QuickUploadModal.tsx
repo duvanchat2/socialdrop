@@ -22,9 +22,10 @@ interface FileEntry {
   thumbnail: string;
   duration?: number;
   originalSize: number;
-  compressedSize?: number;
-  status: 'compressing' | 'uploading' | 'done' | 'error';
+  status: 'uploading' | 'done' | 'error';
   progress: number;
+  speed?: string;
+  remaining?: string;
   uploadedUrl?: string;
   uploadedFileName?: string;
   error?: string;
@@ -60,7 +61,7 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
 
     setEntries((prev) => [
       ...prev,
-      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: 'compressing', progress: 0 },
+      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: 'uploading', progress: 0 },
     ]);
 
     // Thumbnail extracted immediately so user sees preview at once
@@ -73,21 +74,16 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
       }
     } catch { /* non-critical */ }
 
-    // Unified compress + upload
+    // Upload with real-time speed feedback
     try {
       const result = await uploadFile(
         file,
-        (stage, pct) =>
-          updateEntry(id, {
-            status: stage === 'Comprimiendo' ? 'compressing' : 'uploading',
-            progress: pct,
-          }),
-        (compressedSize) => updateEntry(id, { compressedSize }),
+        (pct, speed, remaining) =>
+          updateEntry(id, { status: 'uploading', progress: pct, speed, remaining }),
       );
       updateEntry(id, {
         status: 'done',
         progress: 100,
-        compressedSize: result.fileSize,
         uploadedUrl: result.url,
         uploadedFileName: result.fileName,
       });
@@ -105,7 +101,7 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
 
   if (!date) return null;
 
-  const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
+  const pendingCount = entries.filter((e) => e.status === 'uploading').length;
   const readyUrls = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
 
   const handleSave = () => {
@@ -231,22 +227,14 @@ function FileRow({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => voi
 
       <div className="flex-1 min-w-0">
         <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
-        <p className="text-[10px] text-gray-500">
-          {fmtSize(e.originalSize)}
-          {e.compressedSize != null && e.compressedSize < e.originalSize && (
-            <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
-          )}
-        </p>
+        <p className="text-[10px] text-gray-500">{fmtSize(e.originalSize)}</p>
         {e.status !== 'error' ? (
           <UploadProgress
-            stage={
-              e.status === 'compressing' ? 'Comprimiendo'
-              : e.status === 'uploading' ? 'Subiendo'
-              : 'Listo'
-            }
+            stage={e.status === 'uploading' ? 'uploading' : 'done'}
             percent={e.progress}
+            speed={e.speed}
+            remaining={e.remaining}
             originalSize={e.originalSize}
-            compressedSize={e.compressedSize}
           />
         ) : (
           <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">

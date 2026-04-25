@@ -10,7 +10,7 @@ export interface UploadedFile {
   preview?: string;
   /** Video duration in seconds */
   duration?: number;
-  /** Original file size before compression (bytes) */
+  /** Original file size before any server compression (bytes) */
   originalSize?: number;
 }
 
@@ -55,49 +55,71 @@ export function uploadFileXHR(
 }
 
 /**
- * Full pipeline: compress (if video) then upload with progress.
+ * Upload a file with real-time speed and ETA feedback.
  *
- * @param file          File to process
- * @param onProgress    Called as (stage, 0–100):
- *                        stage = 'Comprimiendo' during ffmpeg compression
- *                        stage = 'Subiendo'     during XHR upload
- * @param onCompressed  Optional — called with the compressed file size (bytes)
- *                      right before upload starts, so the UI can show
- *                      "150 MB → 12 MB" while the upload is in progress.
+ * @param file        File to upload
+ * @param onProgress  Called as (percent, speed, remaining):
+ *                      percent   = 0–99 during upload
+ *                      speed     = "2.3 MB/s" | "450 KB/s"
+ *                      remaining = "~12s restantes" | "~2min restantes"
  */
 export async function uploadFile(
   file: File,
-  onProgress?: (stage: string, percent: number) => void,
-  onCompressed?: (compressedSize: number) => void,
+  onProgress?: (percent: number, speed: string, remaining: string) => void,
 ): Promise<UploadedFile> {
-  let fileToUpload = file;
+  const startTime = Date.now();
 
-  if (file.type.startsWith('video/')) {
-    onProgress?.('Comprimiendo', 0);
-    try {
-      const { compressVideo } = await import('./compressVideo');
-      fileToUpload = await compressVideo(file, (pct) =>
-        onProgress?.('Comprimiendo', pct),
-      );
-    } catch {
-      // compressVideo already handles all its own errors and returns the
-      // original file on failure, so this catch is an extra safety net.
-      fileToUpload = file;
-    }
-    onCompressed?.(fileToUpload.size);
-  }
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
 
-  onProgress?.('Subiendo', 0);
+    const xhr = new XMLHttpRequest();
 
-  const result = await uploadFileXHR(fileToUpload, (pct) =>
-    onProgress?.('Subiendo', pct),
-  );
+    xhr.upload.addEventListener('progress', (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+      const elapsed = (Date.now() - startTime) / 1000;
+      const bps = elapsed > 0.1 ? e.loaded / elapsed : 0;
 
-  onProgress?.('Subiendo', 100);
-  return { ...result, originalSize: file.size };
+      const speedStr = bps > 1024 * 1024
+        ? `${(bps / 1024 / 1024).toFixed(1)} MB/s`
+        : bps > 0
+          ? `${(bps / 1024).toFixed(0)} KB/s`
+          : '';
+
+      let remainingStr = '';
+      if (bps > 0 && e.total > e.loaded) {
+        const secs = Math.ceil((e.total - e.loaded) / bps);
+        remainingStr = secs > 60
+          ? `~${Math.ceil(secs / 60)}min restantes`
+          : `~${secs}s restantes`;
+      }
+
+      onProgress?.(pct, speedStr, remainingStr);
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText) as UploadedFile;
+          resolve({ ...data, originalSize: file.size });
+        } catch {
+          reject(new Error('Respuesta inválida del servidor'));
+        }
+      } else {
+        reject(new Error(xhr.responseText || xhr.statusText));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Error de red al subir archivo')));
+    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada')));
+
+    xhr.open('POST', `${API_URL}/api/media/upload-standalone`);
+    xhr.send(form);
+  });
 }
 
-/** Legacy helper — uploads without compression or progress tracking. */
+/** Legacy helper — uploads without progress tracking. */
 export async function uploadFiles(files: FileList | File[]): Promise<UploadedFile[]> {
   const arr = Array.from(files);
   if (!arr.length) return [];

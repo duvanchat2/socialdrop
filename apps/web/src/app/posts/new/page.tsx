@@ -43,9 +43,10 @@ interface FileEntry {
   thumbnail: string;
   duration?: number;
   originalSize: number;
-  compressedSize?: number;
-  status: 'compressing' | 'uploading' | 'done' | 'error';
+  status: 'uploading' | 'done' | 'error';
   progress: number;
+  speed?: string;
+  remaining?: string;
   uploadedUrl?: string;
   uploadedFileName?: string;
   uploadedMediaType?: 'IMAGE' | 'VIDEO';
@@ -135,7 +136,7 @@ export default function NewPostPage() {
         originalFile: file,
         thumbnail: '',
         originalSize: file.size,
-        status: 'compressing',
+        status: 'uploading',
         progress: 0,
       },
     ]);
@@ -150,22 +151,17 @@ export default function NewPostPage() {
       }
     } catch { /* non-critical */ }
 
-    // Unified compress + upload pipeline
+    // Upload with real-time speed feedback
     try {
       const result = await uploadFile(
         file,
-        (stage, pct) =>
-          updateEntry(id, {
-            status: stage === 'Comprimiendo' ? 'compressing' : 'uploading',
-            progress: pct,
-          }),
-        (compressedSize) => updateEntry(id, { compressedSize }),
+        (pct, speed, remaining) =>
+          updateEntry(id, { status: 'uploading', progress: pct, speed, remaining }),
       );
 
       updateEntry(id, {
         status: 'done',
         progress: 100,
-        compressedSize: result.fileSize,
         uploadedUrl: result.url,
         uploadedFileName: result.fileName,
         uploadedMediaType: result.mediaType,
@@ -195,7 +191,7 @@ export default function NewPostPage() {
   };
 
   const readyEntries = fileEntries.filter((e) => e.status === 'done');
-  const pendingCount = fileEntries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
+  const pendingCount = fileEntries.filter((e) => e.status === 'uploading').length;
 
   // --- Mutations ---
   const createPost = useMutation({
@@ -533,12 +529,7 @@ function FileCard({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => vo
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm text-gray-100 truncate">{e.originalFile.name}</p>
-            <p className="text-xs text-gray-500">
-              {fmtSize(e.originalSize)}
-              {e.compressedSize != null && e.compressedSize < e.originalSize && (
-                <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
-              )}
-            </p>
+            <p className="text-xs text-gray-500">{fmtSize(e.originalSize)}</p>
           </div>
           <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0">
             <X size={14} />
@@ -548,14 +539,11 @@ function FileCard({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => vo
         <div className="mt-1.5">
           {e.status !== 'error' ? (
             <UploadProgress
-              stage={
-                e.status === 'compressing' ? 'Comprimiendo'
-                : e.status === 'uploading' ? 'Subiendo'
-                : 'Listo'
-              }
+              stage={e.status === 'uploading' ? 'uploading' : 'done'}
               percent={e.progress}
+              speed={e.speed}
+              remaining={e.remaining}
               originalSize={e.originalSize}
-              compressedSize={e.compressedSize}
             />
           ) : (
             <span className="text-xs text-red-400 flex items-center gap-1">

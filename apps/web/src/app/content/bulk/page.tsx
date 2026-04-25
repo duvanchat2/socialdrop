@@ -34,10 +34,10 @@ interface FileEntry {
   thumbnail: string;
   duration?: number;
   originalSize: number;
-  compressedSize?: number;
-  status: 'compressing' | 'uploading' | 'done' | 'error';
-  phase: 'compress' | 'upload';
+  status: 'uploading' | 'done' | 'error';
   progress: number;
+  speed?: string;
+  remaining?: string;
   uploadedUrl?: string;
   uploadedFileName?: string;
   uploadedMimeType?: string;
@@ -93,8 +93,7 @@ export default function BulkUploadPage() {
         originalFile: file,
         thumbnail: '',
         originalSize: file.size,
-        status: isVideo ? 'compressing' : 'uploading',
-        phase: isVideo ? 'compress' : 'upload',
+        status: 'uploading',
         progress: 0,
         ytTitle: baseName,
         ytDescription: '',
@@ -109,33 +108,20 @@ export default function BulkUploadPage() {
         updateEntry(id, { thumbnail: meta.thumbnail, duration: meta.duration });
       } else {
         updateEntry(id, { thumbnail: URL.createObjectURL(file) });
-        // Compress images in the background before upload
-        const { compressImage: ci } = await import('@/lib/compressMedia');
-        const compressed = await ci(file);
-        updateEntry(id, { compressedSize: compressed.size });
       }
-    } catch {
-      // Non-critical — proceed without thumbnail/compression
-    }
+    } catch { /* non-critical */ }
 
-    // Unified compress + upload pipeline
+    // Upload with real-time speed feedback
     try {
       const result = await uploadFile(
         file,
-        (stage, pct) => {
-          updateEntry(id, {
-            status: stage === 'Comprimiendo' ? 'compressing' : 'uploading',
-            phase: stage === 'Comprimiendo' ? 'compress' : 'upload',
-            progress: pct,
-          });
-        },
-        (compressedSize) => updateEntry(id, { compressedSize }),
+        (pct, speed, remaining) =>
+          updateEntry(id, { status: 'uploading', progress: pct, speed, remaining }),
       );
 
       updateEntry(id, {
         status: 'done',
         progress: 100,
-        compressedSize: result.fileSize, // server reflects actual stored size
         uploadedUrl: result.url,
         uploadedFileName: result.fileName,
         uploadedMimeType: result.mimeType,
@@ -195,7 +181,7 @@ export default function BulkUploadPage() {
   ) ?? 0;
 
   const readyEntries = entries.filter((e) => e.status === 'done');
-  const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
+  const pendingCount = entries.filter((e) => e.status === 'uploading').length;
   const youtubeSelected = selectedPlatforms.includes('YOUTUBE');
 
   const handleContinue = () => {
@@ -486,14 +472,7 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-100 truncate">{e.originalFile.name}</p>
-            <p className="text-xs text-gray-500">
-              {formatSize(e.originalSize)}
-              {e.compressedSize != null && e.compressedSize < e.originalSize && (
-                <span className="text-green-400 ml-1">
-                  → {formatSize(e.compressedSize)} ({Math.round((1 - e.compressedSize / e.originalSize) * 100)}% menos)
-                </span>
-              )}
-            </p>
+            <p className="text-xs text-gray-500">{formatSize(e.originalSize)}</p>
           </div>
           <button
             type="button"
@@ -507,14 +486,11 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
         {/* Status */}
         {e.status !== 'error' ? (
           <UploadProgress
-            stage={
-              e.status === 'compressing' ? 'Comprimiendo'
-              : e.status === 'uploading' ? 'Subiendo'
-              : 'Listo'
-            }
+            stage={e.status === 'uploading' ? 'uploading' : 'done'}
             percent={e.progress}
+            speed={e.speed}
+            remaining={e.remaining}
             originalSize={e.originalSize}
-            compressedSize={e.compressedSize}
           />
         ) : (
           <span className="inline-flex items-center gap-1 text-xs text-red-400">
