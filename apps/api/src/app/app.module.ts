@@ -29,6 +29,7 @@ import { InboxModule } from '../modules/inbox/inbox.module.js';
 import { SequencesModule } from '../modules/sequences/sequences.module.js';
 import { DebugModule } from '../modules/debug/debug.module.js';
 import { YoutubeModule } from '../modules/youtube/youtube.module.js';
+import { UsersModule } from '../modules/users/users.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -74,6 +75,7 @@ import redisConfig from '../config/redis.config.js';
     SequencesModule,
     DebugModule,
     YoutubeModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
