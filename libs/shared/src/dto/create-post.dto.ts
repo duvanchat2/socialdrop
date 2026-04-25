@@ -28,4 +28,21 @@ export class CreatePostDto {
   @IsOptional()
   @IsEnum(PostStatus)
   status?: PostStatus;
+
+  // ── YouTube-specific metadata ─────────────────────────────────────────────
+
+  /** Video title for YouTube (required when publishing to YouTube) */
+  @IsOptional()
+  @IsString()
+  youtubeTitle?: string;
+
+  /** Long-form description for YouTube (overrides caption if set) */
+  @IsOptional()
+  @IsString()
+  youtubeDescription?: string;
+
+  /** Comma-separated tags for YouTube, e.g. "shorts,tutorial,vlog" */
+  @IsOptional()
+  @IsString()
+  youtubeTags?: string;
 }

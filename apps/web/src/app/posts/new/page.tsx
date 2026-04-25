@@ -2,12 +2,14 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import { uploadFile, UploadedFile } from '@/lib/uploadMedia';
+import { uploadFileXHR } from '@/lib/uploadMedia';
+import { getVideoMeta } from '@/lib/videoThumbnail';
+import { compressVideo, compressImage } from '@/lib/compressMedia';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
-  CalendarClock, Send, FileText, ListOrdered,
+  CalendarClock, Send, FileText, ListOrdered, CheckCircle2, AlertCircle,
 } from 'lucide-react';
 
 const PLATFORM_LIMITS: Record<string, number> = {
@@ -35,7 +37,23 @@ interface Integration {
   profileId: string | null;
 }
 
+interface FileEntry {
+  id: string;
+  originalFile: File;
+  thumbnail: string;
+  duration?: number;
+  originalSize: number;
+  compressedSize?: number;
+  status: 'compressing' | 'uploading' | 'done' | 'error';
+  progress: number;
+  uploadedUrl?: string;
+  uploadedFileName?: string;
+  uploadedMediaType?: 'IMAGE' | 'VIDEO';
+  error?: string;
+}
+
 const PLATFORM_ORDER = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'TWITTER', 'LINKEDIN', 'YOUTUBE'];
+const MAX_FILES = 10;
 
 export default function NewPostPage() {
   const router = useRouter();
@@ -45,9 +63,13 @@ export default function NewPostPage() {
   const [caption, setCaption] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadingCount, setUploadingCount] = useState(0);
+
+  // YouTube-specific fields
+  const [ytTitle, setYtTitle] = useState('');
+  const [ytDescription, setYtDescription] = useState('');
+  const [ytTags, setYtTags] = useState('');
 
   const userId = 'demo-user';
 
@@ -76,6 +98,8 @@ export default function NewPostPage() {
     return Array.from(platforms);
   }, [integrations, selectedAccountIds]);
 
+  const youtubeSelected = selectedPlatforms.includes('YOUTUBE');
+
   const maxChars = useMemo(() => {
     if (selectedPlatforms.length === 0) return 280;
     return Math.min(...selectedPlatforms.map((p) => PLATFORM_LIMITS[p] ?? 2200));
@@ -92,44 +116,86 @@ export default function NewPostPage() {
     });
   };
 
-  // --- Upload handling ---
-  const handleFiles = useCallback(async (files: FileList | File[]) => {
-    const arr = Array.from(files);
-    if (!arr.length) return;
-    setUploadingCount((c) => c + arr.length);
-    try {
-      const results = await Promise.allSettled(arr.map(uploadFile));
-      const ok: UploadedFile[] = [];
-      for (const r of results) {
-        if (r.status === 'fulfilled') ok.push(r.value);
-        else toast.error(`Error subiendo archivo: ${(r.reason as Error).message}`);
-      }
-      if (ok.length) {
-        setUploadedFiles((prev) => [...prev, ...ok]);
-        toast.success(`${ok.length} archivo(s) subido(s)`);
-      }
-    } finally {
-      setUploadingCount((c) => c - arr.length);
-    }
+  const updateEntry = useCallback((id: string, patch: Partial<FileEntry>) => {
+    setFileEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      handleFiles(e.dataTransfer.files);
-    },
-    [handleFiles],
-  );
+  const processFile = useCallback(async (file: File) => {
+    if (fileEntries.length >= MAX_FILES) {
+      toast.error(`Máximo ${MAX_FILES} archivos por post`);
+      return;
+    }
+    const id = Math.random().toString(36).slice(2, 10);
+    const isVideo = file.type.startsWith('video/');
 
-  const removeFile = (idx: number) => {
-    setUploadedFiles((prev) => {
-      const copy = [...prev];
-      if (copy[idx]?.preview) URL.revokeObjectURL(copy[idx].preview!);
-      copy.splice(idx, 1);
-      return copy;
+    setFileEntries((prev) => [
+      ...prev,
+      {
+        id,
+        originalFile: file,
+        thumbnail: '',
+        originalSize: file.size,
+        status: 'compressing',
+        progress: 0,
+      },
+    ]);
+
+    // Thumbnail
+    try {
+      if (isVideo) {
+        const meta = await getVideoMeta(file);
+        updateEntry(id, { thumbnail: meta.thumbnail, duration: meta.duration });
+      } else {
+        updateEntry(id, { thumbnail: URL.createObjectURL(file) });
+      }
+    } catch { /* non-critical */ }
+
+    // Compress → upload
+    try {
+      let compressed: File;
+      if (isVideo) {
+        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
+      } else {
+        compressed = await compressImage(file);
+      }
+
+      updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
+
+      const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
+
+      updateEntry(id, {
+        status: 'done',
+        progress: 100,
+        uploadedUrl: result.url,
+        uploadedFileName: result.fileName,
+        uploadedMediaType: result.mediaType,
+      });
+    } catch (err) {
+      updateEntry(id, { status: 'error', error: (err as Error).message });
+    }
+  }, [fileEntries.length, updateEntry]);
+
+  const handleFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files).slice(0, MAX_FILES - fileEntries.length);
+    arr.forEach(processFile);
+  }, [processFile, fileEntries.length]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+
+  const removeFile = (id: string) => {
+    setFileEntries((prev) => {
+      const e = prev.find((x) => x.id === id);
+      if (e?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(e.thumbnail);
+      return prev.filter((x) => x.id !== id);
     });
   };
+
+  const readyEntries = fileEntries.filter((e) => e.status === 'done');
+  const pendingCount = fileEntries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
 
   // --- Mutations ---
   const createPost = useMutation({
@@ -139,32 +205,33 @@ export default function NewPostPage() {
 
   const assignToQueue = useMutation({
     mutationFn: (postId: string) =>
-      apiFetch(`/api/queue/assign`, {
-        method: 'POST',
-        body: JSON.stringify({ postId }),
-      }),
+      apiFetch(`/api/queue/assign`, { method: 'POST', body: JSON.stringify({ postId }) }),
   });
 
   const buildBasePayload = () => ({
     content: caption,
     platforms: selectedPlatforms,
-    mediaUrls: uploadedFiles.map((f) => f.url),
+    mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
+    ...(youtubeSelected && ytTitle && {
+      youtubeTitle: ytTitle,
+      youtubeDescription: ytDescription || undefined,
+      youtubeTags: ytTags || undefined,
+    }),
   });
 
   const commonGuards = (): boolean => {
     if (!caption) { toast.error('Escribe el contenido del post'); return false; }
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
     if (overLimit) { toast.error(`El contenido excede ${maxChars} caracteres`); return false; }
+    if (pendingCount > 0) { toast.error('Espera a que terminen todas las subidas'); return false; }
+    if (youtubeSelected && !ytTitle) { toast.error('El título es requerido para YouTube'); return false; }
     return true;
   };
 
   const handlePublishNow = async () => {
     if (!commonGuards()) return;
     try {
-      await createPost.mutateAsync({
-        ...buildBasePayload(),
-        scheduledAt: new Date().toISOString(),
-      });
+      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString() });
       toast.success('Publicando ahora…');
       qc.invalidateQueries({ queryKey: ['posts'] });
       qc.invalidateQueries({ queryKey: ['posts-all'] });
@@ -184,9 +251,7 @@ export default function NewPostPage() {
       }) as { id: string };
       const result = await assignToQueue.mutateAsync(post.id) as { slot: { dayOfWeek: number; hour: number; minute: number } };
       const { slot } = result;
-      toast.success(
-        `Añadido a la cola (día ${slot.dayOfWeek} - ${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')})`,
-      );
+      toast.success(`Añadido a la cola (día ${slot.dayOfWeek} - ${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')})`);
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
     } catch (e) {
@@ -198,11 +263,7 @@ export default function NewPostPage() {
     if (!caption) { toast.error('Escribe el contenido del post'); return; }
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return; }
     try {
-      await createPost.mutateAsync({
-        ...buildBasePayload(),
-        scheduledAt: new Date().toISOString(),
-        status: 'DRAFT',
-      });
+      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString(), status: 'DRAFT' });
       toast.success('Borrador guardado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
@@ -215,10 +276,7 @@ export default function NewPostPage() {
     if (!commonGuards()) return;
     if (!scheduledAt) { toast.error('Elige fecha y hora'); return; }
     try {
-      await createPost.mutateAsync({
-        ...buildBasePayload(),
-        scheduledAt: new Date(scheduledAt).toISOString(),
-      });
+      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date(scheduledAt).toISOString() });
       toast.success('Post programado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
@@ -227,35 +285,33 @@ export default function NewPostPage() {
     }
   };
 
-  const busy = createPost.isPending || assignToQueue.isPending || uploadingCount > 0;
+  const busy = createPost.isPending || assignToQueue.isPending || pendingCount > 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Create Post</h1>
-        <p className="text-sm text-gray-400">Compose and schedule your content.</p>
+        <h1 className="text-2xl font-bold">Nuevo Post</h1>
+        <p className="text-sm text-gray-400">Redacta y programa tu contenido.</p>
       </header>
 
       {/* Card 1 — Content */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <Edit3 size={16} className="text-indigo-400" />
-          <h2 className="font-semibold">Content</h2>
+          <h2 className="font-semibold">Contenido</h2>
         </div>
-        <p className="text-xs text-gray-500 mb-3">Write your post content and add media.</p>
+        <p className="text-xs text-gray-500 mb-3">Escribe el caption y adjunta medios.</p>
 
         <div className="relative">
           <textarea
             data-testid="caption-input"
             className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
             rows={4}
-            placeholder="What's on your mind?"
+            placeholder="¿Qué quieres publicar?"
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
           />
-          <span
-            className={`absolute bottom-2 right-3 text-xs ${overLimit ? 'text-red-400' : 'text-gray-500'}`}
-          >
+          <span className={`absolute bottom-2 right-3 text-xs ${overLimit ? 'text-red-400' : 'text-gray-500'}`}>
             {caption.length} / {maxChars}
           </span>
         </div>
@@ -265,86 +321,99 @@ export default function NewPostPage() {
           <div className="flex items-center gap-2 mb-2">
             <ImageIcon size={15} className="text-indigo-400" />
             <span className="text-sm font-medium">Media</span>
+            <span className="text-xs text-gray-500">({fileEntries.length}/{MAX_FILES})</span>
           </div>
 
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
-              isDragging
-                ? 'border-indigo-400 bg-indigo-950/30'
-                : 'border-gray-800 hover:border-gray-600 bg-gray-950'
-            }`}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm"
-              className="hidden"
-              onChange={(e) => e.target.files && handleFiles(e.target.files)}
-            />
-            {uploadingCount > 0 ? (
-              <div className="flex flex-col items-center gap-2 text-gray-400">
-                <Loader2 className="animate-spin" size={24} />
-                <p className="text-sm">Subiendo {uploadingCount} archivo(s)…</p>
-              </div>
-            ) : (
+          {fileEntries.length < MAX_FILES && (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
+                isDragging ? 'border-indigo-400 bg-indigo-950/30' : 'border-gray-800 hover:border-gray-600 bg-gray-950'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm"
+                className="hidden"
+                onChange={(e) => e.target.files && handleFiles(e.target.files)}
+              />
               <div className="flex flex-col items-center gap-1 text-gray-400">
                 <Upload size={22} />
-                <p className="text-sm">Drop files here or click to upload</p>
-                <p className="text-xs text-gray-600">
-                  Images (JPG, PNG, GIF, WebP) or Videos (MP4, MOV, WebM)
-                </p>
+                <p className="text-sm">Arrastra o haz clic para subir</p>
+                <p className="text-xs text-gray-600">Imágenes y videos · Los videos se comprimirán</p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {uploadedFiles.length > 0 && (
-            <div className="grid grid-cols-4 gap-2 mt-3">
-              {uploadedFiles.map((f, i) => (
-                <div
-                  key={`${f.url}-${i}`}
-                  className="relative group rounded-lg overflow-hidden bg-gray-800 aspect-square"
-                >
-                  {f.mediaType === 'IMAGE' && f.preview ? (
-                    <img src={f.preview} alt={f.fileName} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full gap-1 text-gray-400 p-1">
-                      {f.mediaType === 'VIDEO' ? <Film size={22} /> : <ImageIcon size={22} />}
-                      <p className="text-[10px] truncate w-full text-center">{f.fileName}</p>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeFile(i)}
-                    className="absolute top-1 right-1 bg-black/70 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X size={12} className="text-white" />
-                  </button>
-                </div>
+          {fileEntries.length > 0 && (
+            <div className="grid grid-cols-1 gap-2 mt-3">
+              {fileEntries.map((e) => (
+                <FileCard key={e.id} entry={e} onRemove={() => removeFile(e.id)} />
               ))}
             </div>
           )}
         </div>
+
+        {/* YouTube metadata */}
+        {youtubeSelected && (
+          <div className="mt-4 p-4 bg-red-950/20 border border-red-900/40 rounded-xl space-y-3">
+            <p className="text-sm font-semibold text-red-400 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+              Datos de YouTube
+            </p>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Título <span className="text-red-400">*</span> <span className="text-gray-600">(máx 100)</span></label>
+              <input
+                type="text"
+                maxLength={100}
+                placeholder="Título del video en YouTube"
+                value={ytTitle}
+                onChange={(e) => setYtTitle(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Descripción <span className="text-gray-600">(máx 5000)</span></label>
+              <textarea
+                rows={3}
+                maxLength={5000}
+                placeholder="Descripción del video (opcional, usa el caption si se deja vacío)"
+                value={ytDescription}
+                onChange={(e) => setYtDescription(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Tags <span className="text-gray-600">(separados por coma)</span></label>
+              <input
+                type="text"
+                placeholder="shorts, tutorial, vlog"
+                value={ytTags}
+                onChange={(e) => setYtTags(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Card 2 — Select Accounts */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
           <UsersIcon size={16} className="text-indigo-400" />
-          <h2 className="font-semibold">Select Accounts</h2>
+          <h2 className="font-semibold">Seleccionar Cuentas</h2>
         </div>
-        <p className="text-xs text-gray-500 mb-3">Choose which accounts to publish to.</p>
+        <p className="text-xs text-gray-500 mb-3">Elige en qué cuentas publicar.</p>
 
         {groupedByPlatform.length === 0 && (
           <p className="text-sm text-gray-500 py-6 text-center">
             No hay cuentas conectadas.{' '}
-            <a href="/integrations" className="text-indigo-400 hover:underline">
-              Conecta una aquí.
-            </a>
+            <a href="/integrations" className="text-indigo-400 hover:underline">Conecta una aquí.</a>
           </p>
         )}
 
@@ -352,10 +421,7 @@ export default function NewPostPage() {
           {groupedByPlatform.map(({ platform, accounts }) => (
             <div key={platform}>
               <div className="flex items-center gap-2 mb-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: PLATFORM_COLORS[platform] }}
-                />
+                <span className="w-2 h-2 rounded-full" style={{ background: PLATFORM_COLORS[platform] }} />
                 <span className="text-sm font-medium capitalize">{platform.toLowerCase()}</span>
               </div>
               <div className="space-y-2">
@@ -368,9 +434,7 @@ export default function NewPostPage() {
                       data-testid={`account-${acc.id}`}
                       onClick={() => toggleAccount(acc.id)}
                       className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
-                        selected
-                          ? 'border-indigo-500 bg-indigo-950/40'
-                          : 'border-gray-800 bg-gray-950 hover:border-gray-700'
+                        selected ? 'border-indigo-500 bg-indigo-950/40' : 'border-gray-800 bg-gray-950 hover:border-gray-700'
                       }`}
                     >
                       <div
@@ -380,9 +444,7 @@ export default function NewPostPage() {
                         {(acc.accountName ?? acc.profileId ?? '?').slice(0, 1).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-100 truncate">
-                          {acc.accountName ?? acc.profileId ?? 'Sin nombre'}
-                        </p>
+                        <p className="text-sm text-gray-100 truncate">{acc.accountName ?? acc.profileId ?? 'Sin nombre'}</p>
                         <p className="text-xs text-gray-500 capitalize">{platform.toLowerCase()}</p>
                       </div>
                     </button>
@@ -444,4 +506,74 @@ export default function NewPostPage() {
       </section>
     </div>
   );
+}
+
+/* ─── FileCard ──────────────────────────────────────────────────────────────── */
+function FileCard({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => void }) {
+  const isVideo = e.originalFile.type.startsWith('video/');
+
+  return (
+    <div className="flex gap-3 bg-gray-950 border border-gray-800 rounded-xl p-3">
+      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-800 relative">
+        {e.thumbnail ? (
+          <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            {isVideo ? <Film size={20} /> : <ImageIcon size={20} />}
+          </div>
+        )}
+        {isVideo && e.duration != null && (
+          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] px-1 rounded">
+            {Math.floor(e.duration / 60)}:{String(Math.round(e.duration % 60)).padStart(2, '0')}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm text-gray-100 truncate">{e.originalFile.name}</p>
+            <p className="text-xs text-gray-500">
+              {fmtSize(e.originalSize)}
+              {e.compressedSize != null && e.compressedSize < e.originalSize && (
+                <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+              )}
+            </p>
+          </div>
+          <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="mt-1.5">
+          {e.status === 'compressing' && <InlineProgress label={`Comprimiendo… ${e.progress}%`} pct={e.progress} />}
+          {e.status === 'uploading' && <InlineProgress label={`Subiendo… ${e.progress}%`} pct={e.progress} />}
+          {e.status === 'done' && (
+            <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 size={11} />Subido</span>
+          )}
+          {e.status === 'error' && (
+            <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={11} />{e.error}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InlineProgress({ label, pct }: { label: string; pct: number }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-xs text-gray-400 flex items-center gap-1">
+        <Loader2 className="animate-spin" size={10} />{label}
+      </p>
+      <div className="w-full bg-gray-700 rounded-full h-1">
+        <div className="bg-indigo-500 h-1 rounded-full transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function fmtSize(b: number) {
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }

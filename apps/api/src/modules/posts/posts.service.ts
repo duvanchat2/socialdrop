@@ -28,12 +28,26 @@ export class PostsService {
       where: { userId, platform: { in: dto.platforms as any[] } },
     });
 
+    // Build optional YouTube metadata blob
+    const youtubeMetadata = (dto.youtubeTitle || dto.youtubeDescription || dto.youtubeTags)
+      ? {
+          youtube: {
+            title: dto.youtubeTitle ?? undefined,
+            description: dto.youtubeDescription ?? undefined,
+            tags: dto.youtubeTags
+              ? dto.youtubeTags.split(',').map((t) => t.trim()).filter(Boolean)
+              : undefined,
+          },
+        }
+      : undefined;
+
     const post = await this.prisma.post.create({
       data: {
         userId,
         content: dto.content,
         scheduledAt: new Date(dto.scheduledAt),
         status: (dto.status ?? 'SCHEDULED') as PostStatus,
+        ...(youtubeMetadata && { metadata: youtubeMetadata as any }),
         integrations: {
           create: integrations.map((int) => ({
             integrationId: int.id,

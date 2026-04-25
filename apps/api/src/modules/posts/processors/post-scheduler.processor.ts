@@ -149,12 +149,17 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     await this.debugLog.push(userId, 'log', platform,
       `[${platform}] Calling provider.post() | content="${pi.post.content.slice(0, 80)}..." | mediaUrls=${JSON.stringify(mediaUrls)}`);
 
+    // Pull YouTube metadata from the post's JSON blob (if any)
+    const postMeta = (pi.post as any).metadata as { youtube?: { title?: string; description?: string; tags?: string[] } } | null;
+    const postContent = {
+      text: pi.post.content,
+      mediaUrls,
+      mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
+      ...(postMeta?.youtube && { metadata: { youtube: postMeta.youtube } }),
+    };
+
     try {
-      const result = await provider.post(accessToken, {
-        text: pi.post.content,
-        mediaUrls,
-        mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
-      });
+      const result = await provider.post(accessToken, postContent);
 
       await this.prisma.postIntegration.update({
         where: { id: postIntegrationId },
@@ -194,11 +199,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
           await this.debugLog.push(userId, 'log', platform,
             `[${platform}] Token refreshed, retrying publish...`);
 
-          const result = await provider.post(refreshed.accessToken, {
-            text: pi.post.content,
-            mediaUrls,
-            mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
-          });
+          const result = await provider.post(refreshed.accessToken, postContent);
 
           await this.prisma.postIntegration.update({
             where: { id: postIntegrationId },

@@ -49,6 +49,7 @@ model Post {
   errorMessage  String?
   retryCount    Int               @default(0)
   driveSourceId String?
+  metadata      Json?
   media         Media[]
   integrations  PostIntegration[]
   createdAt     DateTime          @default(now())

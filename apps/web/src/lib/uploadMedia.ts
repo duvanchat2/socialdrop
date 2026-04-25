@@ -6,9 +6,52 @@ export interface UploadedFile {
   mimeType: string;
   fileSize: number;
   mediaType: 'IMAGE' | 'VIDEO';
+  /** Image blob-URL or video first-frame thumbnail data-URL */
   preview?: string;
+  /** Video duration in seconds */
+  duration?: number;
+  /** Original file size before compression */
+  originalSize?: number;
 }
 
+/** Upload a single already-compressed file via XHR so we get progress events. */
+export function uploadFileXHR(
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<UploadedFile> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        onProgress?.(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as UploadedFile);
+        } catch {
+          reject(new Error('Respuesta inválida del servidor'));
+        }
+      } else {
+        reject(new Error(xhr.responseText || xhr.statusText));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Error de red al subir archivo')));
+    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada')));
+
+    xhr.open('POST', `${API_URL}/api/media/upload-standalone`);
+    xhr.send(form);
+  });
+}
+
+/** Legacy helper — uploads without progress (used by existing code). */
 export async function uploadFile(file: File): Promise<UploadedFile> {
   const formData = new FormData();
   formData.append('file', file);
