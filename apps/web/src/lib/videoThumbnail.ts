@@ -101,3 +101,20 @@ export function formatDuration(seconds: number): string {
   const rem = s % 60;
   return `${m}:${String(rem).padStart(2, '0')}`;
 }
+
+/**
+ * Convenience alias matching the simpler signature used by upload zones.
+ * Returns thumbnail data URL, duration in seconds, and original file size.
+ */
+export async function getVideoThumbnail(file: File): Promise<{
+  thumbnail: string;
+  duration: number;
+  originalSize: number;
+}> {
+  const meta = await getVideoMeta(file);
+  return {
+    thumbnail: meta.thumbnail,
+    duration: Math.round(meta.duration),
+    originalSize: file.size,
+  };
+}

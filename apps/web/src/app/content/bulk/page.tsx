@@ -5,12 +5,12 @@ import { apiFetch } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Upload, X, Film, Image as ImageIcon, Loader2, ChevronRight,
-  Zap, Target, Plus, Minus, CheckCircle2, AlertCircle,
+  Upload, X, Film, Image as ImageIcon, ChevronRight,
+  Zap, Target, Plus, Minus, AlertCircle,
 } from 'lucide-react';
-import { uploadFileXHR } from '@/lib/uploadMedia';
+import { uploadFile } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
-import { compressVideo, compressImage } from '@/lib/compressMedia';
+import { UploadProgress } from '@/components/UploadProgress';
 
 const USER_ID = 'demo-user';
 
@@ -85,61 +85,57 @@ export default function BulkUploadPage() {
     const isVideo = file.type.startsWith('video/');
     const baseName = file.name.replace(/\.[^.]+$/, '');
 
-    // Add skeleton entry immediately
-    const entry: FileEntry = {
-      id,
-      originalFile: file,
-      thumbnail: '',
-      originalSize: file.size,
-      status: 'compressing',
-      phase: 'compress',
-      progress: 0,
-      ytTitle: baseName,
-      ytDescription: '',
-      ytTags: '',
-    };
-    setEntries((prev) => [...prev, entry]);
+    // Add entry immediately — thumbnail appears as soon as it's extracted
+    setEntries((prev) => [
+      ...prev,
+      {
+        id,
+        originalFile: file,
+        thumbnail: '',
+        originalSize: file.size,
+        status: isVideo ? 'compressing' : 'uploading',
+        phase: isVideo ? 'compress' : 'upload',
+        progress: 0,
+        ytTitle: baseName,
+        ytDescription: '',
+        ytTags: '',
+      },
+    ]);
 
-    // Extract thumbnail & duration client-side
+    // Extract thumbnail immediately so user sees it right away
     try {
       if (isVideo) {
         const meta = await getVideoMeta(file);
         updateEntry(id, { thumbnail: meta.thumbnail, duration: meta.duration });
       } else {
         updateEntry(id, { thumbnail: URL.createObjectURL(file) });
+        // Compress images in the background before upload
+        const { compressImage: ci } = await import('@/lib/compressMedia');
+        const compressed = await ci(file);
+        updateEntry(id, { compressedSize: compressed.size });
       }
     } catch {
-      // Non-critical — proceed without thumbnail
+      // Non-critical — proceed without thumbnail/compression
     }
 
-    // Compress
+    // Unified compress + upload pipeline
     try {
-      let compressed: File;
-      if (isVideo) {
-        compressed = await compressVideo(
-          file,
-          (pct) => updateEntry(id, { progress: pct }),
-          () => updateEntry(id, { status: 'compressing', phase: 'compress', progress: 0 }),
-        );
-      } else {
-        compressed = await compressImage(file);
-      }
-
-      updateEntry(id, {
-        compressedSize: compressed.size,
-        status: 'uploading',
-        phase: 'upload',
-        progress: 0,
-      });
-
-      // Upload with progress
-      const result = await uploadFileXHR(compressed, (pct) =>
-        updateEntry(id, { progress: pct }),
+      const result = await uploadFile(
+        file,
+        (stage, pct) => {
+          updateEntry(id, {
+            status: stage === 'Comprimiendo' ? 'compressing' : 'uploading',
+            phase: stage === 'Comprimiendo' ? 'compress' : 'upload',
+            progress: pct,
+          });
+        },
+        (compressedSize) => updateEntry(id, { compressedSize }),
       );
 
       updateEntry(id, {
         status: 'done',
         progress: 100,
+        compressedSize: result.fileSize, // server reflects actual stored size
         uploadedUrl: result.url,
         uploadedFileName: result.fileName,
         uploadedMimeType: result.mimeType,
@@ -509,26 +505,18 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
         </div>
 
         {/* Status */}
-        {e.status === 'compressing' && (
-          <ProgressBar
-            label={`Comprimiendo video… ${e.progress}%`}
-            pct={e.progress}
-            color="indigo"
+        {e.status !== 'error' ? (
+          <UploadProgress
+            stage={
+              e.status === 'compressing' ? 'Comprimiendo'
+              : e.status === 'uploading' ? 'Subiendo'
+              : 'Listo'
+            }
+            percent={e.progress}
+            originalSize={e.originalSize}
+            compressedSize={e.compressedSize}
           />
-        )}
-        {e.status === 'uploading' && (
-          <ProgressBar
-            label={`Subiendo… ${e.progress}%`}
-            pct={e.progress}
-            color="blue"
-          />
-        )}
-        {e.status === 'done' && (
-          <span className="inline-flex items-center gap-1 text-xs text-green-400">
-            <CheckCircle2 size={12} /> Subido
-          </span>
-        )}
-        {e.status === 'error' && (
+        ) : (
           <span className="inline-flex items-center gap-1 text-xs text-red-400">
             <AlertCircle size={12} /> {e.error}
           </span>
@@ -563,21 +551,6 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
             />
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function ProgressBar({ label, pct, color }: { label: string; pct: number; color: 'indigo' | 'blue' }) {
-  const bg = color === 'indigo' ? 'bg-indigo-500' : 'bg-blue-500';
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-1 text-xs text-gray-400">
-        <Loader2 className="animate-spin" size={10} />
-        {label}
-      </div>
-      <div className="w-full bg-gray-700 rounded-full h-1">
-        <div className={`${bg} h-1 rounded-full transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

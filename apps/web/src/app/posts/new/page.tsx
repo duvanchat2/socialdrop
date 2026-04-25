@@ -2,14 +2,14 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import { uploadFileXHR } from '@/lib/uploadMedia';
+import { uploadFile } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
-import { compressVideo, compressImage } from '@/lib/compressMedia';
+import { UploadProgress } from '@/components/UploadProgress';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
-  CalendarClock, Send, FileText, ListOrdered, CheckCircle2, AlertCircle,
+  Upload, X, Film, Image as ImageIcon, Edit3, Users as UsersIcon,
+  CalendarClock, Send, FileText, ListOrdered, AlertCircle,
 } from 'lucide-react';
 
 const PLATFORM_LIMITS: Record<string, number> = {
@@ -140,7 +140,7 @@ export default function NewPostPage() {
       },
     ]);
 
-    // Thumbnail
+    // Extract thumbnail immediately so user sees preview right away
     try {
       if (isVideo) {
         const meta = await getVideoMeta(file);
@@ -150,22 +150,22 @@ export default function NewPostPage() {
       }
     } catch { /* non-critical */ }
 
-    // Compress → upload
+    // Unified compress + upload pipeline
     try {
-      let compressed: File;
-      if (isVideo) {
-        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
-      } else {
-        compressed = await compressImage(file);
-      }
-
-      updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
-
-      const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
+      const result = await uploadFile(
+        file,
+        (stage, pct) =>
+          updateEntry(id, {
+            status: stage === 'Comprimiendo' ? 'compressing' : 'uploading',
+            progress: pct,
+          }),
+        (compressedSize) => updateEntry(id, { compressedSize }),
+      );
 
       updateEntry(id, {
         status: 'done',
         progress: 100,
+        compressedSize: result.fileSize,
         uploadedUrl: result.url,
         uploadedFileName: result.fileName,
         uploadedMediaType: result.mediaType,
@@ -546,28 +546,23 @@ function FileCard({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => vo
         </div>
 
         <div className="mt-1.5">
-          {e.status === 'compressing' && <InlineProgress label={`Comprimiendo… ${e.progress}%`} pct={e.progress} />}
-          {e.status === 'uploading' && <InlineProgress label={`Subiendo… ${e.progress}%`} pct={e.progress} />}
-          {e.status === 'done' && (
-            <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 size={11} />Subido</span>
-          )}
-          {e.status === 'error' && (
-            <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={11} />{e.error}</span>
+          {e.status !== 'error' ? (
+            <UploadProgress
+              stage={
+                e.status === 'compressing' ? 'Comprimiendo'
+                : e.status === 'uploading' ? 'Subiendo'
+                : 'Listo'
+              }
+              percent={e.progress}
+              originalSize={e.originalSize}
+              compressedSize={e.compressedSize}
+            />
+          ) : (
+            <span className="text-xs text-red-400 flex items-center gap-1">
+              <AlertCircle size={11} />{e.error}
+            </span>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function InlineProgress({ label, pct }: { label: string; pct: number }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-xs text-gray-400 flex items-center gap-1">
-        <Loader2 className="animate-spin" size={10} />{label}
-      </p>
-      <div className="w-full bg-gray-700 rounded-full h-1">
-        <div className="bg-indigo-500 h-1 rounded-full transition-all" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

@@ -10,11 +10,14 @@ export interface UploadedFile {
   preview?: string;
   /** Video duration in seconds */
   duration?: number;
-  /** Original file size before compression */
+  /** Original file size before compression (bytes) */
   originalSize?: number;
 }
 
-/** Upload a single already-compressed file via XHR so we get progress events. */
+/**
+ * Upload a single file via XHR so we get granular progress events.
+ * @param onProgress  Called with 0–100 as bytes are transmitted
+ */
 export function uploadFileXHR(
   file: File,
   onProgress?: (pct: number) => void,
@@ -51,28 +54,56 @@ export function uploadFileXHR(
   });
 }
 
-/** Legacy helper — uploads without progress (used by existing code). */
-export async function uploadFile(file: File): Promise<UploadedFile> {
-  const formData = new FormData();
-  formData.append('file', file);
+/**
+ * Full pipeline: compress (if video) then upload with progress.
+ *
+ * @param file          File to process
+ * @param onProgress    Called as (stage, 0–100):
+ *                        stage = 'Comprimiendo' during ffmpeg compression
+ *                        stage = 'Subiendo'     during XHR upload
+ * @param onCompressed  Optional — called with the compressed file size (bytes)
+ *                      right before upload starts, so the UI can show
+ *                      "150 MB → 12 MB" while the upload is in progress.
+ */
+export async function uploadFile(
+  file: File,
+  onProgress?: (stage: string, percent: number) => void,
+  onCompressed?: (compressedSize: number) => void,
+): Promise<UploadedFile> {
+  let fileToUpload = file;
 
-  const res = await fetch(`${API_URL}/api/media/upload-standalone`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText);
-    throw new Error(err);
+  if (file.type.startsWith('video/')) {
+    onProgress?.('Comprimiendo', 0);
+    try {
+      const { compressVideo } = await import('./compressVideo');
+      fileToUpload = await compressVideo(file, (pct) =>
+        onProgress?.('Comprimiendo', pct),
+      );
+    } catch {
+      // compressVideo already handles all its own errors and returns the
+      // original file on failure, so this catch is an extra safety net.
+      fileToUpload = file;
+    }
+    onCompressed?.(fileToUpload.size);
   }
-  const data = (await res.json()) as UploadedFile;
-  const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-  return { ...data, preview };
+
+  onProgress?.('Subiendo', 0);
+
+  const result = await uploadFileXHR(fileToUpload, (pct) =>
+    onProgress?.('Subiendo', pct),
+  );
+
+  onProgress?.('Subiendo', 100);
+  return { ...result, originalSize: file.size };
 }
 
+/** Legacy helper — uploads without compression or progress tracking. */
 export async function uploadFiles(files: FileList | File[]): Promise<UploadedFile[]> {
   const arr = Array.from(files);
   if (!arr.length) return [];
-  const results = await Promise.allSettled(arr.map(uploadFile));
+  const results = await Promise.allSettled(
+    arr.map((f) => uploadFileXHR(f)),
+  );
   return results
     .filter((r): r is PromiseFulfilledResult<UploadedFile> => r.status === 'fulfilled')
     .map((r) => r.value);
