@@ -51,6 +51,10 @@ interface FileEntry {
   uploadedFileName?: string;
   uploadedMediaType?: 'IMAGE' | 'VIDEO';
   error?: string;
+  // Per-file YouTube metadata
+  ytTitle: string;
+  ytDescription: string;
+  ytTags: string;
 }
 
 const PLATFORM_ORDER = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'TWITTER', 'LINKEDIN', 'YOUTUBE'];
@@ -66,11 +70,6 @@ export default function NewPostPage() {
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-
-  // YouTube-specific fields
-  const [ytTitle, setYtTitle] = useState('');
-  const [ytDescription, setYtDescription] = useState('');
-  const [ytTags, setYtTags] = useState('');
 
   const userId = 'demo-user';
 
@@ -121,6 +120,10 @@ export default function NewPostPage() {
     setFileEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }, []);
 
+  const updateFileMeta = useCallback((id: string, field: 'ytTitle' | 'ytDescription' | 'ytTags', value: string) => {
+    setFileEntries((prev) => prev.map((e) => (e.id === id ? { ...e, [field]: value } : e)));
+  }, []);
+
   const processFile = useCallback(async (file: File) => {
     if (fileEntries.length >= MAX_FILES) {
       toast.error(`Máximo ${MAX_FILES} archivos por post`);
@@ -138,6 +141,9 @@ export default function NewPostPage() {
         originalSize: file.size,
         status: 'uploading',
         progress: 0,
+        ytTitle: file.name.replace(/\.[^.]+$/, ''),
+        ytDescription: '',
+        ytTags: '',
       },
     ]);
 
@@ -204,31 +210,51 @@ export default function NewPostPage() {
       apiFetch(`/api/queue/assign`, { method: 'POST', body: JSON.stringify({ postId }) }),
   });
 
-  const buildBasePayload = () => ({
+  /** Build a single post payload for one file entry (or no-media text post). */
+  const buildPostPayload = (entry: FileEntry | null, isoDate: string, status?: string) => ({
     content: caption,
     platforms: selectedPlatforms,
-    mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
-    ...(youtubeSelected && ytTitle && {
-      youtubeTitle: ytTitle,
-      youtubeDescription: ytDescription || undefined,
-      youtubeTags: ytTags || undefined,
+    scheduledAt: isoDate,
+    ...(status && { status }),
+    mediaUrls: entry ? [entry.uploadedUrl!] : [],
+    ...(youtubeSelected && entry?.uploadedMediaType === 'VIDEO' && entry.ytTitle && {
+      youtubeTitle: entry.ytTitle,
+      youtubeDescription: entry.ytDescription || undefined,
+      youtubeTags: entry.ytTags || undefined,
     }),
   });
+
+  /** Create one post per uploaded file; fall back to one text-only post if no files. */
+  const createAllPosts = async (isoDate: string, status?: string) => {
+    if (readyEntries.length === 0) {
+      return [await createPost.mutateAsync(buildPostPayload(null, isoDate, status))];
+    }
+    return Promise.all(readyEntries.map((e) => createPost.mutateAsync(buildPostPayload(e, isoDate, status))));
+  };
 
   const commonGuards = (): boolean => {
     if (!caption) { toast.error('Escribe el contenido del post'); return false; }
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
     if (overLimit) { toast.error(`El contenido excede ${maxChars} caracteres`); return false; }
     if (pendingCount > 0) { toast.error('Espera a que terminen todas las subidas'); return false; }
-    if (youtubeSelected && !ytTitle) { toast.error('El título es requerido para YouTube'); return false; }
+    if (youtubeSelected) {
+      const videosMissingTitle = readyEntries.filter(
+        (e) => e.uploadedMediaType === 'VIDEO' && !e.ytTitle,
+      );
+      if (videosMissingTitle.length > 0) {
+        toast.error('Todos los videos requieren un título para YouTube');
+        return false;
+      }
+    }
     return true;
   };
 
   const handlePublishNow = async () => {
     if (!commonGuards()) return;
     try {
-      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString() });
-      toast.success('Publicando ahora…');
+      await createAllPosts(new Date().toISOString());
+      const n = Math.max(readyEntries.length, 1);
+      toast.success(`${n} post${n > 1 ? 's' : ''} publicado${n > 1 ? 's' : ''}…`);
       qc.invalidateQueries({ queryKey: ['posts'] });
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
@@ -240,14 +266,21 @@ export default function NewPostPage() {
   const handleAddToQueue = async () => {
     if (!commonGuards()) return;
     try {
-      const post = await createPost.mutateAsync({
-        ...buildBasePayload(),
-        scheduledAt: new Date().toISOString(),
-        status: 'DRAFT',
-      }) as { id: string };
-      const result = await assignToQueue.mutateAsync(post.id) as { slot: { dayOfWeek: number; hour: number; minute: number } };
-      const { slot } = result;
-      toast.success(`Añadido a la cola (día ${slot.dayOfWeek} - ${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')})`);
+      const now = new Date().toISOString();
+      if (readyEntries.length <= 1) {
+        const post = await createPost.mutateAsync(
+          buildPostPayload(readyEntries[0] ?? null, now, 'DRAFT'),
+        ) as { id: string };
+        const result = await assignToQueue.mutateAsync(post.id) as {
+          slot: { dayOfWeek: number; hour: number; minute: number };
+        };
+        const { slot } = result;
+        toast.success(`Añadido a la cola (día ${slot.dayOfWeek} - ${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')})`);
+      } else {
+        const posts = await createAllPosts(now, 'DRAFT') as { id: string }[];
+        await Promise.all(posts.map((p) => assignToQueue.mutateAsync(p.id)));
+        toast.success(`${posts.length} posts añadidos a la cola`);
+      }
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
     } catch (e) {
@@ -259,7 +292,7 @@ export default function NewPostPage() {
     if (!caption) { toast.error('Escribe el contenido del post'); return; }
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return; }
     try {
-      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString(), status: 'DRAFT' });
+      await createAllPosts(new Date().toISOString(), 'DRAFT');
       toast.success('Borrador guardado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
@@ -272,8 +305,9 @@ export default function NewPostPage() {
     if (!commonGuards()) return;
     if (!scheduledAt) { toast.error('Elige fecha y hora'); return; }
     try {
-      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date(scheduledAt).toISOString() });
-      toast.success('Post programado');
+      await createAllPosts(new Date(scheduledAt).toISOString());
+      const n = Math.max(readyEntries.length, 1);
+      toast.success(`${n} post${n > 1 ? 's' : ''} programado${n > 1 ? 's' : ''}`);
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
     } catch (e) {
@@ -349,53 +383,17 @@ export default function NewPostPage() {
           {fileEntries.length > 0 && (
             <div className="grid grid-cols-1 gap-2 mt-3">
               {fileEntries.map((e) => (
-                <FileCard key={e.id} entry={e} onRemove={() => removeFile(e.id)} />
+                <FileCard
+                  key={e.id}
+                  entry={e}
+                  onRemove={() => removeFile(e.id)}
+                  showYouTubeFields={youtubeSelected && (e.originalFile.type.startsWith('video/') || e.uploadedMediaType === 'VIDEO')}
+                  onMetaChange={(field, value) => updateFileMeta(e.id, field, value)}
+                />
               ))}
             </div>
           )}
         </div>
-
-        {/* YouTube metadata */}
-        {youtubeSelected && (
-          <div className="mt-4 p-4 bg-red-950/20 border border-red-900/40 rounded-xl space-y-3">
-            <p className="text-sm font-semibold text-red-400 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-              Datos de YouTube
-            </p>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Título <span className="text-red-400">*</span> <span className="text-gray-600">(máx 100)</span></label>
-              <input
-                type="text"
-                maxLength={100}
-                placeholder="Título del video en YouTube"
-                value={ytTitle}
-                onChange={(e) => setYtTitle(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Descripción <span className="text-gray-600">(máx 5000)</span></label>
-              <textarea
-                rows={3}
-                maxLength={5000}
-                placeholder="Descripción del video (opcional, usa el caption si se deja vacío)"
-                value={ytDescription}
-                onChange={(e) => setYtDescription(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Tags <span className="text-gray-600">(separados por coma)</span></label>
-              <input
-                type="text"
-                placeholder="shorts, tutorial, vlog"
-                value={ytTags}
-                onChange={(e) => setYtTags(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
-          </div>
-        )}
       </section>
 
       {/* Card 2 — Select Accounts */}
@@ -505,53 +503,104 @@ export default function NewPostPage() {
 }
 
 /* ─── FileCard ──────────────────────────────────────────────────────────────── */
-function FileCard({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => void }) {
+function FileCard({
+  entry: e,
+  onRemove,
+  showYouTubeFields = false,
+  onMetaChange,
+}: {
+  entry: FileEntry;
+  onRemove: () => void;
+  showYouTubeFields?: boolean;
+  onMetaChange?: (field: 'ytTitle' | 'ytDescription' | 'ytTags', value: string) => void;
+}) {
   const isVideo = e.originalFile.type.startsWith('video/');
 
   return (
-    <div className="flex gap-3 bg-gray-950 border border-gray-800 rounded-xl p-3">
-      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-800 relative">
-        {e.thumbnail ? (
-          <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            {isVideo ? <Film size={20} /> : <ImageIcon size={20} />}
-          </div>
-        )}
-        {isVideo && e.duration != null && (
-          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] px-1 rounded">
-            {Math.floor(e.duration / 60)}:{String(Math.round(e.duration % 60)).padStart(2, '0')}
-          </span>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm text-gray-100 truncate">{e.originalFile.name}</p>
-            <p className="text-xs text-gray-500">{fmtSize(e.originalSize)}</p>
-          </div>
-          <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0">
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="mt-1.5">
-          {e.status !== 'error' ? (
-            <UploadProgress
-              stage={e.status === 'uploading' ? 'uploading' : 'done'}
-              percent={e.progress}
-              speed={e.speed}
-              remaining={e.remaining}
-              originalSize={e.originalSize}
-            />
+    <div className="bg-gray-950 border border-gray-800 rounded-xl p-3 space-y-3">
+      <div className="flex gap-3">
+        {/* Thumbnail */}
+        <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-800 relative">
+          {e.thumbnail ? (
+            <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
           ) : (
-            <span className="text-xs text-red-400 flex items-center gap-1">
-              <AlertCircle size={11} />{e.error}
+            <div className="flex items-center justify-center h-full text-gray-500">
+              {isVideo ? <Film size={20} /> : <ImageIcon size={20} />}
+            </div>
+          )}
+          {isVideo && e.duration != null && (
+            <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] px-1 rounded">
+              {Math.floor(e.duration / 60)}:{String(Math.round(e.duration % 60)).padStart(2, '0')}
             </span>
           )}
         </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm text-gray-100 truncate">{e.originalFile.name}</p>
+              <p className="text-xs text-gray-500">{fmtSize(e.originalSize)}</p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {showYouTubeFields && (
+                <span className="text-[10px] text-red-400 font-bold">● YouTube</span>
+              )}
+              <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 ml-1">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-1.5">
+            {e.status !== 'error' ? (
+              <UploadProgress
+                stage={e.status === 'uploading' ? 'uploading' : 'done'}
+                percent={e.progress}
+                speed={e.speed}
+                remaining={e.remaining}
+                originalSize={e.originalSize}
+              />
+            ) : (
+              <span className="text-xs text-red-400 flex items-center gap-1">
+                <AlertCircle size={11} />{e.error}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Per-file YouTube metadata — shown for video files when YouTube is selected */}
+      {showYouTubeFields && (
+        <div className="border-t border-red-900/30 pt-3 space-y-2">
+          <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+            Datos de YouTube
+          </p>
+          <input
+            type="text"
+            maxLength={100}
+            placeholder="Título del video en YouTube (máx 100) *"
+            value={e.ytTitle}
+            onChange={(ev) => onMetaChange?.('ytTitle', ev.target.value)}
+            className="w-full bg-gray-900 border border-red-900/40 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+          />
+          <textarea
+            rows={2}
+            maxLength={5000}
+            placeholder="Descripción (opcional)"
+            value={e.ytDescription}
+            onChange={(ev) => onMetaChange?.('ytDescription', ev.target.value)}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+          />
+          <input
+            type="text"
+            placeholder="Tags: shorts, tutorial, vlog"
+            value={e.ytTags}
+            onChange={(ev) => onMetaChange?.('ytTags', ev.target.value)}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+          />
+        </div>
+      )}
     </div>
   );
 }
