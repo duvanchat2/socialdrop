@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
-  ListOrdered, GitBranch, Inbox, Zap, Terminal, Youtube,
+  ListOrdered, GitBranch, Inbox, Zap, Terminal, Youtube, Brain,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
@@ -26,6 +26,7 @@ const NAV_MAIN = [
   { href: '/integrations', label: 'Integraciones', icon: Settings },
   { href: '/competitors', label: 'Competencia', icon: Users },
   { href: '/assistant', label: 'Asistente IA', icon: BotMessageSquare },
+  { href: '/brain', label: 'Mi Voz', icon: Brain },
 ];
 
 const NAV_AUTOMATION = [

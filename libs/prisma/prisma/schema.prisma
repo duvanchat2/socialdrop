@@ -364,3 +364,56 @@ model YoutubeAutoReply {
 
   @@index([userId])
 }
+
+model GeneratedScript {
+  id             String    @id @default(cuid())
+  userId         String
+  platform       String
+  topic          String
+  hook           String
+  body           String
+  cta            String?
+  hashtags       String[]
+  tone           String?
+  contentType    String?   // SOCIAL | YT_SHORT | YT_LONG
+  // Performance (populated 72h after publish)
+  postId         String?
+  likes          Int?
+  saves          Int?
+  reach          Int?
+  follows        Int?
+  engagementRate Float?
+  isViral        Boolean   @default(false)
+  metricsAt      DateTime?
+  publishedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, isViral])
+  @@index([publishedAt])
+}
+
+model ContentBrain {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  // Learned patterns stored as JSON arrays
+  viralHooks      Json     @default("[]")  // top performing hooks
+  viralTopics     Json     @default("[]")  // recurring themes in viral posts
+  viralFormats    Json     @default("[]")  // content formats that perform
+  bestHashtags    Json     @default("[]")  // hashtags that boost reach
+  optimalLength   Json     @default("{}")  // { platform: { hook: n, body: n } }
+  // Stats
+  totalScripts    Int      @default(0)
+  viralCount      Int      @default(0)
+  avgEngagement   Float?
+  accuracyScore   Float?   // % of scripts that exceeded avg engagement
+  lastLearnedAt   DateTime?
+  nextLearnAt     DateTime?
+  // Raw pattern text from Claude
+  patternSummary  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}

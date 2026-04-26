@@ -30,6 +30,7 @@ import { SequencesModule } from '../modules/sequences/sequences.module.js';
 import { DebugModule } from '../modules/debug/debug.module.js';
 import { YoutubeModule } from '../modules/youtube/youtube.module.js';
 import { UsersModule } from '../modules/users/users.module.js';
+import { BrainModule } from '../modules/brain/brain.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -76,6 +77,7 @@ import redisConfig from '../config/redis.config.js';
     DebugModule,
     YoutubeModule,
     UsersModule,
+    BrainModule,
   ],
   controllers: [AppController],
   providers: [
