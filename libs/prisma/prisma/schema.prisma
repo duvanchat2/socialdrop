@@ -247,15 +247,22 @@ model GrowthGoal {
 
 model Competitor {
   id          String               @id @default(cuid())
-  userId      String
+  userId      String               @default("demo-user")
   username    String
-  platform    String
+  platform    String               @default("INSTAGRAM")
   displayName String?
+  avatar      String?
   followers   Int?
+  following   Int?
+  postsCount  Int?
+  bio         String?
+  isActive    Boolean              @default(true)
   notes       String?
   createdAt   DateTime             @default(now())
   analyses    CompetitorAnalysis[]
+  posts       CompetitorPost[]
 
+  @@unique([userId, username, platform])
   @@index([userId])
 }
 
@@ -269,6 +276,25 @@ model CompetitorAnalysis {
   bestFormats     String[]
   recommendations String[]
   createdAt       DateTime   @default(now())
+}
+
+model CompetitorPost {
+  id           String     @id @default(cuid())
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  postId       String     @unique
+  caption      String?
+  mediaType    String     @default("IMAGE")
+  likes        Int        @default(0)
+  comments     Int        @default(0)
+  hashtags     String[]
+  publishedAt  DateTime
+  thumbnail    String?
+  url          String?
+  createdAt    DateTime   @default(now())
+
+  @@index([competitorId])
+  @@index([competitorId, publishedAt])
 }
 
 model QueueSlot {
