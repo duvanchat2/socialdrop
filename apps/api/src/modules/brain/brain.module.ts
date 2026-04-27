@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '@socialdrop/prisma';
 import { BrainService } from './brain.service.js';
 import { BrainController } from './brain.controller.js';
