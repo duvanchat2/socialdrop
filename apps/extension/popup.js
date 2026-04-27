@@ -7,46 +7,62 @@ function setStatus(msg, type = '') {
   statusEl.className = type
 }
 
+function detectPlatform(url) {
+  if (!url) return null
+  if (url.includes('instagram.com')) return 'INSTAGRAM'
+  if (url.includes('tiktok.com')) return 'TIKTOK'
+  return null
+}
+
+function adapterFiles(platform) {
+  return platform === 'INSTAGRAM'
+    ? ['panel.js', 'instagram.js']
+    : platform === 'TIKTOK'
+    ? ['panel.js', 'tiktok.js']
+    : null
+}
+
 async function scrapeCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const platform = detectPlatform(tab?.url)
 
-  if (!tab?.url?.includes('instagram.com')) {
-    setStatus('Debes estar en Instagram', 'error')
+  if (!platform) {
+    setStatus('Abre Instagram o TikTok', 'error')
     return null
   }
 
   try {
-    // Try sending message first (content.js may already be loaded)
-    return await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
+    const data = await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
+    return { ...data, platform }
   } catch (err) {
-    // content.js not loaded — inject it programmatically and retry
+    // Content scripts not loaded — inject and retry
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ['content.js']
+      files: adapterFiles(platform),
     })
-    await new Promise(r => setTimeout(r, 500))
-    return await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
+    await new Promise((r) => setTimeout(r, 500))
+    const data = await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
+    return { ...data, platform }
   }
 }
 
 // Load saved API URL
-chrome.storage.local.get(['apiUrl']).then(data => {
+chrome.storage.local.get(['apiUrl']).then((data) => {
   if (data.apiUrl) apiInput.value = data.apiUrl
 })
 
-// Check if on Instagram
+// Detect current tab
 chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-  const isInstagram = tab?.url?.includes('instagram.com')
-
-  document.getElementById('not-instagram').style.display =
-    isInstagram ? 'none' : 'block'
-  document.getElementById('instagram-detected').style.display =
-    isInstagram ? 'block' : 'none'
-
-  if (isInstagram) {
-    const username = tab.url.match(/instagram\.com\/([^/?]+)/)?.[1]
-    document.getElementById('detected-user').textContent =
-      `📍 @${username}`
+  const platform = detectPlatform(tab?.url)
+  document.getElementById('not-instagram').style.display = platform ? 'none' : 'block'
+  document.getElementById('instagram-detected').style.display = platform ? 'block' : 'none'
+  if (platform) {
+    const username =
+      platform === 'INSTAGRAM'
+        ? tab.url.match(/instagram\.com\/([^/?]+)/)?.[1]
+        : tab.url.match(/tiktok\.com\/@([^/?]+)/)?.[1]
+    const label = platform === 'INSTAGRAM' ? 'IG' : 'TT'
+    document.getElementById('detected-user').textContent = `📍 [${label}] @${username || '—'}`
   }
 })
 
@@ -58,14 +74,11 @@ btn.addEventListener('click', async () => {
     return
   }
 
-  // Save API URL
   await chrome.storage.local.set({ apiUrl })
-
   btn.disabled = true
   setStatus('Capturando datos...', '')
 
   try {
-    // Get scraped data from content script (with injection fallback)
     const data = await scrapeCurrentTab()
     if (!data) {
       btn.disabled = false
@@ -74,34 +87,27 @@ btn.addEventListener('click', async () => {
 
     setStatus(`Enviando ${data.posts.length} posts...`, '')
 
-    // Send to SocialDrop API
     const res = await fetch(`${apiUrl}/api/competitors/ingest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId: 'demo-user',
-        platform: 'INSTAGRAM',
+        platform: data.platform,
         profile: data.profile,
-        posts: data.posts
-      })
+        posts: data.posts,
+      }),
     })
 
     if (!res.ok) throw new Error(`API error: ${res.status}`)
-
     const result = await res.json()
 
-    setStatus(
-      `✓ ${result.imported || data.posts.length} posts enviados`,
-      'success'
-    )
+    setStatus(`✓ ${result.imported || data.posts.length} posts enviados`, 'success')
 
-    // Open competitors page
     setTimeout(() => {
       chrome.tabs.create({
-        url: `${apiUrl}/competitors?username=${data.profile.username}`
+        url: `${apiUrl}/competitors?username=${data.profile.username}`,
       })
     }, 1500)
-
   } catch (err) {
     setStatus(`Error: ${err.message}`, 'error')
   } finally {
