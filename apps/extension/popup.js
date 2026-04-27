@@ -7,6 +7,28 @@ function setStatus(msg, type = '') {
   statusEl.className = type
 }
 
+async function scrapeCurrentTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+
+  if (!tab?.url?.includes('instagram.com')) {
+    setStatus('Debes estar en Instagram', 'error')
+    return null
+  }
+
+  try {
+    // Try sending message first (content.js may already be loaded)
+    return await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
+  } catch (err) {
+    // content.js not loaded — inject it programmatically and retry
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['content.js']
+    })
+    await new Promise(r => setTimeout(r, 500))
+    return await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
+  }
+}
+
 // Load saved API URL
 chrome.storage.local.get(['apiUrl']).then(data => {
   if (data.apiUrl) apiInput.value = data.apiUrl
@@ -43,20 +65,12 @@ btn.addEventListener('click', async () => {
   setStatus('Capturando datos...', '')
 
   try {
-    const [tab] = await chrome.tabs.query({
-      active: true, currentWindow: true
-    })
-
-    if (!tab?.url?.includes('instagram.com')) {
-      setStatus('Navega a Instagram primero', 'error')
+    // Get scraped data from content script (with injection fallback)
+    const data = await scrapeCurrentTab()
+    if (!data) {
       btn.disabled = false
       return
     }
-
-    // Get scraped data from content script
-    const data = await chrome.tabs.sendMessage(tab.id, {
-      action: 'scrape'
-    })
 
     setStatus(`Enviando ${data.posts.length} posts...`, '')
 

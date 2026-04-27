@@ -3,7 +3,7 @@
   "name": "SocialDrop Analyzer",
   "version": "1.0.0",
   "description": "Analyze Instagram competitors and sync to SocialDrop",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "scripting"],
   "host_permissions": ["https://www.instagram.com/*"],
   "action": {
     "default_popup": "popup.html",
