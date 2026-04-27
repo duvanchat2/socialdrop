@@ -8,6 +8,7 @@ import { BrainController } from './brain.controller.js';
 import { MetricsCollectorProcessor } from './metrics-collector.processor.js';
 import { BrainUpdaterProcessor } from './brain-updater.processor.js';
 import { BrainScheduler } from './brain.scheduler.js';
+import { TranscriptionService } from './transcription.service.js';
 
 @Module({
   imports: [
@@ -21,10 +22,11 @@ import { BrainScheduler } from './brain.scheduler.js';
   controllers: [BrainController],
   providers: [
     BrainService,
+    TranscriptionService,
     MetricsCollectorProcessor,
     BrainUpdaterProcessor,
     BrainScheduler,
   ],
-  exports: [BrainService],
+  exports: [BrainService, TranscriptionService],
 })
 export class BrainModule {}
