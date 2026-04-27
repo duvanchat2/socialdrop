@@ -3,11 +3,15 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { CompetitorsService } from './competitors.service.js';
+import { TranscriptionService } from '../brain/transcription.service.js';
 
 @ApiTags('competitors')
 @Controller('competitors')
 export class CompetitorsController {
-  constructor(private readonly competitorsService: CompetitorsService) {}
+  constructor(
+    private readonly competitorsService: CompetitorsService,
+    private readonly transcriptionService: TranscriptionService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List tracked competitors for a user' })
@@ -72,6 +76,24 @@ export class CompetitorsController {
   async analyze(@Param('id') id: string, @Query('userId') userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.competitorsService.analyze(id, userId);
+  }
+
+  @Post('transcribe')
+  @ApiOperation({ summary: 'Transcribe a video URL using faster-whisper' })
+  async transcribe(@Body() body: { videoUrl: string }) {
+    const { videoUrl } = body;
+    if (!videoUrl || !/^https?:\/\//.test(videoUrl)) {
+      throw new HttpException('videoUrl (http/https) is required', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const transcript = await this.transcriptionService.transcribeUrl(videoUrl);
+      return { transcript };
+    } catch (err) {
+      throw new HttpException(
+        `Transcription failed: ${(err as Error).message}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 
   @Get('benchmark')

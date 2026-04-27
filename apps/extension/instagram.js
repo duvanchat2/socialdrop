@@ -20,16 +20,32 @@
     return parseInt(text, 10) || 0
   }
 
-  function isProfilePage() {
+  function pageType() {
     const path = location.pathname.replace(/\/+$/, '')
     const parts = path.split('/').filter(Boolean)
-    if (parts.length !== 1) return false
-    const reserved = new Set([
-      'p', 'reel', 'reels', 'explore', 'direct', 'accounts',
-      'stories', 'about', 'developer', 'legal', 'press',
-      'web', 'sessions', 'challenge', 'emails',
-    ])
-    return !reserved.has(parts[0])
+    if (parts.length === 2 && (parts[0] === 'p' || parts[0] === 'reel')) return 'post'
+    if (parts.length === 1) {
+      const reserved = new Set([
+        'p', 'reel', 'reels', 'explore', 'direct', 'accounts',
+        'stories', 'about', 'developer', 'legal', 'press',
+        'web', 'sessions', 'challenge', 'emails',
+      ])
+      if (!reserved.has(parts[0])) return 'profile'
+    }
+    return null
+  }
+
+  function getCurrentMediaInfo() {
+    const ogVideo =
+      document.querySelector('meta[property="og:video"]')?.content ||
+      document.querySelector('meta[property="og:video:secure_url"]')?.content ||
+      null
+    const m = location.pathname.match(/\/(p|reel)\/([^/?]+)/)
+    return {
+      videoUrl: ogVideo,
+      postId: m?.[2] ?? null,
+      isReel: m?.[1] === 'reel',
+    }
   }
 
   function scrapeProfile() {
@@ -102,9 +118,10 @@
 
   window.SDPanel.init({
     platform: 'INSTAGRAM',
-    isProfilePage,
+    pageType,
     scrapeProfile,
     scrapePosts,
     fetchMetrics,
+    getCurrentMediaInfo,
   })
 })()

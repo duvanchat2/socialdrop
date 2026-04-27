@@ -18,13 +18,29 @@
   }
 
   /**
-   * TikTok profile pages: /@username  (single segment starting with @).
-   * Skip /video/, /tag/, /music/, /search, /foryou, /following, /live, etc.
+   * TikTok page types:
+   *   - profile: /@username
+   *   - post:    /@username/video/<id>
    */
-  function isProfilePage() {
+  function pageType() {
     const parts = location.pathname.split('/').filter(Boolean)
-    if (parts.length < 1) return false
-    return parts[0].startsWith('@') && parts.length === 1
+    if (parts.length === 1 && parts[0].startsWith('@')) return 'profile'
+    if (parts.length === 3 && parts[0].startsWith('@') && parts[1] === 'video') return 'post'
+    return null
+  }
+
+  function getCurrentMediaInfo() {
+    const ogVideo =
+      document.querySelector('meta[property="og:video"]')?.content ||
+      document.querySelector('meta[property="og:video:secure_url"]')?.content ||
+      document.querySelector('video')?.src ||
+      null
+    const m = location.pathname.match(/\/video\/(\d+)/)
+    return {
+      videoUrl: ogVideo,
+      postId: m?.[1] ?? null,
+      isReel: false,
+    }
   }
 
   function scrapeProfile() {
@@ -78,9 +94,10 @@
   // for now — views from grid DOM are good enough.
   window.SDPanel.init({
     platform: 'TIKTOK',
-    isProfilePage,
+    pageType,
     scrapeProfile,
     scrapePosts,
+    getCurrentMediaInfo,
     // fetchMetrics: undefined — button hidden
   })
 })()

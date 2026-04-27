@@ -165,34 +165,52 @@
 
   // ---------- Panel ----------
   function buildPanel(adapter) {
-    const profile = adapter.scrapeProfile()
-    const posts = adapter.scrapePosts()
+    const pageType = adapter.pageType()
     const wrapper = document.createElement('div')
     wrapper.id = PANEL_ID
     const platformLabel = adapter.platform === 'INSTAGRAM' ? 'IG' : 'TT'
-    wrapper.innerHTML = `
-      <div class="sd-header" data-sd-toggle>
-        <span class="sd-title">🔮 SocialDrop
-          <span class="sd-platform-badge sd-platform-${platformLabel}">${platformLabel}</span>
-        </span>
-        <button class="sd-toggle" data-sd-toggle>−</button>
-      </div>
-      <div class="sd-body">
-        <div class="sd-info">
-          Perfil: <b>@${profile.username || '—'}</b><br>
-          Seguidores: <b>${(profile.followers || 0).toLocaleString()}</b>
+    if (pageType === 'post') {
+      wrapper.innerHTML = `
+        <div class="sd-header" data-sd-toggle>
+          <span class="sd-title">🔮 SocialDrop
+            <span class="sd-platform-badge sd-platform-${platformLabel}">${platformLabel}</span>
+          </span>
+          <button class="sd-toggle" data-sd-toggle>−</button>
         </div>
-        <div class="sd-counter">
-          <span>Posts cargados</span>
-          <b data-sd-counter>${posts.length}</b>
+        <div class="sd-body">
+          <div class="sd-info">Modo: <b>Post / Reel</b></div>
+          ${adapter.getCurrentMediaInfo ? '<button class="sd-btn sd-btn-primary" data-sd-action="transcribe">🎙 Transcribir este video</button>' : '<div class="sd-info">Esta plataforma no soporta transcripción aún.</div>'}
+          <div class="sd-status" data-sd-status></div>
+          <div class="sd-transcript" data-sd-transcript style="display:none; margin-top:10px; max-height:200px; overflow-y:auto; padding:8px; background:#1e293b; border:1px solid #334155; border-radius:6px; font-size:11px; color:#cbd5e1; white-space:pre-wrap;"></div>
         </div>
-        <button class="sd-btn sd-btn-secondary" data-sd-action="scroll">⬇ Auto-scroll</button>
-        ${adapter.fetchMetrics ? '<button class="sd-btn sd-btn-secondary" data-sd-action="metrics">📈 Cargar métricas</button>' : ''}
-        <button class="sd-btn sd-btn-secondary" data-sd-action="csv">📊 Exportar CSV</button>
-        <button class="sd-btn sd-btn-primary" data-sd-action="sync">✨ Sincronizar con SocialDrop</button>
-        <div class="sd-status" data-sd-status></div>
-      </div>
-    `
+      `
+    } else {
+      const profile = adapter.scrapeProfile()
+      const posts = adapter.scrapePosts()
+      wrapper.innerHTML = `
+        <div class="sd-header" data-sd-toggle>
+          <span class="sd-title">🔮 SocialDrop
+            <span class="sd-platform-badge sd-platform-${platformLabel}">${platformLabel}</span>
+          </span>
+          <button class="sd-toggle" data-sd-toggle>−</button>
+        </div>
+        <div class="sd-body">
+          <div class="sd-info">
+            Perfil: <b>@${profile.username || '—'}</b><br>
+            Seguidores: <b>${(profile.followers || 0).toLocaleString()}</b>
+          </div>
+          <div class="sd-counter">
+            <span>Posts cargados</span>
+            <b data-sd-counter>${posts.length}</b>
+          </div>
+          <button class="sd-btn sd-btn-secondary" data-sd-action="scroll">⬇ Auto-scroll</button>
+          ${adapter.fetchMetrics ? '<button class="sd-btn sd-btn-secondary" data-sd-action="metrics">📈 Cargar métricas</button>' : ''}
+          <button class="sd-btn sd-btn-secondary" data-sd-action="csv">📊 Exportar CSV</button>
+          <button class="sd-btn sd-btn-primary" data-sd-action="sync">✨ Sincronizar con SocialDrop</button>
+          <div class="sd-status" data-sd-status></div>
+        </div>
+      `
+    }
 
     const statusEl = wrapper.querySelector('[data-sd-status]')
     const counterEl = wrapper.querySelector('[data-sd-counter]')
@@ -211,10 +229,47 @@
       })
     })
 
+    // Transcribe (post page only)
+    const transcribeBtn = wrapper.querySelector('[data-sd-action="transcribe"]')
+    if (transcribeBtn && adapter.getCurrentMediaInfo) {
+      const transcriptEl = wrapper.querySelector('[data-sd-transcript]')
+      transcribeBtn.addEventListener('click', async () => {
+        transcribeBtn.disabled = true
+        transcriptEl.style.display = 'none'
+        setStatus('Buscando URL del video...', '')
+        try {
+          const media = adapter.getCurrentMediaInfo()
+          if (!media?.videoUrl) throw new Error('No se encontró URL del video')
+
+          const { apiUrl } = await chrome.storage.local.get(['apiUrl'])
+          if (!apiUrl) throw new Error('Configura la URL del API en el popup')
+
+          setStatus('Transcribiendo... (puede tardar 30-90s)', '')
+          const res = await fetch(`${apiUrl.replace(/\/$/, '')}/api/competitors/transcribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoUrl: media.videoUrl }),
+          })
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            throw new Error(`API ${res.status} ${text.slice(0, 120)}`)
+          }
+          const { transcript } = await res.json()
+          transcriptEl.textContent = transcript || '(transcripción vacía)'
+          transcriptEl.style.display = 'block'
+          setStatus(`✓ Transcrito (${transcript.length} chars)`, 'success')
+        } catch (err) {
+          setStatus(`Error: ${err.message}`, 'error')
+        } finally {
+          transcribeBtn.disabled = false
+        }
+      })
+    }
+
     // Auto-scroll
     const scrollAbort = { aborted: false }
     const scrollBtn = wrapper.querySelector('[data-sd-action="scroll"]')
-    scrollBtn.addEventListener('click', async () => {
+    if (scrollBtn) scrollBtn.addEventListener('click', async () => {
       if (scrollBtn.dataset.running === '1') {
         scrollAbort.aborted = true
         scrollBtn.dataset.running = '0'
@@ -228,7 +283,7 @@
       setStatus('Cargando posts...', '')
       try {
         const total = await autoScroll(adapter, scrollAbort, (n) => {
-          counterEl.textContent = String(n)
+          if (counterEl) counterEl.textContent = String(n)
           setStatus(`Cargando... ${n} posts`, '')
         })
         setStatus(`✓ ${total} posts cargados`, 'success')
@@ -261,7 +316,8 @@
     }
 
     // CSV
-    wrapper.querySelector('[data-sd-action="csv"]').addEventListener('click', () => {
+    const csvBtn = wrapper.querySelector('[data-sd-action="csv"]')
+    if (csvBtn) csvBtn.addEventListener('click', () => {
       try {
         const profile = adapter.scrapeProfile()
         const posts = adapter.scrapePosts()
@@ -274,7 +330,8 @@
     })
 
     // Sync
-    wrapper.querySelector('[data-sd-action="sync"]').addEventListener('click', async (e) => {
+    const syncBtn = wrapper.querySelector('[data-sd-action="sync"]')
+    if (syncBtn) syncBtn.addEventListener('click', async (e) => {
       const btn = e.currentTarget
       const { apiUrl } = await chrome.storage.local.get(['apiUrl'])
       if (!apiUrl) { setStatus('Configura la URL en el popup ⚙', 'warn'); return }
@@ -313,16 +370,25 @@
   }
 
   function ensurePanel(adapter) {
-    if (!adapter.isProfilePage()) {
+    const type = adapter.pageType()
+    if (!type) {
       document.getElementById(PANEL_ID)?.remove()
       return
     }
-    if (document.getElementById(PANEL_ID)) {
-      refreshCounter(adapter)
-      return
+    const existing = document.getElementById(PANEL_ID)
+    if (existing) {
+      // Rebuild if page type changed (profile ↔ post)
+      if (existing.dataset.sdPageType !== type) {
+        existing.remove()
+      } else {
+        refreshCounter(adapter)
+        return
+      }
     }
     injectStyles()
-    document.body?.appendChild(buildPanel(adapter))
+    const panel = buildPanel(adapter)
+    panel.dataset.sdPageType = type
+    document.body?.appendChild(panel)
   }
 
   // ---------- Public API ----------
