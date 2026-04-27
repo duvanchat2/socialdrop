@@ -39,14 +39,77 @@ function scrapePosts() {
     const postId = m[2]
     if (seen.has(postId)) return
     seen.add(postId)
+    const merged = metricsCache.get(postId)
     posts.push({
       postId,
       url: el.href,
       thumbnail: el.querySelector('img')?.src,
       isReel: el.href.includes('/reel/'),
+      ...(merged ?? {}),
     })
   })
   return posts
+}
+
+// ---------- Metrics (web_profile_info GraphQL) ----------
+// Map of postId (shortcode) → { likes, comments, views, caption, takenAt, isVideo }
+const metricsCache = new Map()
+
+const IG_APP_ID = '936619743392459'
+
+async function fetchProfileMetrics(username) {
+  const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`
+  const res = await fetch(url, {
+    headers: {
+      'x-ig-app-id': IG_APP_ID,
+      'x-asbd-id': '198387',
+      'x-requested-with': 'XMLHttpRequest',
+    },
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(`web_profile_info ${res.status}`)
+  }
+  const json = await res.json()
+  const user = json?.data?.user
+  if (!user) throw new Error('Respuesta sin user (¿no logueado?)')
+
+  const edges = user.edge_owner_to_timeline_media?.edges ?? []
+  const items = edges.map((e) => {
+    const n = e.node ?? {}
+    return {
+      postId: n.shortcode,
+      likes: n.edge_liked_by?.count ?? n.edge_media_preview_like?.count ?? null,
+      comments: n.edge_media_to_comment?.count ?? null,
+      views: n.video_view_count ?? n.video_play_count ?? null,
+      caption: n.edge_media_to_caption?.edges?.[0]?.node?.text ?? '',
+      takenAt: n.taken_at_timestamp
+        ? new Date(n.taken_at_timestamp * 1000).toISOString()
+        : null,
+      isVideo: !!n.is_video,
+      thumbnail: n.thumbnail_src ?? n.display_url ?? null,
+    }
+  })
+
+  // Cache by shortcode
+  for (const it of items) {
+    if (it.postId) metricsCache.set(it.postId, it)
+  }
+
+  return {
+    profile: {
+      username: user.username,
+      displayName: user.full_name,
+      bio: user.biography,
+      followers: user.edge_followed_by?.count ?? null,
+      following: user.edge_follow?.count ?? null,
+      isVerified: !!user.is_verified,
+      isPrivate: !!user.is_private,
+      profilePic: user.profile_pic_url_hd ?? user.profile_pic_url ?? null,
+      mediaCount: user.edge_owner_to_timeline_media?.count ?? null,
+    },
+    items,
+  }
 }
 
 // ---------- Page detection ----------
@@ -204,6 +267,9 @@ function buildPanel() {
       <button class="sd-btn sd-btn-secondary" data-sd-action="scroll">
         ⬇ Auto-scroll
       </button>
+      <button class="sd-btn sd-btn-secondary" data-sd-action="metrics">
+        📈 Cargar métricas (likes/comments)
+      </button>
       <button class="sd-btn sd-btn-secondary" data-sd-action="csv">
         📊 Exportar CSV
       </button>
@@ -222,6 +288,29 @@ function buildPanel() {
       const btn = wrapper.querySelector('.sd-toggle')
       if (btn) btn.textContent = wrapper.classList.contains('sd-collapsed') ? '+' : '−'
     })
+  })
+
+  // Metrics action — fetch via web_profile_info
+  wrapper.querySelector('[data-sd-action="metrics"]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget
+    const statusEl = wrapper.querySelector('[data-sd-status]')
+    const setStatus = (msg, cls = '') => {
+      statusEl.textContent = msg
+      statusEl.className = `sd-status ${cls}`
+    }
+    btn.disabled = true
+    setStatus('Pidiendo métricas a IG...', '')
+    try {
+      const profile = scrapeProfile()
+      if (!profile.username) throw new Error('No se detectó username')
+      const { items } = await fetchProfileMetrics(profile.username)
+      const matched = scrapePosts().filter((p) => metricsCache.has(p.postId)).length
+      setStatus(`✓ Métricas cargadas: ${items.length} (${matched} en grilla)`, 'success')
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, 'error')
+    } finally {
+      btn.disabled = false
+    }
   })
 
   // CSV export action
@@ -355,6 +444,11 @@ function buildCSV(profile, posts) {
     'type',
     'url',
     'thumbnail',
+    'likes',
+    'comments',
+    'views',
+    'taken_at',
+    'caption',
     'scraped_at',
   ]
   const now = new Date().toISOString()
@@ -362,9 +456,14 @@ function buildCSV(profile, posts) {
     [
       profile.username,
       p.postId,
-      p.isReel ? 'reel' : 'post',
+      p.isReel ? 'reel' : (p.isVideo ? 'video' : 'post'),
       p.url,
       p.thumbnail ?? '',
+      p.likes ?? '',
+      p.comments ?? '',
+      p.views ?? '',
+      p.takenAt ?? '',
+      p.caption ?? '',
       now,
     ]
       .map(csvEscape)
