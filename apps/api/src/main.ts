@@ -22,8 +22,19 @@ async function bootstrap() {
   app.useStaticAssets(uploadDir, { prefix: '/uploads' });
 
   app.setGlobalPrefix('api');
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow same-origin/no-origin requests (curl, server-to-server)
+      if (!origin) return callback(null, true);
+      // Allow configured frontend
+      if (origin === frontendUrl) return callback(null, true);
+      // Allow Chrome/Firefox extensions
+      if (origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://')) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS: origin ${origin} not allowed`), false);
+    },
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

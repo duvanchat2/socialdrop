@@ -25,6 +25,56 @@ export class CompetitorsService {
     });
   }
 
+  async ingest(
+    userId: string,
+    platform: string,
+    profile: {
+      username: string;
+      displayName?: string;
+      bio?: string;
+      followers?: number;
+      following?: number;
+      url?: string;
+    },
+    posts: Array<{
+      postId: string;
+      url: string;
+      thumbnail?: string;
+      isReel?: boolean;
+    }>,
+  ) {
+    // Upsert competitor (find by userId+username+platform)
+    const existing = await this.prisma.competitor.findFirst({
+      where: { userId, username: profile.username, platform },
+    });
+
+    const data = {
+      displayName: profile.displayName ?? undefined,
+      followers: typeof profile.followers === 'number' ? profile.followers : undefined,
+      notes: profile.bio ?? undefined,
+    };
+
+    const competitor = existing
+      ? await this.prisma.competitor.update({
+          where: { id: existing.id },
+          data,
+        })
+      : await this.prisma.competitor.create({
+          data: { userId, username: profile.username, platform, ...data },
+        });
+
+    this.logger.log(
+      `[Competitors] Ingested @${profile.username} (${platform}) — ${posts.length} posts received`,
+    );
+
+    return {
+      competitorId: competitor.id,
+      username: competitor.username,
+      imported: posts.length,
+      created: !existing,
+    };
+  }
+
   async remove(id: string) {
     return this.prisma.competitor.delete({ where: { id } });
   }

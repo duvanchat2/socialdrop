@@ -27,6 +27,39 @@ export class CompetitorsController {
     return this.competitorsService.add(userId, username, platform);
   }
 
+  @Post('ingest')
+  @ApiOperation({ summary: 'Ingest a scraped competitor profile + posts (Chrome extension)' })
+  async ingest(
+    @Body()
+    body: {
+      userId: string;
+      platform: string;
+      profile: {
+        username: string;
+        displayName?: string;
+        bio?: string;
+        followers?: number;
+        following?: number;
+        url?: string;
+      };
+      posts: Array<{
+        postId: string;
+        url: string;
+        thumbnail?: string;
+        isReel?: boolean;
+      }>;
+    },
+  ) {
+    const { userId, platform, profile, posts } = body;
+    if (!userId || !platform || !profile?.username) {
+      throw new HttpException(
+        'userId, platform and profile.username are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.competitorsService.ingest(userId, platform, profile, posts ?? []);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Remove a tracked competitor' })
   async remove(@Param('id') id: string) {
