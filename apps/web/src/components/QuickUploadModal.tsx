@@ -1,10 +1,9 @@
 'use client';
 import { useCallback, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { uploadFileXHR } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
-import { compressVideo, compressImage } from '@/lib/compressMedia';
 import { toast } from 'sonner';
 import { X, Upload, Loader2, Film, Image as ImageIcon, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -22,33 +21,24 @@ interface FileEntry {
   thumbnail: string;
   duration?: number;
   originalSize: number;
-  compressedSize?: number;
-  status: 'compressing' | 'uploading' | 'done' | 'error';
+  status: 'uploading' | 'done' | 'error';
   progress: number;
   uploadedUrl?: string;
   uploadedFileName?: string;
   error?: string;
+  /** Per-file caption */
+  caption: string;
+  /** Per-file YouTube title */
+  ytTitle: string;
 }
 
 export function QuickUploadModal({ date, initialFiles = [], platforms = [], onClose }: Props) {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
-  const [caption, setCaption] = useState('');
-  const [ytTitle, setYtTitle] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const youtubeSelected = platforms.includes('YOUTUBE');
-
-  const createPost = useMutation({
-    mutationFn: (data: object) =>
-      apiFetch(`/api/posts?userId=demo-user`, { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: () => {
-      toast.success('Borrador creado en el calendario');
-      qc.invalidateQueries({ queryKey: ['posts-all'] });
-      onClose();
-    },
-    onError: (e: Error) => toast.error(`Error: ${e.message}`),
-  });
 
   const updateEntry = useCallback((id: string, patch: Partial<FileEntry>) => {
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
@@ -57,13 +47,23 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   const processFile = useCallback(async (file: File) => {
     const id = Math.random().toString(36).slice(2, 10);
     const isVideo = file.type.startsWith('video/');
+    const baseName = file.name.replace(/\.[^.]+$/, '');
 
     setEntries((prev) => [
       ...prev,
-      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: 'compressing', progress: 0 },
+      {
+        id,
+        originalFile: file,
+        thumbnail: '',
+        originalSize: file.size,
+        status: 'uploading',
+        progress: 0,
+        caption: '',
+        ytTitle: baseName,
+      },
     ]);
 
-    // Thumbnail
+    // Thumbnail (non-blocking)
     try {
       if (isVideo) {
         const meta = await getVideoMeta(file);
@@ -73,25 +73,16 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
       }
     } catch { /* non-critical */ }
 
-    // Compress → upload
+    // Upload directly (no client-side video compression — server handles it in background)
     try {
-      let compressed: File;
-      if (isVideo) {
-        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
-      } else {
-        compressed = await compressImage(file);
-      }
-      updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
-
-      const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
-
+      const result = await uploadFileXHR(file, (pct) => updateEntry(id, { progress: pct }));
       updateEntry(id, { status: 'done', progress: 100, uploadedUrl: result.url, uploadedFileName: result.fileName });
     } catch (err) {
       updateEntry(id, { status: 'error', error: (err as Error).message });
     }
   }, [updateEntry]);
 
-  const handleFiles = useCallback(async (list: FileList | File[]) => {
+  const handleFiles = useCallback((list: FileList | File[]) => {
     Array.from(list).forEach(processFile);
   }, [processFile]);
 
@@ -100,29 +91,63 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
 
   if (!date) return null;
 
-  const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
-  const readyUrls = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
+  const pendingCount = entries.filter((e) => e.status === 'uploading').length;
+  const doneEntries = entries.filter((e) => e.status === 'done');
 
-  const handleSave = () => {
-    if (youtubeSelected && !ytTitle) {
-      toast.error('El título es requerido para YouTube');
+  const handleSave = async () => {
+    if (youtubeSelected && doneEntries.some((e) => !e.ytTitle)) {
+      toast.error('Todos los videos necesitan título para YouTube');
       return;
     }
-    const scheduledAt = new Date(date);
-    scheduledAt.setHours(9, 0, 0, 0);
-    createPost.mutate({
-      content: caption || '(Borrador sin contenido)',
-      scheduledAt: scheduledAt.toISOString(),
-      platforms: [],
-      status: 'DRAFT',
-      mediaUrls: readyUrls,
-      ...(youtubeSelected && ytTitle && { youtubeTitle: ytTitle }),
-    });
+
+    setSaving(true);
+    try {
+      const scheduledAt = new Date(date);
+      scheduledAt.setHours(9, 0, 0, 0);
+
+      if (doneEntries.length === 0) {
+        // Text-only draft
+        await apiFetch(`/api/posts?userId=demo-user`, {
+          method: 'POST',
+          body: JSON.stringify({
+            content: '(Borrador sin contenido)',
+            scheduledAt: scheduledAt.toISOString(),
+            platforms: [],
+            status: 'DRAFT',
+            mediaUrls: [],
+          }),
+        });
+      } else {
+        // One post per file
+        for (const entry of doneEntries) {
+          await apiFetch(`/api/posts?userId=demo-user`, {
+            method: 'POST',
+            body: JSON.stringify({
+              content: entry.caption || '(Borrador sin contenido)',
+              scheduledAt: scheduledAt.toISOString(),
+              platforms: [],
+              status: 'DRAFT',
+              mediaUrls: [entry.uploadedUrl!],
+              ...(youtubeSelected && entry.ytTitle && { youtubeTitle: entry.ytTitle }),
+            }),
+          });
+        }
+      }
+
+      const count = doneEntries.length;
+      toast.success(count > 1 ? `${count} borradores creados` : 'Borrador creado');
+      qc.invalidateQueries({ queryKey: ['posts-all'] });
+      onClose();
+    } catch (e) {
+      toast.error(`Error: ${(e as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-semibold text-lg">Nuevo borrador</h3>
@@ -132,29 +157,6 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
         </div>
-
-        <textarea
-          rows={3}
-          placeholder="Caption (opcional)"
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
-        />
-
-        {/* YouTube title field */}
-        {youtubeSelected && (
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Título YouTube <span className="text-red-400">*</span></label>
-            <input
-              type="text"
-              maxLength={100}
-              placeholder="Título del video"
-              value={ytTitle}
-              onChange={(e) => setYtTitle(e.target.value)}
-              className="w-full bg-gray-950 border border-red-900/40 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-            />
-          </div>
-        )}
 
         {/* Upload zone */}
         <div
@@ -172,35 +174,49 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
           <div className="flex flex-col items-center gap-1 text-gray-400">
             <Upload size={20} />
             <p className="text-sm">Haz clic o arrastra archivos</p>
-            <p className="text-xs text-gray-600">Los videos se comprimirán automáticamente</p>
+            <p className="text-xs text-gray-600">Los videos se comprimirán automáticamente en el servidor</p>
           </div>
         </div>
 
-        {/* File list */}
+        {/* Per-file cards */}
         {entries.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {entries.map((e) => (
-              <FileRow key={e.id} entry={e} onRemove={() => {
-                setEntries((prev) => {
-                  const found = prev.find((x) => x.id === e.id);
-                  if (found?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(found.thumbnail);
-                  return prev.filter((x) => x.id !== e.id);
-                });
-              }} />
+              <FileCard
+                key={e.id}
+                entry={e}
+                youtubeSelected={youtubeSelected}
+                onRemove={() => {
+                  setEntries((prev) => {
+                    const found = prev.find((x) => x.id === e.id);
+                    if (found?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(found.thumbnail);
+                    return prev.filter((x) => x.id !== e.id);
+                  });
+                }}
+                onCaptionChange={(caption) => updateEntry(e.id, { caption })}
+                onYtTitleChange={(ytTitle) => updateEntry(e.id, { ytTitle })}
+              />
             ))}
           </div>
         )}
 
         <div className="flex gap-2 justify-end pt-1">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200"
+          >
             Cancelar
           </button>
           <button
             onClick={handleSave}
-            disabled={createPost.isPending || pendingCount > 0}
+            disabled={saving || pendingCount > 0}
             className="px-3 py-1.5 text-sm rounded-lg bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white font-medium"
           >
-            {createPost.isPending ? 'Guardando…' : 'Guardar borrador'}
+            {saving
+              ? 'Guardando…'
+              : doneEntries.length > 1
+              ? `Guardar ${doneEntries.length} borradores`
+              : 'Guardar borrador'}
           </button>
         </div>
       </div>
@@ -208,55 +224,87 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   );
 }
 
-/* ─── FileRow ── */
-function FileRow({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => void }) {
+/* ─── FileCard ─────────────────────────────────────────────────────────── */
+interface FileCardProps {
+  entry: FileEntry;
+  youtubeSelected: boolean;
+  onRemove: () => void;
+  onCaptionChange: (v: string) => void;
+  onYtTitleChange: (v: string) => void;
+}
+
+function FileCard({ entry: e, youtubeSelected, onRemove, onCaptionChange, onYtTitleChange }: FileCardProps) {
   const isVideo = e.originalFile.type.startsWith('video/');
 
   return (
-    <div className="flex gap-2 items-center bg-gray-800 rounded-lg p-2">
-      <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
-        {e.thumbnail ? (
-          <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            {isVideo ? <Film size={16} /> : <ImageIcon size={16} />}
-          </div>
-        )}
+    <div className="border border-gray-700 rounded-lg p-3 bg-gray-800">
+      {/* File header */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-14 h-10 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
+          {e.thumbnail ? (
+            <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              {isVideo ? <Film size={14} /> : <ImageIcon size={14} />}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-200 truncate max-w-[200px]">
+            {e.originalFile.name}
+          </p>
+          <p className="text-xs text-gray-500">
+            {e.duration != null ? `${Math.round(e.duration)}s · ` : ''}
+            {fmtSize(e.originalSize)}
+          </p>
+        </div>
+        <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
+          <X size={12} />
+        </button>
       </div>
 
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
-        <p className="text-[10px] text-gray-500">
-          {fmtSize(e.originalSize)}
-          {e.compressedSize != null && e.compressedSize < e.originalSize && (
-            <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
-          )}
-        </p>
-        {e.status === 'compressing' && (
-          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-            <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
-          </p>
-        )}
-        {e.status === 'uploading' && (
+      {/* Progress */}
+      {e.status === 'uploading' && (
+        <div className="mb-2 space-y-0.5">
           <p className="text-[10px] text-gray-400 flex items-center gap-1">
             <Loader2 className="animate-spin" size={9} />Subiendo… {e.progress}%
           </p>
-        )}
-        {e.status === 'done' && (
-          <p className="text-[10px] text-green-400 flex items-center gap-1">
-            <CheckCircle2 size={9} />Subido
-          </p>
-        )}
-        {e.status === 'error' && (
-          <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">
-            <AlertCircle size={9} />{e.error}
-          </p>
-        )}
-      </div>
+          <div className="w-full bg-gray-700 rounded-full h-1">
+            <div className="bg-indigo-500 h-1 rounded-full transition-all" style={{ width: `${e.progress}%` }} />
+          </div>
+        </div>
+      )}
+      {e.status === 'done' && (
+        <p className="text-[10px] text-green-400 flex items-center gap-1 mb-2">
+          <CheckCircle2 size={9} />Subido
+        </p>
+      )}
+      {e.status === 'error' && (
+        <p className="text-[10px] text-red-400 flex items-center gap-1 mb-2 truncate">
+          <AlertCircle size={9} />{e.error}
+        </p>
+      )}
 
-      <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
-        <X size={12} />
-      </button>
+      {/* Caption textarea (always shown) */}
+      <textarea
+        rows={2}
+        placeholder={`Caption para ${e.originalFile.name}…`}
+        value={e.caption}
+        onChange={(ev) => onCaptionChange(ev.target.value)}
+        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
+      />
+
+      {/* YouTube title (when YouTube platform selected) */}
+      {youtubeSelected && (
+        <input
+          type="text"
+          maxLength={100}
+          placeholder="Título para YouTube (requerido) *"
+          value={e.ytTitle}
+          onChange={(ev) => onYtTitleChange(ev.target.value)}
+          className="w-full mt-1.5 bg-gray-900 border border-red-900/50 rounded p-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+        />
+      )}
     </div>
   );
 }

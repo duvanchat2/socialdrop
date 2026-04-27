@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { uploadFileXHR } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
-import { compressVideo, compressImage } from '@/lib/compressMedia';
 
 const USER_ID = 'demo-user';
 
@@ -34,16 +33,15 @@ interface FileEntry {
   thumbnail: string;
   duration?: number;
   originalSize: number;
-  compressedSize?: number;
-  status: 'compressing' | 'uploading' | 'done' | 'error';
-  phase: 'compress' | 'upload';
+  status: 'uploading' | 'done' | 'error';
   progress: number;
   uploadedUrl?: string;
   uploadedFileName?: string;
   uploadedMimeType?: string;
   uploadedMediaType?: 'IMAGE' | 'VIDEO';
   error?: string;
-  // YouTube metadata (editable after upload)
+  // Per-file metadata
+  caption: string;
   ytTitle: string;
   ytDescription: string;
   ytTags: string;
@@ -91,9 +89,9 @@ export default function BulkUploadPage() {
       originalFile: file,
       thumbnail: '',
       originalSize: file.size,
-      status: 'compressing',
-      phase: 'compress',
+      status: 'uploading',
       progress: 0,
+      caption: '',
       ytTitle: baseName,
       ytDescription: '',
       ytTags: '',
@@ -112,30 +110,9 @@ export default function BulkUploadPage() {
       // Non-critical — proceed without thumbnail
     }
 
-    // Compress
+    // Upload directly — server compresses videos in background
     try {
-      let compressed: File;
-      if (isVideo) {
-        compressed = await compressVideo(
-          file,
-          (pct) => updateEntry(id, { progress: pct }),
-          () => updateEntry(id, { status: 'compressing', phase: 'compress', progress: 0 }),
-        );
-      } else {
-        compressed = await compressImage(file);
-      }
-
-      updateEntry(id, {
-        compressedSize: compressed.size,
-        status: 'uploading',
-        phase: 'upload',
-        progress: 0,
-      });
-
-      // Upload with progress
-      const result = await uploadFileXHR(compressed, (pct) =>
-        updateEntry(id, { progress: pct }),
-      );
+      const result = await uploadFileXHR(file, (pct) => updateEntry(id, { progress: pct }));
 
       updateEntry(id, {
         status: 'done',
@@ -199,7 +176,7 @@ export default function BulkUploadPage() {
   ) ?? 0;
 
   const readyEntries = entries.filter((e) => e.status === 'done');
-  const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
+  const pendingCount = entries.filter((e) => e.status === 'uploading').length;
   const youtubeSelected = selectedPlatforms.includes('YOUTUBE');
 
   const handleContinue = () => {
@@ -224,6 +201,7 @@ export default function BulkUploadPage() {
           fileName: e.uploadedFileName!,
           mimeType: e.uploadedMimeType!,
           mediaType: e.uploadedMediaType!,
+          caption: e.caption || undefined,
           youtubeTitle: e.ytTitle || undefined,
           youtubeDescription: e.ytDescription || undefined,
           youtubeTags: e.ytTags || undefined,
@@ -242,6 +220,7 @@ export default function BulkUploadPage() {
           fileName: e.uploadedFileName!,
           mimeType: e.uploadedMimeType!,
           mediaType: e.uploadedMediaType!,
+          caption: e.caption || undefined,
           youtubeTitle: e.ytTitle || undefined,
           youtubeDescription: e.ytDescription || undefined,
           youtubeTags: e.ytTags || undefined,
@@ -490,14 +469,7 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-100 truncate">{e.originalFile.name}</p>
-            <p className="text-xs text-gray-500">
-              {formatSize(e.originalSize)}
-              {e.compressedSize != null && e.compressedSize < e.originalSize && (
-                <span className="text-green-400 ml-1">
-                  → {formatSize(e.compressedSize)} ({Math.round((1 - e.compressedSize / e.originalSize) * 100)}% menos)
-                </span>
-              )}
-            </p>
+            <p className="text-xs text-gray-500">{formatSize(e.originalSize)}</p>
           </div>
           <button
             type="button"
@@ -509,19 +481,8 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
         </div>
 
         {/* Status */}
-        {e.status === 'compressing' && (
-          <ProgressBar
-            label={`Comprimiendo video… ${e.progress}%`}
-            pct={e.progress}
-            color="indigo"
-          />
-        )}
         {e.status === 'uploading' && (
-          <ProgressBar
-            label={`Subiendo… ${e.progress}%`}
-            pct={e.progress}
-            color="blue"
-          />
+          <ProgressBar label={`Subiendo… ${e.progress}%`} pct={e.progress} color="blue" />
         )}
         {e.status === 'done' && (
           <span className="inline-flex items-center gap-1 text-xs text-green-400">
@@ -534,7 +495,16 @@ function FileCard({ entry: e, showYouTubeFields, onRemove, onMetaChange }: FileC
           </span>
         )}
 
-        {/* YouTube metadata (shown once done and YouTube is selected) */}
+        {/* Per-file caption (always shown) */}
+        <textarea
+          rows={2}
+          placeholder={`Caption para ${e.originalFile.name}…`}
+          value={e.caption}
+          onChange={(ev) => onMetaChange({ caption: ev.target.value })}
+          className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
+        />
+
+        {/* YouTube metadata (shown when YouTube is selected) */}
         {showYouTubeFields && (
           <div className="space-y-1.5 pt-1 border-t border-gray-700 mt-2">
             <p className="text-xs font-medium text-red-400">YouTube</p>
