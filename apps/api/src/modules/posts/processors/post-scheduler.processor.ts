@@ -2,11 +2,15 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
+import { Cron } from '@nestjs/schedule';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '@socialdrop/prisma';
 import { IntegrationManager, RefreshTokenError } from '@socialdrop/integrations';
 import { DebugLogService } from '../../debug/debug-log.service.js';
 
 const DEBUG_USER = 'demo-user';
+const UPLOAD_DIR = process.env.UPLOAD_DIRECTORY ?? 'uploads';
 
 interface SchedulerJobData {
   type: 'scan' | 'publish' | 'sequence-step';
@@ -16,6 +20,10 @@ interface SchedulerJobData {
   platform?: string;
   message?: string;
   stepIndex?: number;
+}
+
+interface DeleteMediaJobData {
+  mediaUrls: string[];
 }
 
 @Processor('post-scheduler')
@@ -41,17 +49,100 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     }
   }
 
-  async process(job: Job<SchedulerJobData>): Promise<unknown> {
-    if (job.data.type === 'scan') {
+  async process(job: Job<SchedulerJobData | DeleteMediaJobData>): Promise<unknown> {
+    // ─── Delayed media deletion ───────────────────────────────────────────
+    if (job.name === 'delete-media') {
+      return this.deleteMedia(job as Job<DeleteMediaJobData>);
+    }
+
+    const data = job.data as SchedulerJobData;
+
+    if (data.type === 'scan') {
       return this.scanScheduledPosts();
     }
 
-    if (job.data.type === 'publish' && job.data.postIntegrationId) {
-      return this.publishPost(job.data.postIntegrationId);
+    if (data.type === 'publish' && data.postIntegrationId) {
+      return this.publishPost(data.postIntegrationId);
     }
 
     return null;
   }
+
+  // ─── Delete media files (called 24h after PUBLISHED) ──────────────────
+
+  private async deleteMedia(job: Job<DeleteMediaJobData>): Promise<unknown> {
+    const { mediaUrls } = job.data;
+    let deleted = 0;
+
+    for (const url of mediaUrls ?? []) {
+      try {
+        const filename = path.basename(url);
+        const filePath = path.join(process.cwd(), UPLOAD_DIR, filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          this.logger.log(`Deleted media: ${filename}`);
+          deleted++;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Could not delete ${url}: ${err.message}`);
+      }
+    }
+
+    return { deleted, total: mediaUrls?.length ?? 0 };
+  }
+
+  // ─── Daily cleanup cron (3am) ─────────────────────────────────────────
+
+  /**
+   * Deletes any file in /uploads/ older than 48h that is NOT referenced by
+   * a PENDING, SCHEDULED, or DRAFT post media record.
+   */
+  @Cron('0 3 * * *')
+  async cleanupOrphanedFiles(): Promise<void> {
+    const uploadsDir = path.join(process.cwd(), UPLOAD_DIR);
+
+    let files: string[];
+    try {
+      files = fs.readdirSync(uploadsDir);
+    } catch {
+      this.logger.warn('[Cleanup] Could not read uploads dir');
+      return;
+    }
+
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000; // 48h ago
+    let cleaned = 0;
+
+    for (const file of files) {
+      try {
+        const filePath = path.join(uploadsDir, file);
+        const stat = fs.statSync(filePath);
+
+        if (stat.mtimeMs >= cutoff) continue; // too new
+
+        // Check if any active post references this file
+        const inUse = await this.prisma.media.findFirst({
+          where: {
+            url: { endsWith: `/${file}` },
+            post: {
+              status: { in: ['PENDING', 'SCHEDULED', 'DRAFT'] },
+            },
+          },
+        });
+
+        if (!inUse) {
+          fs.unlinkSync(filePath);
+          this.logger.log(`[Cleanup] Deleted orphaned: ${file}`);
+          cleaned++;
+        }
+      } catch (err: any) {
+        this.logger.warn(`[Cleanup] Error processing ${file}: ${err.message}`);
+      }
+    }
+
+    this.logger.log(`[Cleanup] Done — removed ${cleaned} orphaned file(s)`);
+  }
+
+  // ─── Scheduler ────────────────────────────────────────────────────────
 
   private async scanScheduledPosts() {
     this.logger.log(`[Scheduler] Scanning at ${new Date().toISOString()}, checking pending posts...`);
@@ -170,7 +261,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
         },
       });
 
-      await this.updatePostStatus(pi.postId);
+      await this.updatePostStatus(pi.postId, mediaUrls);
 
       this.logger.log(`Published to ${platform}: ${result.platformPostId}`);
       await this.debugLog.push(userId, 'log', platform,
@@ -210,7 +301,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
             },
           });
 
-          await this.updatePostStatus(pi.postId);
+          await this.updatePostStatus(pi.postId, mediaUrls);
           this.logger.log(`Published to ${platform} after token refresh: ${result.platformPostId}`);
           await this.debugLog.push(userId, 'log', platform,
             `[${platform}] ✓ Published after token refresh — platformPostId=${result.platformPostId}`);
@@ -246,12 +337,16 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
         finalError.stack);
 
       if (retryCount >= maxRetries) {
-        await this.updatePostStatus(pi.postId);
+        await this.updatePostStatus(pi.postId, mediaUrls);
       }
     }
   }
 
-  private async updatePostStatus(postId: string) {
+  /**
+   * Called when all integrations for a post are done.
+   * If the post becomes PUBLISHED, enqueue a delayed media deletion (24h).
+   */
+  private async updatePostStatus(postId: string, mediaUrls: string[] = []) {
     const allIntegrations = await this.prisma.postIntegration.findMany({
       where: { postId },
     });
@@ -269,6 +364,16 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
           publishedAt: hasError ? null : new Date(),
         },
       });
+
+      // Schedule media deletion 24h after successful publish
+      if (!hasError && mediaUrls.length > 0) {
+        await this.schedulerQueue.add(
+          'delete-media',
+          { mediaUrls },
+          { delay: 24 * 60 * 60 * 1000 }, // 24 hours
+        );
+        this.logger.log(`[Scheduler] Media deletion scheduled in 24h for ${mediaUrls.length} file(s) (post ${postId})`);
+      }
     }
   }
 

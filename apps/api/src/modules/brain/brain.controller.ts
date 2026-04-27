@@ -16,7 +16,7 @@ import { TranscriptionService } from './transcription.service.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('brain')
-@Controller('api/content-brain')
+@Controller('content-brain')
 export class BrainController {
   constructor(
     private readonly brainService: BrainService,
