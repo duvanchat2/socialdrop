@@ -201,8 +201,8 @@ function buildPanel() {
         <span>Posts cargados</span>
         <b data-sd-counter>${posts.length}</b>
       </div>
-      <button class="sd-btn sd-btn-secondary" data-sd-action="scroll" disabled>
-        ⬇ Auto-scroll (próximamente)
+      <button class="sd-btn sd-btn-secondary" data-sd-action="scroll">
+        ⬇ Auto-scroll
       </button>
       <button class="sd-btn sd-btn-secondary" data-sd-action="csv" disabled>
         📊 Exportar CSV (próximamente)
@@ -222,6 +222,44 @@ function buildPanel() {
       const btn = wrapper.querySelector('.sd-toggle')
       if (btn) btn.textContent = wrapper.classList.contains('sd-collapsed') ? '+' : '−'
     })
+  })
+
+  // Auto-scroll action
+  wrapper.querySelector('[data-sd-action="scroll"]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget
+    const statusEl = wrapper.querySelector('[data-sd-status]')
+    const counterEl = wrapper.querySelector('[data-sd-counter]')
+
+    const setStatus = (msg, cls = '') => {
+      statusEl.textContent = msg
+      statusEl.className = `sd-status ${cls}`
+    }
+
+    // Toggle stop if already running
+    if (btn.dataset.running === '1') {
+      scrollAbort = true
+      btn.dataset.running = '0'
+      btn.textContent = '⬇ Auto-scroll'
+      setStatus('Detenido', 'warn')
+      return
+    }
+
+    btn.dataset.running = '1'
+    btn.textContent = '⏹ Detener'
+    setStatus('Cargando posts...', '')
+
+    try {
+      const total = await autoScroll((n) => {
+        if (counterEl) counterEl.textContent = String(n)
+        setStatus(`Cargando... ${n} posts`, '')
+      })
+      setStatus(`✓ ${total} posts cargados`, 'success')
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, 'error')
+    } finally {
+      btn.dataset.running = '0'
+      btn.textContent = '⬇ Auto-scroll'
+    }
   })
 
   // Sync action
@@ -276,6 +314,56 @@ function buildPanel() {
 function refreshCounter() {
   const counter = document.querySelector(`#${PANEL_ID} [data-sd-counter]`)
   if (counter) counter.textContent = String(scrapePosts().length)
+}
+
+// ---------- Auto-scroll ----------
+
+const SCROLL_MAX_POSTS = 300
+const SCROLL_NO_GROWTH_LIMIT = 4
+const SCROLL_MIN_DELAY = 800
+const SCROLL_MAX_DELAY = 1500
+
+let scrollAbort = false
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function autoScroll(onProgress) {
+  scrollAbort = false
+  let lastCount = scrapePosts().length
+  let stagnant = 0
+
+  while (!scrollAbort) {
+    window.scrollBy({ top: window.innerHeight * 0.9, behavior: 'instant' })
+    const delay = SCROLL_MIN_DELAY + Math.random() * (SCROLL_MAX_DELAY - SCROLL_MIN_DELAY)
+    await sleep(delay)
+
+    const count = scrapePosts().length
+    onProgress?.(count)
+
+    if (count >= SCROLL_MAX_POSTS) break
+
+    if (count === lastCount) {
+      stagnant++
+      // Try a bigger jump in case lazy loader is sluggish
+      window.scrollBy({ top: window.innerHeight * 1.5, behavior: 'instant' })
+      await sleep(delay)
+      const recount = scrapePosts().length
+      if (recount > count) {
+        stagnant = 0
+        lastCount = recount
+        onProgress?.(recount)
+        continue
+      }
+      if (stagnant >= SCROLL_NO_GROWTH_LIMIT) break
+    } else {
+      stagnant = 0
+      lastCount = count
+    }
+  }
+
+  return scrapePosts().length
 }
 
 function ensurePanel() {
