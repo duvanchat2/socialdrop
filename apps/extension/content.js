@@ -204,8 +204,8 @@ function buildPanel() {
       <button class="sd-btn sd-btn-secondary" data-sd-action="scroll">
         ⬇ Auto-scroll
       </button>
-      <button class="sd-btn sd-btn-secondary" data-sd-action="csv" disabled>
-        📊 Exportar CSV (próximamente)
+      <button class="sd-btn sd-btn-secondary" data-sd-action="csv">
+        📊 Exportar CSV
       </button>
       <button class="sd-btn sd-btn-primary" data-sd-action="sync">
         ✨ Sincronizar con SocialDrop
@@ -222,6 +222,27 @@ function buildPanel() {
       const btn = wrapper.querySelector('.sd-toggle')
       if (btn) btn.textContent = wrapper.classList.contains('sd-collapsed') ? '+' : '−'
     })
+  })
+
+  // CSV export action
+  wrapper.querySelector('[data-sd-action="csv"]').addEventListener('click', () => {
+    const statusEl = wrapper.querySelector('[data-sd-status]')
+    const setStatus = (msg, cls = '') => {
+      statusEl.textContent = msg
+      statusEl.className = `sd-status ${cls}`
+    }
+    try {
+      const profile = scrapeProfile()
+      const posts = scrapePosts()
+      if (!posts.length) {
+        setStatus('No hay posts para exportar', 'warn')
+        return
+      }
+      downloadCSV(profile, posts)
+      setStatus(`✓ CSV descargado (${posts.length} posts)`, 'success')
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, 'error')
+    }
   })
 
   // Auto-scroll action
@@ -314,6 +335,59 @@ function buildPanel() {
 function refreshCounter() {
   const counter = document.querySelector(`#${PANEL_ID} [data-sd-counter]`)
   if (counter) counter.textContent = String(scrapePosts().length)
+}
+
+// ---------- CSV export ----------
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return ''
+  const str = String(value)
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function buildCSV(profile, posts) {
+  const headers = [
+    'username',
+    'postId',
+    'type',
+    'url',
+    'thumbnail',
+    'scraped_at',
+  ]
+  const now = new Date().toISOString()
+  const rows = posts.map((p) =>
+    [
+      profile.username,
+      p.postId,
+      p.isReel ? 'reel' : 'post',
+      p.url,
+      p.thumbnail ?? '',
+      now,
+    ]
+      .map(csvEscape)
+      .join(','),
+  )
+  return [headers.join(','), ...rows].join('\r\n')
+}
+
+function downloadCSV(profile, posts) {
+  const csv = buildCSV(profile, posts)
+  // Prepend BOM so Excel detects UTF-8 correctly
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `socialdrop_${profile.username || 'export'}_${ts}.csv`
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+    a.remove()
+  }, 100)
 }
 
 // ---------- Auto-scroll ----------
