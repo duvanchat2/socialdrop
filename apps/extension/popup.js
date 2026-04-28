@@ -17,12 +17,12 @@ const exportCsvBtn   = document.getElementById('exportCsvBtn')
 const reloadBtn      = document.getElementById('reloadBtn')
 
 // Range elements
-const minViewsEl      = document.getElementById('minViews')
-const minLikesEl      = document.getElementById('minLikes')
-const minCommentsEl   = document.getElementById('minComments')
-const minViewsValEl   = document.getElementById('minViewsVal')
-const minLikesValEl   = document.getElementById('minLikesVal')
-const minCommentsValEl = document.getElementById('minCommentsVal')
+const minViewsEl       = document.getElementById('viewsRange')
+const minLikesEl       = document.getElementById('likesRange')
+const minCommentsEl    = document.getElementById('commentsRange')
+const minViewsValEl    = document.getElementById('viewsVal')
+const minLikesValEl    = document.getElementById('likesVal')
+const minCommentsValEl = document.getElementById('commentsVal')
 const resetFiltersLink = document.getElementById('resetFiltersLink')
 
 let activeSort    = null

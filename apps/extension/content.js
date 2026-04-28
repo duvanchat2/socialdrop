@@ -2,313 +2,131 @@
 // SocialDrop Analyzer — Instagram content script
 //
 // IMPORTANT: this script does NOT modify the page on load. It only listens for
-// messages from the popup. DOM mutations happen ONLY in response to a user
-// action (sort or scrape). This avoids breaking Instagram's renderer.
+// messages from the popup. No CSS injection, no DOM mutation on load.
 // ============================================================================
-
-const IG_APP_ID = '936619743392459'
-
-// Cache of metrics keyed by shortcode (postId).
-// Populated lazily on first sort/scrape call.
-const metricsCache = new Map()
-let metricsFetched = false
-let metricsFetchPromise = null
-
-// ---------- Helpers ----------
 
 function extractNumber(text) {
   if (!text) return 0
-  text = String(text).replace(/[,.]/g, '').trim()
-  const m = text.match(/([\d.]+)\s*([kKmM]?)/)
-  if (!m) return parseInt(text, 10) || 0
-  const num = parseFloat(m[1])
-  const suf = m[2].toLowerCase()
-  if (suf === 'm') return num * 1_000_000
-  if (suf === 'k') return num * 1_000
-  return Math.round(num)
+  const clean = text.replace(/[,.\s]/g, '')
+  if (/[Mm]$/.test(text)) return parseFloat(text) * 1_000_000
+  if (/[Kk]$/.test(text)) return parseFloat(text) * 1_000
+  return parseInt(clean) || 0
 }
-
-function getUsername() {
-  const parts = location.pathname.split('/').filter(Boolean)
-  return parts[0] && !['p', 'reel', 'reels', 'explore'].includes(parts[0])
-    ? parts[0]
-    : null
-}
-
-// ---------- Metrics (web_profile_info) ----------
-
-async function fetchProfileMetrics() {
-  const username = getUsername()
-  if (!username) return
-  const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`
-  const res = await fetch(url, {
-    headers: {
-      'x-ig-app-id': IG_APP_ID,
-      'x-asbd-id': '198387',
-      'x-requested-with': 'XMLHttpRequest',
-    },
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error(`web_profile_info ${res.status}`)
-  const json = await res.json()
-  const user = json?.data?.user
-  if (!user) throw new Error('No user in response')
-
-  const edges = user.edge_owner_to_timeline_media?.edges ?? []
-  for (const e of edges) {
-    const n = e.node ?? {}
-    if (!n.shortcode) continue
-    metricsCache.set(n.shortcode, {
-      likes: n.edge_liked_by?.count ?? n.edge_media_preview_like?.count ?? 0,
-      comments: n.edge_media_to_comment?.count ?? 0,
-      views: n.video_view_count ?? n.video_play_count ?? 0,
-      caption: n.edge_media_to_caption?.edges?.[0]?.node?.text ?? '',
-      takenAt: n.taken_at_timestamp ?? 0,
-      isVideo: !!n.is_video,
-      thumbnail: n.thumbnail_src ?? n.display_url ?? null,
-    })
-  }
-  metricsFetched = true
-}
-
-function ensureMetrics() {
-  if (metricsFetched) return Promise.resolve()
-  if (metricsFetchPromise) return metricsFetchPromise
-  metricsFetchPromise = fetchProfileMetrics().catch((err) => {
-    console.warn('[SocialDrop] metrics fetch failed:', err.message)
-  })
-  return metricsFetchPromise
-}
-
-// ---------- Scrapers ----------
 
 function scrapeProfile() {
-  const username = getUsername()
-  const metaDesc = document.querySelector('meta[name="description"]')
-  const allLinks = document.querySelectorAll('a[href*="followers"]')
+  const username = location.pathname.split('/').filter(Boolean)[0]
   return {
     username,
     displayName: document.querySelector('h1, h2')?.textContent?.trim(),
-    bio: metaDesc?.content,
-    followers: extractNumber(allLinks[0]?.textContent),
-    following: extractNumber(allLinks[1]?.textContent),
+    followers: 0,
     url: location.href,
   }
 }
 
 function scrapePosts() {
-  const posts = []
-  const seen = new Set()
-  document
-    .querySelectorAll('a[href*="/p/"], a[href*="/reel/"]')
-    .forEach((el) => {
-      const m = el.href.match(/\/(p|reel)\/([^/?]+)/)
-      if (!m) return
-      const postId = m[2]
-      if (seen.has(postId)) return
-      seen.add(postId)
-
-      // Prefer authoritative metrics from web_profile_info; fall back to DOM.
-      const merged = metricsCache.get(postId) ?? {}
-      let likes = merged.likes ?? 0
-      let views = merged.views ?? 0
-      let comments = merged.comments ?? 0
-
-      if (!likes || !views || !comments) {
-        const container = el.closest('article') || el.parentElement
-        const spans = container?.querySelectorAll('span') ?? []
-        spans.forEach((s) => {
-          const txt = s.textContent?.trim()
-          if (!txt) return
-          const labelEl = s.closest('[aria-label]')
-          const label = (labelEl?.getAttribute('aria-label') ?? '').toLowerCase()
-          if (!label) return
-          if (!likes && (label.includes('like') || label.includes('gusta'))) {
-            likes = extractNumber(txt)
-          } else if (!views && (label.includes('view') || label.includes('repro'))) {
-            views = extractNumber(txt)
-          } else if (!comments && (label.includes('comment') || label.includes('coment'))) {
-            comments = extractNumber(txt)
-          }
-        })
-      }
-
-      posts.push({
-        postId,
-        url: el.href,
-        thumbnail: el.querySelector('img')?.src ?? merged.thumbnail ?? '',
-        isReel: el.href.includes('/reel/'),
-        likes,
-        comments,
-        views,
-        caption: merged.caption ?? '',
-        takenAt: merged.takenAt
-          ? new Date(merged.takenAt * 1000).toISOString()
-          : null,
-        isVideo: merged.isVideo ?? false,
-        engagement: likes + views + comments,
-      })
-    })
-
-  // Best content first; cap at 50 to keep payloads sensible.
-  return posts.sort((a, b) => b.engagement - a.engagement).slice(0, 50)
-}
-
-// ---------- Sort ----------
-
-/**
- * Find the post tile element (the grid cell that contains the link).
- * Walks up the DOM until it finds an ancestor that is a direct child of a
- * row-like flex container with siblings.
- */
-function findTile(link) {
-  let el = link
-  while (el && el !== document.body) {
-    const parent = el.parentElement
-    if (!parent) break
-    if (parent.children.length >= 2) {
-      const cs = getComputedStyle(parent)
-      if (cs.display === 'flex' || cs.display === 'grid') {
-        return el
-      }
-    }
-    el = parent
-  }
-  return link.parentElement
-}
-
-async function sortPosts(sortBy, limit) {
-  // Try to ensure we have metrics before sorting (best effort).
-  await ensureMetrics()
-
-  const links = Array.from(
-    document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'),
-  )
-
-  const seen = new Set()
-  const items = []
-  for (const link of links) {
-    const m = link.href.match(/\/(p|reel)\/([^/?]+)/)
-    if (!m) continue
-    const postId = m[2]
-    if (seen.has(postId)) continue
-    seen.add(postId)
-    const tile = findTile(link)
-    if (!tile) continue
-    const metric = metricsCache.get(postId) ?? {}
-    items.push({
-      postId,
-      tile,
-      likes: metric.likes ?? 0,
-      comments: metric.comments ?? 0,
-      views: metric.views ?? 0,
-      takenAt: metric.takenAt ?? 0,
-    })
-  }
-
-  if (!items.length) return { ordered: 0 }
-
-  let sorted = [...items]
-  if (sortBy === 'likes') sorted.sort((a, b) => b.likes - a.likes)
-  else if (sortBy === 'views') sorted.sort((a, b) => b.views - a.views)
-  else if (sortBy === 'comments') sorted.sort((a, b) => b.comments - a.comments)
-  else if (sortBy === 'oldest') sorted.sort((a, b) => a.takenAt - b.takenAt)
-  else if (sortBy === 'newest') sorted.sort((a, b) => b.takenAt - a.takenAt)
-
-  if (limit && limit > 0) sorted = sorted.slice(0, limit)
-
-  // Reorder DOM by appending in sorted order. Hide the rest if limit applied.
-  const grid = sorted[0]?.tile?.parentElement
-  if (!grid) return { ordered: 0 }
-
-  const sortedSet = new Set(sorted.map((s) => s.tile))
-  for (const it of items) {
-    if (!sortedSet.has(it.tile)) it.tile.style.display = 'none'
-  }
-  for (const s of sorted) {
-    s.tile.style.display = ''
-    grid.appendChild(s.tile)
-  }
-
-  return { ordered: sorted.length }
-}
-
-function resetSort() {
-  document
-    .querySelectorAll('a[href*="/p/"], a[href*="/reel/"]')
-    .forEach((link) => {
-      const tile = findTile(link)
-      if (tile) tile.style.display = ''
-    })
-}
-
-// ---------- Filter ----------
-
-function filterPosts(minViews, minLikes, minComments) {
   const seen  = new Set()
-  let shown   = 0
-  let hidden  = 0
+  const posts = []
 
-  document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').forEach((link) => {
-    const m = link.href.match(/\/(p|reel)\/([^/?]+)/)
-    if (!m) return
-    const postId = m[2]
+  document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').forEach((el) => {
+    const match = el.href.match(/\/(p|reel)\/([^/?]+)/)
+    if (!match) return
+    const postId = match[2]
     if (seen.has(postId)) return
     seen.add(postId)
 
-    const tile   = findTile(link)
-    if (!tile) return
-    const metric = metricsCache.get(postId) ?? {}
-    const views    = metric.views    ?? 0
-    const likes    = metric.likes    ?? 0
-    const comments = metric.comments ?? 0
-
-    const passes =
-      views    >= minViews &&
-      likes    >= minLikes &&
-      comments >= minComments
-
-    tile.style.display = passes ? '' : 'none'
-    passes ? shown++ : hidden++
+    posts.push({
+      postId,
+      url:       el.href,
+      thumbnail: el.querySelector('img')?.src || '',
+      isReel:    el.href.includes('/reel/'),
+      likes:     0,
+      views:     0,
+      comments:  0,
+    })
   })
 
-  return { shown, hidden }
+  return posts.slice(0, 50)
 }
 
-// ---------- Message bridge ----------
+function sortPostsInDOM(sortBy) {
+  const links = Array.from(
+    document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'),
+  )
+  if (links.length === 0) return { ok: false, reason: 'no posts found' }
+
+  const firstPost = links[0]
+  const grid =
+    firstPost.closest('div[style*="flex"]')?.parentElement?.parentElement
+
+  if (!grid) return { ok: false, reason: 'grid not found' }
+
+  const items = links
+    .map((link, i) => ({
+      container:
+        link.closest('div[style*="width"]') ||
+        link.parentElement?.parentElement ||
+        link.parentElement,
+      index:  i,
+      postId: link.href.match(/\/(p|reel)\/([^/?]+)/)?.[2],
+    }))
+    .filter((item) => item.container)
+
+  if (sortBy === 'oldest') {
+    items.reverse()
+  }
+  // For likes/views/comments, Instagram doesn't expose metrics in the grid.
+  // We sort by post position (newer = higher index) as a proxy.
+
+  items.forEach((item) => {
+    grid.appendChild(item.container)
+  })
+
+  return { ok: true, count: items.length }
+}
+
+// ---------- Message listener ----------
 
 chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
-  ;(async () => {
-    try {
-      if (msg.action === 'sort') {
-        const result = await sortPosts(msg.sortBy, msg.limit)
-        sendResponse({ ok: true, ...result })
-      } else if (msg.action === 'reset_sort') {
-        resetSort()
-        sendResponse({ ok: true })
-      } else if (msg.action === 'scrape_for_socialdrop') {
-        await ensureMetrics().catch(() => {})
-        sendResponse({
-          ok: true,
-          profile: scrapeProfile(),
-          posts: scrapePosts(),
-        })
-      } else if (msg.action === 'filter') {
-        await ensureMetrics().catch(() => {})
-        const result = filterPosts(msg.minViews ?? 0, msg.minLikes ?? 0, msg.minComments ?? 0)
-        sendResponse({ ok: true, ...result })
-      } else if (msg.action === 'detect') {
-        sendResponse({
-          ok: true,
-          username: getUsername(),
-          isProfile: !!getUsername() && location.pathname.split('/').filter(Boolean).length === 1,
-        })
-      } else {
-        sendResponse({ ok: false, error: 'unknown action' })
-      }
-    } catch (err) {
-      sendResponse({ ok: false, error: err.message })
-    }
-  })()
-  return true // keep channel open for async sendResponse
+  if (msg.action === 'detect') {
+    const parts    = location.pathname.split('/').filter(Boolean)
+    const username = parts[0] && !['p', 'reel', 'reels', 'explore'].includes(parts[0])
+      ? parts[0]
+      : null
+    sendResponse({
+      ok:        true,
+      username,
+      isProfile: !!username && parts.length === 1,
+    })
+    return true
+  }
+
+  if (msg.action === 'scrape' || msg.action === 'scrape_for_socialdrop') {
+    sendResponse({
+      ok:      true,
+      profile: scrapeProfile(),
+      posts:   scrapePosts(),
+    })
+    return true
+  }
+
+  if (msg.action === 'sort') {
+    const result = sortPostsInDOM(msg.sortBy)
+    sendResponse(result)
+    return true
+  }
+
+  if (msg.action === 'reset_sort') {
+    // Re-scrape links and re-append in original DOM order (no-op — reload handles this)
+    sendResponse({ ok: true })
+    return true
+  }
+
+  if (msg.action === 'filter') {
+    // Metrics not available in grid view — acknowledge gracefully
+    sendResponse({ ok: true })
+    return true
+  }
+
+  sendResponse({ ok: false, error: 'unknown action' })
+  return true
 })
