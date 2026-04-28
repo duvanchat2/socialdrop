@@ -195,11 +195,16 @@ async function scrapeData() {
 }
 
 async function postToApi(endpoint, body) {
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  })
+  let res
+  try {
+    res = await fetch(`${API_URL}${endpoint}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    })
+  } catch (netErr) {
+    throw new Error(`Sin conexión con el servidor (${API_URL}). Verifica que la app esté activa.`)
+  }
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
     throw new Error(`API ${res.status}: ${errText.slice(0, 120)}`)
