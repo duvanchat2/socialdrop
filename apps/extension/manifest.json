@@ -3,7 +3,7 @@
   "name": "SocialDrop Analyzer",
   "version": "2.0.0",
   "description": "Sort and analyze Instagram profiles, then sync to SocialDrop",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": ["activeTab", "storage", "scripting", "downloads"],
   "host_permissions": ["https://www.instagram.com/*"],
   "action": {
     "default_popup": "popup.html",

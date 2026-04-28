@@ -6,24 +6,51 @@
 
 const API_URL = 'https://app.socialdrop.online'
 
-const detectedEl = document.getElementById('detected')
-const notIgEl = document.getElementById('not-instagram')
-const toolsEl = document.getElementById('tools')
-const statusEl = document.getElementById('status')
-const limitEl = document.getElementById('limitSelect')
-const syncBtn = document.getElementById('syncBtn')
+const detectedEl     = document.getElementById('detected')
+const notIgEl        = document.getElementById('not-instagram')
+const toolsEl        = document.getElementById('tools')
+const statusEl       = document.getElementById('status')
+const limitEl        = document.getElementById('limitSelect')
+const saveBtn        = document.getElementById('saveBtn')
+const saveMetricsBtn = document.getElementById('saveMetricsBtn')
+const exportCsvBtn   = document.getElementById('exportCsvBtn')
+const reloadBtn      = document.getElementById('reloadBtn')
 
-let activeSort = null
-let activeLimit = 25
-let activeTabId = null
+// Range elements
+const minViewsEl      = document.getElementById('minViews')
+const minLikesEl      = document.getElementById('minLikes')
+const minCommentsEl   = document.getElementById('minComments')
+const minViewsValEl   = document.getElementById('minViewsVal')
+const minLikesValEl   = document.getElementById('minLikesVal')
+const minCommentsValEl = document.getElementById('minCommentsVal')
+const resetFiltersLink = document.getElementById('resetFiltersLink')
+
+let activeSort    = null
+let activeLimit   = 25
+let activeTabId   = null
+
+// ---------- Helpers ----------
 
 function setStatus(msg, type = '') {
   statusEl.textContent = msg
-  statusEl.className = type
+  statusEl.className   = type
 }
 
+function formatNum(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
+  return String(n)
+}
+
+function disableActions(disabled) {
+  saveBtn.disabled        = disabled
+  saveMetricsBtn.disabled = disabled
+  exportCsvBtn.disabled   = disabled
+}
+
+// ---------- Content script bridge ----------
+
 async function ensureContentScript(tabId) {
-  // Try a quick ping; if it fails, inject content.js.
   try {
     await chrome.tabs.sendMessage(tabId, { action: 'detect' })
     return
@@ -51,7 +78,7 @@ async function sendToTab(message) {
   const url = tab?.url ?? ''
   if (!url.includes('instagram.com')) {
     detectedEl.textContent = 'No estás en Instagram'
-    notIgEl.style.display = 'block'
+    notIgEl.style.display  = 'block'
     return
   }
 
@@ -71,15 +98,49 @@ async function sendToTab(message) {
     toolsEl.style.display = 'block'
   } else {
     detectedEl.textContent = 'Abre un perfil de Instagram'
-    notIgEl.style.display = 'block'
+    notIgEl.style.display  = 'block'
   }
 })()
 
 // ---------- Limit ----------
 
 limitEl.addEventListener('change', (e) => {
-  const v = parseInt(e.target.value, 10)
+  const v   = parseInt(e.target.value, 10)
   activeLimit = isNaN(v) ? 0 : v
+})
+
+// ---------- Range sliders ----------
+
+function applyFilters() {
+  const minViews    = parseInt(minViewsEl.value,    10) || 0
+  const minLikes    = parseInt(minLikesEl.value,    10) || 0
+  const minComments = parseInt(minCommentsEl.value, 10) || 0
+  sendToTab({ action: 'filter', minViews, minLikes, minComments }).catch(() => {})
+}
+
+minViewsEl.addEventListener('input', () => {
+  minViewsValEl.textContent = formatNum(parseInt(minViewsEl.value, 10))
+  applyFilters()
+})
+
+minLikesEl.addEventListener('input', () => {
+  minLikesValEl.textContent = formatNum(parseInt(minLikesEl.value, 10))
+  applyFilters()
+})
+
+minCommentsEl.addEventListener('input', () => {
+  minCommentsValEl.textContent = formatNum(parseInt(minCommentsEl.value, 10))
+  applyFilters()
+})
+
+resetFiltersLink.addEventListener('click', () => {
+  minViewsEl.value    = 0
+  minLikesEl.value    = 0
+  minCommentsEl.value = 0
+  minViewsValEl.textContent    = '0'
+  minLikesValEl.textContent    = '0'
+  minCommentsValEl.textContent = '0'
+  applyFilters()
 })
 
 // ---------- Sort buttons ----------
@@ -89,9 +150,7 @@ document.querySelectorAll('.sort-btn').forEach((btn) => {
     const sortBy = btn.dataset.sort
 
     if (sortBy === 'reset') {
-      document
-        .querySelectorAll('.sort-btn')
-        .forEach((b) => b.classList.remove('active'))
+      document.querySelectorAll('.sort-btn').forEach((b) => b.classList.remove('active'))
       activeSort = null
       try {
         await sendToTab({ action: 'reset_sort' })
@@ -102,19 +161,13 @@ document.querySelectorAll('.sort-btn').forEach((btn) => {
       return
     }
 
-    document
-      .querySelectorAll('.sort-btn')
-      .forEach((b) => b.classList.remove('active'))
+    document.querySelectorAll('.sort-btn').forEach((b) => b.classList.remove('active'))
     btn.classList.add('active')
     activeSort = sortBy
 
     setStatus('Ordenando...', '')
     try {
-      const res = await sendToTab({
-        action: 'sort',
-        sortBy,
-        limit: activeLimit,
-      })
+      const res = await sendToTab({ action: 'sort', sortBy, limit: activeLimit })
       if (res?.ok) {
         setStatus(`✓ ${res.ordered ?? 0} posts ordenados`, 'success')
       } else {
@@ -126,47 +179,148 @@ document.querySelectorAll('.sort-btn').forEach((btn) => {
   })
 })
 
-// ---------- Sync to SocialDrop ----------
+// ---------- Reload ----------
 
-syncBtn.addEventListener('click', async () => {
-  syncBtn.disabled = true
+reloadBtn.addEventListener('click', () => {
+  if (activeTabId != null) chrome.tabs.reload(activeTabId)
+})
+
+// ---------- Shared scrape helper ----------
+
+async function scrapeData() {
+  const data = await sendToTab({ action: 'scrape_for_socialdrop' })
+  if (!data?.ok) throw new Error(data?.error ?? 'no data')
+  if (!data.posts?.length) throw new Error('no_posts')
+  return data
+}
+
+async function postToApi(endpoint, body) {
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${errText.slice(0, 120)}`)
+  }
+  return res.json()
+}
+
+// ---------- Guardar en SocialDrop (no metrics) ----------
+
+saveBtn.addEventListener('click', async () => {
+  disableActions(true)
   setStatus('Capturando posts...', '')
   try {
-    const data = await sendToTab({ action: 'scrape_for_socialdrop' })
-    if (!data?.ok) throw new Error(data?.error ?? 'no data')
-    if (!data.posts?.length) {
-      setStatus('No se detectaron posts en este perfil', 'warn')
-      syncBtn.disabled = false
-      return
-    }
+    const data = await scrapeData()
 
     setStatus(`Enviando ${data.posts.length} posts a SocialDrop...`, '')
-    const res = await fetch(`${API_URL}/api/competitors/ingest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: 'demo-user',
-        platform: 'INSTAGRAM',
-        profile: data.profile,
-        posts: data.posts,
-      }),
+    const result = await postToApi('/api/competitors/ingest', {
+      userId:   'demo-user',
+      platform: 'INSTAGRAM',
+      profile:  data.profile,
+      posts:    data.posts.map(({ postId, url, thumbnail, isReel, caption }) => ({
+        postId, url, thumbnail, isReel, caption,
+      })),
     })
 
-    if (!res.ok) throw new Error(`API ${res.status}`)
-    const result = await res.json()
     setStatus(
-      `✓ Sincronizado (${result.imported ?? data.posts.length} posts) — abriendo análisis...`,
+      `✓ Guardado (${result.imported ?? data.posts.length} posts) — abriendo análisis...`,
       'success',
     )
-
     setTimeout(() => {
       chrome.tabs.create({
         url: `${API_URL}/competitors?username=${encodeURIComponent(data.profile.username || '')}`,
       })
     }, 1500)
   } catch (err) {
-    setStatus(`Error: ${err.message}`, 'error')
+    if (err.message === 'no_posts') {
+      setStatus('No se detectaron posts en este perfil', 'warn')
+    } else {
+      setStatus(`Error: ${err.message}`, 'error')
+    }
   } finally {
-    syncBtn.disabled = false
+    disableActions(false)
+  }
+})
+
+// ---------- Guardar con métricas ----------
+
+saveMetricsBtn.addEventListener('click', async () => {
+  disableActions(true)
+  setStatus('Capturando posts con métricas...', '')
+  try {
+    const data = await scrapeData()
+
+    setStatus(`Enviando ${data.posts.length} posts con métricas...`, '')
+    const result = await postToApi('/api/competitors/ingest', {
+      userId:   'demo-user',
+      platform: 'INSTAGRAM',
+      profile:  data.profile,
+      posts:    data.posts, // full payload: likes, views, comments, etc.
+    })
+
+    setStatus(
+      `✓ Sincronizado con métricas (${result.imported ?? data.posts.length} posts) — abriendo...`,
+      'success',
+    )
+    setTimeout(() => {
+      chrome.tabs.create({
+        url: `${API_URL}/competitors?username=${encodeURIComponent(data.profile.username || '')}`,
+      })
+    }, 1500)
+  } catch (err) {
+    if (err.message === 'no_posts') {
+      setStatus('No se detectaron posts en este perfil', 'warn')
+    } else {
+      setStatus(`Error: ${err.message}`, 'error')
+    }
+  } finally {
+    disableActions(false)
+  }
+})
+
+// ---------- Exportar CSV ----------
+
+exportCsvBtn.addEventListener('click', async () => {
+  disableActions(true)
+  setStatus('Generando CSV...', '')
+  try {
+    const data = await scrapeData()
+
+    const username = data.profile?.username ?? 'perfil'
+    const date     = new Date().toISOString().slice(0, 10)
+    const filename = `@${username}_${date}.csv`
+
+    const headers = ['postId', 'url', 'thumbnail', 'likes', 'views', 'comments', 'isReel']
+    const rows    = data.posts.map((p) => [
+      p.postId,
+      p.url,
+      p.thumbnail ?? '',
+      p.likes    ?? 0,
+      p.views    ?? 0,
+      p.comments ?? 0,
+      p.isReel   ? 'true' : 'false',
+    ])
+
+    const csv = [headers, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    await chrome.downloads.download({ url, filename, saveAs: false })
+    URL.revokeObjectURL(url)
+
+    setStatus(`✓ CSV exportado: ${filename}`, 'success')
+  } catch (err) {
+    if (err.message === 'no_posts') {
+      setStatus('No se detectaron posts en este perfil', 'warn')
+    } else {
+      setStatus(`Error: ${err.message}`, 'error')
+    }
+  } finally {
+    disableActions(false)
   }
 })

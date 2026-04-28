@@ -242,6 +242,39 @@ function resetSort() {
     })
 }
 
+// ---------- Filter ----------
+
+function filterPosts(minViews, minLikes, minComments) {
+  const seen  = new Set()
+  let shown   = 0
+  let hidden  = 0
+
+  document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').forEach((link) => {
+    const m = link.href.match(/\/(p|reel)\/([^/?]+)/)
+    if (!m) return
+    const postId = m[2]
+    if (seen.has(postId)) return
+    seen.add(postId)
+
+    const tile   = findTile(link)
+    if (!tile) return
+    const metric = metricsCache.get(postId) ?? {}
+    const views    = metric.views    ?? 0
+    const likes    = metric.likes    ?? 0
+    const comments = metric.comments ?? 0
+
+    const passes =
+      views    >= minViews &&
+      likes    >= minLikes &&
+      comments >= minComments
+
+    tile.style.display = passes ? '' : 'none'
+    passes ? shown++ : hidden++
+  })
+
+  return { shown, hidden }
+}
+
 // ---------- Message bridge ----------
 
 chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
@@ -260,6 +293,10 @@ chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
           profile: scrapeProfile(),
           posts: scrapePosts(),
         })
+      } else if (msg.action === 'filter') {
+        await ensureMetrics().catch(() => {})
+        const result = filterPosts(msg.minViews ?? 0, msg.minLikes ?? 0, msg.minComments ?? 0)
+        sendResponse({ ok: true, ...result })
       } else if (msg.action === 'detect') {
         sendResponse({
           ok: true,
