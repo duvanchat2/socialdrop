@@ -1,13 +1,10 @@
 {
   "manifest_version": 3,
   "name": "SocialDrop Analyzer",
-  "version": "1.1.0",
-  "description": "Analyze Instagram & TikTok competitors and sync to SocialDrop",
+  "version": "2.0.0",
+  "description": "Sort and analyze Instagram profiles, then sync to SocialDrop",
   "permissions": ["activeTab", "storage", "scripting"],
-  "host_permissions": [
-    "https://www.instagram.com/*",
-    "https://www.tiktok.com/*"
-  ],
+  "host_permissions": ["https://www.instagram.com/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -19,13 +16,14 @@
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*"],
-      "js": ["panel.js", "instagram.js"],
+      "js": ["content.js"],
       "run_at": "document_idle"
-    },
+    }
+  ],
+  "web_accessible_resources": [
     {
-      "matches": ["https://www.tiktok.com/*"],
-      "js": ["panel.js", "tiktok.js"],
-      "run_at": "document_idle"
+      "resources": ["icon.png"],
+      "matches": ["https://www.instagram.com/*"]
     }
   ]
 }

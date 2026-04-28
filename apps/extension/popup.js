@@ -1,116 +1,162 @@
+// ============================================================================
+// SocialDrop Analyzer — popup
+// All UI lives here. Content script (content.js) only manipulates the page in
+// response to messages we send.
+// ============================================================================
+
+const API_URL = 'https://app.socialdrop.online'
+
+const detectedEl = document.getElementById('detected')
+const notIgEl = document.getElementById('not-instagram')
+const toolsEl = document.getElementById('tools')
 const statusEl = document.getElementById('status')
-const btn = document.getElementById('analyzeBtn')
-const apiInput = document.getElementById('apiUrl')
+const limitEl = document.getElementById('limitSelect')
+const syncBtn = document.getElementById('syncBtn')
+
+let activeSort = null
+let activeLimit = 25
+let activeTabId = null
 
 function setStatus(msg, type = '') {
   statusEl.textContent = msg
   statusEl.className = type
 }
 
-function detectPlatform(url) {
-  if (!url) return null
-  if (url.includes('instagram.com')) return 'INSTAGRAM'
-  if (url.includes('tiktok.com')) return 'TIKTOK'
-  return null
-}
-
-function adapterFiles(platform) {
-  return platform === 'INSTAGRAM'
-    ? ['panel.js', 'instagram.js']
-    : platform === 'TIKTOK'
-    ? ['panel.js', 'tiktok.js']
-    : null
-}
-
-async function scrapeCurrentTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  const platform = detectPlatform(tab?.url)
-
-  if (!platform) {
-    setStatus('Abre Instagram o TikTok', 'error')
-    return null
-  }
-
+async function ensureContentScript(tabId) {
+  // Try a quick ping; if it fails, inject content.js.
   try {
-    const data = await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
-    return { ...data, platform }
-  } catch (err) {
-    // Content scripts not loaded — inject and retry
+    await chrome.tabs.sendMessage(tabId, { action: 'detect' })
+    return
+  } catch {
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: adapterFiles(platform),
+      target: { tabId },
+      files: ['content.js'],
     })
-    await new Promise((r) => setTimeout(r, 500))
-    const data = await chrome.tabs.sendMessage(tab.id, { action: 'scrape' })
-    return { ...data, platform }
+    await new Promise((r) => setTimeout(r, 300))
   }
 }
 
-// Load saved API URL
-chrome.storage.local.get(['apiUrl']).then((data) => {
-  if (data.apiUrl) apiInput.value = data.apiUrl
-})
+async function sendToTab(message) {
+  if (activeTabId == null) throw new Error('No active tab')
+  await ensureContentScript(activeTabId)
+  return chrome.tabs.sendMessage(activeTabId, message)
+}
 
-// Detect current tab
-chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-  const platform = detectPlatform(tab?.url)
-  document.getElementById('not-instagram').style.display = platform ? 'none' : 'block'
-  document.getElementById('instagram-detected').style.display = platform ? 'block' : 'none'
-  if (platform) {
-    const username =
-      platform === 'INSTAGRAM'
-        ? tab.url.match(/instagram\.com\/([^/?]+)/)?.[1]
-        : tab.url.match(/tiktok\.com\/@([^/?]+)/)?.[1]
-    const label = platform === 'INSTAGRAM' ? 'IG' : 'TT'
-    document.getElementById('detected-user').textContent = `📍 [${label}] @${username || '—'}`
-  }
-})
+// ---------- Init ----------
 
-btn.addEventListener('click', async () => {
-  const apiUrl = apiInput.value.trim().replace(/\/$/, '')
+;(async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  activeTabId = tab?.id ?? null
 
-  if (!apiUrl) {
-    setStatus('Ingresa la URL de SocialDrop', 'error')
+  const url = tab?.url ?? ''
+  if (!url.includes('instagram.com')) {
+    detectedEl.textContent = 'No estás en Instagram'
+    notIgEl.style.display = 'block'
     return
   }
 
-  await chrome.storage.local.set({ apiUrl })
-  btn.disabled = true
-  setStatus('Capturando datos...', '')
-
+  await ensureContentScript(activeTabId)
+  let info = null
   try {
-    const data = await scrapeCurrentTab()
-    if (!data) {
-      btn.disabled = false
+    info = await chrome.tabs.sendMessage(activeTabId, { action: 'detect' })
+  } catch {
+    // ignore
+  }
+
+  if (info?.username && info.isProfile) {
+    detectedEl.innerHTML = `📍 Perfil detectado: <b>@${info.username}</b>`
+    toolsEl.style.display = 'block'
+  } else if (info?.username) {
+    detectedEl.innerHTML = `Estás en <b>@${info.username}</b> — abre su perfil para ordenar`
+    toolsEl.style.display = 'block'
+  } else {
+    detectedEl.textContent = 'Abre un perfil de Instagram'
+    notIgEl.style.display = 'block'
+  }
+})()
+
+// ---------- Limit ----------
+
+limitEl.addEventListener('change', (e) => {
+  const v = parseInt(e.target.value, 10)
+  activeLimit = isNaN(v) ? 0 : v
+})
+
+// ---------- Sort buttons ----------
+
+document.querySelectorAll('.sort-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const sortBy = btn.dataset.sort
+
+    if (sortBy === 'reset') {
+      document
+        .querySelectorAll('.sort-btn')
+        .forEach((b) => b.classList.remove('active'))
+      activeSort = null
+      try {
+        await sendToTab({ action: 'reset_sort' })
+        setStatus('✓ Orden restablecido', 'success')
+      } catch (err) {
+        setStatus(`Error: ${err.message}`, 'error')
+      }
       return
     }
 
-    setStatus(`Enviando ${data.posts.length} posts...`, '')
+    document
+      .querySelectorAll('.sort-btn')
+      .forEach((b) => b.classList.remove('active'))
+    btn.classList.add('active')
+    activeSort = sortBy
 
-    const res = await fetch(`${apiUrl}/api/competitors/ingest`, {
+    setStatus('Ordenando...', '')
+    try {
+      const res = await sendToTab({
+        action: 'sort',
+        sortBy,
+        limit: activeLimit,
+      })
+      if (res?.ok) {
+        setStatus(`✓ ${res.ordered ?? 0} posts ordenados`, 'success')
+      } else {
+        setStatus(`Error: ${res?.error ?? 'sin respuesta'}`, 'error')
+      }
+    } catch (err) {
+      setStatus(`Error: ${err.message}`, 'error')
+    }
+  })
+})
+
+// ---------- Sync to SocialDrop ----------
+
+syncBtn.addEventListener('click', async () => {
+  syncBtn.disabled = true
+  setStatus('Capturando datos...', '')
+  try {
+    const data = await sendToTab({ action: 'scrape_for_socialdrop' })
+    if (!data?.ok) throw new Error(data?.error ?? 'no data')
+
+    setStatus(`Enviando ${data.posts.length} posts...`, '')
+    const res = await fetch(`${API_URL}/api/competitors/ingest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId: 'demo-user',
-        platform: data.platform,
+        platform: 'INSTAGRAM',
         profile: data.profile,
         posts: data.posts,
       }),
     })
 
-    if (!res.ok) throw new Error(`API error: ${res.status}`)
+    if (!res.ok) throw new Error(`API ${res.status}`)
     const result = await res.json()
-
-    setStatus(`✓ ${result.imported || data.posts.length} posts enviados`, 'success')
+    setStatus(`✓ ${result.imported ?? data.posts.length} posts enviados`, 'success')
 
     setTimeout(() => {
-      chrome.tabs.create({
-        url: `${apiUrl}/competitors?username=${data.profile.username}`,
-      })
+      chrome.tabs.create({ url: `${API_URL}/competitors` })
     }, 1500)
   } catch (err) {
     setStatus(`Error: ${err.message}`, 'error')
   } finally {
-    btn.disabled = false
+    syncBtn.disabled = false
   }
 })
