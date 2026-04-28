@@ -42,17 +42,24 @@ function allPostLinks() {
 }
 
 function findTile(link) {
+  // Walk UP until we find the direct child of Instagram's post grid.
+  // The real grid container has many children (12+ tiles); internal
+  // flex boxes inside each tile have far fewer. Using >= 9 skips them.
   let el = link
   while (el && el !== document.body) {
     const parent = el.parentElement
     if (!parent) break
-    if (parent.children.length >= 2) {
-      const cs = getComputedStyle(parent)
-      if (cs.display === 'flex' || cs.display === 'grid') return el
+    const cs = getComputedStyle(parent)
+    if (
+      (cs.display === 'flex' || cs.display === 'grid') &&
+      parent.children.length >= 9
+    ) {
+      return el   // el is the direct grid-cell child
     }
     el = parent
   }
-  return link.parentElement
+  // Fallback: try <li> ancestor, then immediate parent
+  return link.closest('li') ?? link.parentElement
 }
 
 // ---------- Read metrics that Instagram already renders on thumbnails ----------
@@ -166,7 +173,11 @@ async function autoScroll(targetCount) {
   scrapeMetricsFromDOM()
 }
 
-// ---------- Visual badges (the "yellow" numbers SortFeed shows) ----------
+// ---------- Visual badges ----------
+// Badges are appended to the tile element directly.
+// We only modify the tile if it is an <li> (safe) or already positioned.
+// We never change the position of a <div> that might use padding-bottom
+// aspect-ratio tricks.
 
 function removeBadges() {
   document.querySelectorAll('.__sd_badge').forEach(b => b.remove())
@@ -177,25 +188,34 @@ function addBadge(tile, text, color = '#f59e0b') {
   badge.className = '__sd_badge'
   badge.textContent = text
   Object.assign(badge.style, {
-    position:       'absolute',
-    top:            '6px',
-    left:           '6px',
-    background:     color,
-    color:          '#fff',
-    fontSize:       '11px',
-    fontWeight:     '700',
-    padding:        '2px 6px',
-    borderRadius:   '4px',
-    zIndex:         '9999',
-    pointerEvents:  'none',
-    lineHeight:     '1.4',
-    boxShadow:      '0 1px 3px rgba(0,0,0,.4)',
+    position:      'absolute',
+    top:           '6px',
+    left:          '6px',
+    background:    color,
+    color:         '#fff',
+    fontSize:      '11px',
+    fontWeight:    '700',
+    padding:       '2px 6px',
+    borderRadius:  '4px',
+    zIndex:        '9999',
+    pointerEvents: 'none',
+    lineHeight:    '1.4',
+    boxShadow:     '0 1px 3px rgba(0,0,0,.4)',
   })
-  // Tile needs relative positioning
-  if (getComputedStyle(tile).position === 'static') {
-    tile.style.position = 'relative'
+  // Only add position:relative when safe — <li> elements don't use
+  // padding-bottom aspect-ratio tricks, so it's always safe there.
+  const tag = tile.tagName?.toLowerCase()
+  const pos  = getComputedStyle(tile).position
+  if (tag === 'li' || pos === 'relative' || pos === 'absolute') {
+    tile.appendChild(badge)
+  } else {
+    // Wrap: find the first child that is already positioned, or just append
+    const inner = tile.querySelector('[style*="position"]') ?? tile
+    if (getComputedStyle(inner).position === 'static') {
+      inner.style.position = 'relative'
+    }
+    inner.appendChild(badge)
   }
-  tile.appendChild(badge)
 }
 
 function formatMetric(n) {
