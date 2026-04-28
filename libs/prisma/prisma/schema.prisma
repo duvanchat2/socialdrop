@@ -252,10 +252,17 @@ model Competitor {
   platform    String
   displayName String?
   followers   Int?
+  following   Int?
+  postsCount  Int?
+  bio         String?
+  avatar      String?
+  isActive    Boolean              @default(true)
   notes       String?
   createdAt   DateTime             @default(now())
   analyses    CompetitorAnalysis[]
+  posts       CompetitorPost[]
 
+  @@unique([userId, username, platform])
   @@index([userId])
 }
 
@@ -269,6 +276,36 @@ model CompetitorAnalysis {
   bestFormats     String[]
   recommendations String[]
   createdAt       DateTime   @default(now())
+}
+
+model CompetitorPost {
+  id             String     @id @default(cuid())
+  competitorId   String
+  competitor     Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  postId         String     @unique
+  url            String?
+  thumbnail      String?
+  caption        String?
+  mediaType      String     @default("IMAGE")
+  isReel         Boolean    @default(false)
+  likes          Int        @default(0)
+  comments       Int        @default(0)
+  views          Int        @default(0)
+  hashtags       String[]   @default([])
+  publishedAt    DateTime?
+  // ----- AI analysis (filled by competitor-analysis processor) -----
+  transcript     String?
+  hookText       String?
+  hookType       String?
+  whyItWorks     String?
+  emotionTrigger String?
+  keyTakeaway    String?
+  analysisScore  Int?
+  analyzedAt     DateTime?
+  createdAt      DateTime   @default(now())
+
+  @@index([competitorId])
+  @@index([competitorId, publishedAt])
 }
 
 model QueueSlot {

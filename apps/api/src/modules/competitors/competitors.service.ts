@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '@socialdrop/prisma';
+
+export const COMPETITOR_ANALYSIS_QUEUE = 'competitor-analysis';
 
 @Injectable()
 export class CompetitorsService {
@@ -9,6 +13,7 @@ export class CompetitorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @InjectQueue(COMPETITOR_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
   ) {}
 
   async list(userId: string) {
@@ -41,6 +46,10 @@ export class CompetitorsService {
       url: string;
       thumbnail?: string;
       isReel?: boolean;
+      likes?: number;
+      comments?: number;
+      views?: number;
+      caption?: string;
     }>,
   ) {
     // Upsert competitor (find by userId+username+platform)
@@ -63,16 +72,101 @@ export class CompetitorsService {
           data: { userId, username: profile.username, platform, ...data },
         });
 
+    // Upsert posts (best-effort, errors per-post don't fail the whole call)
+    let upserted = 0;
+    for (const p of posts) {
+      try {
+        await this.prisma.competitorPost.upsert({
+          where: { postId: p.postId },
+          update: {
+            url: p.url,
+            thumbnail: p.thumbnail,
+            isReel: !!p.isReel,
+            likes: p.likes ?? 0,
+            comments: p.comments ?? 0,
+            views: p.views ?? 0,
+            caption: p.caption ?? undefined,
+            mediaType: p.isReel ? 'REEL' : 'IMAGE',
+          },
+          create: {
+            competitorId: competitor.id,
+            postId: p.postId,
+            url: p.url,
+            thumbnail: p.thumbnail,
+            isReel: !!p.isReel,
+            likes: p.likes ?? 0,
+            comments: p.comments ?? 0,
+            views: p.views ?? 0,
+            caption: p.caption ?? undefined,
+            mediaType: p.isReel ? 'REEL' : 'IMAGE',
+          },
+        });
+        upserted++;
+      } catch (err) {
+        this.logger.warn(
+          `[Competitors] Could not upsert post ${p.postId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
     this.logger.log(
-      `[Competitors] Ingested @${profile.username} (${platform}) — ${posts.length} posts received`,
+      `[Competitors] Ingested @${profile.username} (${platform}) — ${upserted}/${posts.length} posts persisted`,
     );
 
     return {
       competitorId: competitor.id,
       username: competitor.username,
-      imported: posts.length,
+      imported: upserted,
+      received: posts.length,
       created: !existing,
     };
+  }
+
+  /**
+   * Queue all un-analyzed reels for a competitor for transcription + AI analysis.
+   * Returns the number of jobs queued.
+   */
+  async queueVideoAnalysis(competitorId: string, postIds?: string[]) {
+    const where: any = {
+      competitorId,
+      isReel: true,
+      transcript: null,
+    };
+    if (postIds && postIds.length) where.postId = { in: postIds };
+
+    const candidates = await this.prisma.competitorPost.findMany({
+      where,
+      select: { id: true, url: true, postId: true, likes: true, views: true, comments: true },
+    });
+
+    let queued = 0;
+    for (const p of candidates) {
+      if (!p.url) continue;
+      await this.analysisQueue.add(
+        'analyze-video',
+        {
+          competitorPostId: p.id,
+          competitorId,
+          videoUrl: p.url,
+          postId: p.postId,
+          likes: p.likes,
+          views: p.views,
+          comments: p.comments,
+        },
+        { attempts: 2, backoff: { type: 'exponential', delay: 5_000 }, removeOnComplete: 100, removeOnFail: 50 },
+      );
+      queued++;
+    }
+
+    this.logger.log(`[Competitors] Queued ${queued} video analysis jobs for competitor ${competitorId}`);
+    return { queued };
+  }
+
+  async listVideos(competitorId: string) {
+    return this.prisma.competitorPost.findMany({
+      where: { competitorId },
+      orderBy: [{ views: 'desc' }, { likes: 'desc' }, { createdAt: 'desc' }],
+    });
   }
 
   async remove(id: string) {

@@ -51,6 +51,10 @@ export class CompetitorsController {
         url: string;
         thumbnail?: string;
         isReel?: boolean;
+        likes?: number;
+        comments?: number;
+        views?: number;
+        caption?: string;
       }>;
     },
   ) {
@@ -70,12 +74,25 @@ export class CompetitorsController {
     return this.competitorsService.remove(id);
   }
 
-  @Post(':id/analyze')
-  @ApiOperation({ summary: 'Run AI analysis on a competitor' })
+  @Post(':id/summary')
+  @ApiOperation({ summary: 'Run profile-level AI summary (legacy ZAI-based) for a competitor' })
   @ApiQuery({ name: 'userId', required: true })
-  async analyze(@Param('id') id: string, @Query('userId') userId: string) {
+  async summary(@Param('id') id: string, @Query('userId') userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.competitorsService.analyze(id, userId);
+  }
+
+  @Post(':id/analyze')
+  @ApiOperation({ summary: 'Queue per-video transcription + Claude analysis for all reels' })
+  async analyze(@Param('id') id: string, @Body() body: { postIds?: string[] } = {}) {
+    const { queued } = await this.competitorsService.queueVideoAnalysis(id, body.postIds);
+    return { queued, message: `Analizando ${queued} videos...` };
+  }
+
+  @Get(':id/videos')
+  @ApiOperation({ summary: 'List competitor posts/videos with analysis status' })
+  async videos(@Param('id') id: string) {
+    return this.competitorsService.listVideos(id);
   }
 
   @Post('transcribe')
