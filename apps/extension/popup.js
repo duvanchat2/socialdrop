@@ -115,7 +115,22 @@ function applyFilters() {
   const minViews    = parseInt(minViewsEl.value,    10) || 0
   const minLikes    = parseInt(minLikesEl.value,    10) || 0
   const minComments = parseInt(minCommentsEl.value, 10) || 0
-  sendToTab({ action: 'filter', minViews, minLikes, minComments }).catch(() => {})
+
+  if (minViews === 0 && minLikes === 0 && minComments === 0) {
+    // Reset all tiles
+    sendToTab({ action: 'filter', minViews: 0, minLikes: 0, minComments: 0 }).catch(() => {})
+    setStatus('', '')
+    return
+  }
+
+  setStatus('Filtrando...', '')
+  sendToTab({ action: 'filter', minViews, minLikes, minComments })
+    .then(res => {
+      if (res?.ok) {
+        setStatus(`✓ ${res.shown ?? '?'} visibles, ${res.hidden ?? '?'} ocultos`, 'success')
+      }
+    })
+    .catch(() => setStatus('Error al filtrar', 'error'))
 }
 
 minViewsEl.addEventListener('input', () => {
@@ -165,7 +180,7 @@ document.querySelectorAll('.sort-btn').forEach((btn) => {
     btn.classList.add('active')
     activeSort = sortBy
 
-    setStatus('Ordenando...', '')
+    setStatus('⏳ Cargando posts...', '')
     try {
       const res = await sendToTab({ action: 'sort', sortBy, limit: activeLimit })
       if (res?.ok) {
