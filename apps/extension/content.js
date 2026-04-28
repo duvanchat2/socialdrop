@@ -107,23 +107,51 @@ function scrapePosts() {
       const postId = m[2]
       if (seen.has(postId)) return
       seen.add(postId)
+
+      // Prefer authoritative metrics from web_profile_info; fall back to DOM.
       const merged = metricsCache.get(postId) ?? {}
+      let likes = merged.likes ?? 0
+      let views = merged.views ?? 0
+      let comments = merged.comments ?? 0
+
+      if (!likes || !views || !comments) {
+        const container = el.closest('article') || el.parentElement
+        const spans = container?.querySelectorAll('span') ?? []
+        spans.forEach((s) => {
+          const txt = s.textContent?.trim()
+          if (!txt) return
+          const labelEl = s.closest('[aria-label]')
+          const label = (labelEl?.getAttribute('aria-label') ?? '').toLowerCase()
+          if (!label) return
+          if (!likes && (label.includes('like') || label.includes('gusta'))) {
+            likes = extractNumber(txt)
+          } else if (!views && (label.includes('view') || label.includes('repro'))) {
+            views = extractNumber(txt)
+          } else if (!comments && (label.includes('comment') || label.includes('coment'))) {
+            comments = extractNumber(txt)
+          }
+        })
+      }
+
       posts.push({
         postId,
         url: el.href,
-        thumbnail: el.querySelector('img')?.src ?? merged.thumbnail ?? null,
+        thumbnail: el.querySelector('img')?.src ?? merged.thumbnail ?? '',
         isReel: el.href.includes('/reel/'),
-        likes: merged.likes ?? null,
-        comments: merged.comments ?? null,
-        views: merged.views ?? null,
+        likes,
+        comments,
+        views,
         caption: merged.caption ?? '',
         takenAt: merged.takenAt
           ? new Date(merged.takenAt * 1000).toISOString()
           : null,
         isVideo: merged.isVideo ?? false,
+        engagement: likes + views + comments,
       })
     })
-  return posts
+
+  // Best content first; cap at 50 to keep payloads sensible.
+  return posts.sort((a, b) => b.engagement - a.engagement).slice(0, 50)
 }
 
 // ---------- Sort ----------

@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import {
   Users, Plus, Trash2, Zap, RefreshCw, TrendingUp, Hash,
   Clock, BarChart2, ExternalLink, ChevronRight, X,
+  Play, FileText, Sparkles, Mic, Heart, Eye, MessageCircle,
 } from 'lucide-react';
 
 const USER_ID = 'demo-user';
@@ -71,8 +72,29 @@ const PLATFORM_EMOJI: Record<string, string> = {
   INSTAGRAM: '📸', TIKTOK: '🎵', FACEBOOK: '👥', YOUTUBE: '▶️', TWITTER: '🐦', LINKEDIN: '💼',
 };
 const PLATFORMS = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'YOUTUBE', 'TWITTER', 'LINKEDIN'];
-const TABS = ['Resumen', 'Mejores posts', 'Hashtags', 'Horarios', 'Comparativa'] as const;
+const TABS = ['Resumen', 'Videos', 'Mejores posts', 'Hashtags', 'Horarios', 'Comparativa'] as const;
 type Tab = typeof TABS[number];
+
+interface CompetitorVideo {
+  id: string;
+  postId: string;
+  url: string | null;
+  thumbnail: string | null;
+  caption: string | null;
+  isReel: boolean;
+  likes: number;
+  comments: number;
+  views: number;
+  transcript: string | null;
+  hookText: string | null;
+  hookType: string | null;
+  whyItWorks: string | null;
+  emotionTrigger: string | null;
+  keyTakeaway: string | null;
+  analysisScore: number | null;
+  analyzedAt: string | null;
+  publishedAt: string | null;
+}
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 function fmtNum(n: number) {
@@ -145,9 +167,10 @@ export default function CompetitorsPage() {
     },
   });
 
-  const analyzeMutation = useMutation({
+  // Legacy profile-level summary (POST /:id/summary)
+  const summaryMutation = useMutation({
     mutationFn: (id: string) =>
-      apiFetch(`/api/competitors/${id}/analyze?userId=${USER_ID}`, { method: 'POST' }),
+      apiFetch(`/api/competitors/${id}/summary?userId=${USER_ID}`, { method: 'POST' }),
     onSuccess: (_d, id) => {
       void qc.invalidateQueries({ queryKey: ['competitors'] });
       setAnalyzing((prev) => { const s = new Set(prev); s.delete(id); return s; });
@@ -157,9 +180,21 @@ export default function CompetitorsPage() {
     },
   });
 
+  // Per-video analysis queue (POST /:id/analyze)
+  const queueAnalysisMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ queued: number; message: string }>(
+        `/api/competitors/${id}/analyze`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+      ),
+    onSuccess: (_d, id) => {
+      void qc.invalidateQueries({ queryKey: ['competitor-videos', id] });
+    },
+  });
+
   function handleAnalyze(id: string) {
     setAnalyzing((prev) => new Set(prev).add(id));
-    analyzeMutation.mutate(id);
+    summaryMutation.mutate(id);
   }
 
   return (
@@ -284,6 +319,7 @@ export default function CompetitorsPage() {
             onTabChange={setTab}
             onAnalyze={() => handleAnalyze(selected.id)}
             analyzing={analyzing.has(selected.id)}
+            onQueueVideoAnalysis={() => queueAnalysisMutation.mutateAsync(selected.id)}
           />
         )}
       </main>
@@ -386,6 +422,7 @@ function CompetitorDetail({
   onTabChange,
   onAnalyze,
   analyzing,
+  onQueueVideoAnalysis,
 }: {
   competitor: Competitor;
   analysis: PostAnalysis | null;
@@ -393,6 +430,7 @@ function CompetitorDetail({
   onTabChange: (t: Tab) => void;
   onAnalyze: () => void;
   analyzing: boolean;
+  onQueueVideoAnalysis: () => Promise<{ queued: number; message: string }>;
 }) {
   const color = PLATFORM_COLORS[c.platform] ?? '#6366f1';
   const latestAiAnalysis = c.analyses[0] ?? null;
@@ -465,10 +503,313 @@ function CompetitorDetail({
 
       {/* Tab content */}
       {tab === 'Resumen'       && <TabResumen analysis={a} aiAnalysis={latestAiAnalysis} />}
+      {tab === 'Videos'        && <TabVideos competitorId={c.id} onQueueVideoAnalysis={onQueueVideoAnalysis} />}
       {tab === 'Mejores posts' && <TabTopPosts analysis={a} />}
       {tab === 'Hashtags'      && <TabHashtags analysis={a} />}
       {tab === 'Horarios'      && <TabSchedule analysis={a} />}
       {tab === 'Comparativa'   && <TabComparativa competitor={c} />}
+    </div>
+  );
+}
+
+/* ─── Tab: Videos ─────────────────────────────────────────────────────────── */
+function TabVideos({
+  competitorId,
+  onQueueVideoAnalysis,
+}: {
+  competitorId: string;
+  onQueueVideoAnalysis: () => Promise<{ queued: number; message: string }>;
+}) {
+  const [adapting, setAdapting] = useState<string | null>(null);
+  const [queuingMsg, setQueuingMsg] = useState<string | null>(null);
+
+  const { data: videos = [], refetch } = useQuery({
+    queryKey: ['competitor-videos', competitorId],
+    queryFn: () => apiFetch<CompetitorVideo[]>(`/api/competitors/${competitorId}/videos`),
+    // Poll every 5s while any video is pending analysis (best-effort).
+    refetchInterval: (q) => {
+      const data = q.state.data as CompetitorVideo[] | undefined;
+      if (!data) return false;
+      const pending = data.some((v) => v.isReel && !v.analyzedAt);
+      return pending ? 5000 : false;
+    },
+  });
+
+  const reels = videos.filter((v) => v.isReel);
+  const analyzedCount = reels.filter((v) => v.analyzedAt).length;
+  const pendingCount = reels.length - analyzedCount;
+
+  const handleQueueAll = async () => {
+    setQueuingMsg('Encolando análisis...');
+    try {
+      const r = await onQueueVideoAnalysis();
+      setQueuingMsg(r.message ?? `Analizando ${r.queued} videos...`);
+      void refetch();
+    } catch (err) {
+      setQueuingMsg(`Error: ${(err as Error).message}`);
+    } finally {
+      setTimeout(() => setQueuingMsg(null), 4000);
+    }
+  };
+
+  if (!videos.length) {
+    return (
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+        <Play size={32} className="mx-auto text-gray-700 mb-3" />
+        <p className="text-gray-400 text-sm">Sin videos sincronizados aún.</p>
+        <p className="text-xs text-gray-600 mt-1">
+          Usa la extensión de Chrome en el perfil del competidor para capturar sus posts.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Action bar */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">
+            {reels.length} reels · <span className="text-green-400">{analyzedCount} analizados</span>
+            {pendingCount > 0 && <span className="text-amber-400"> · {pendingCount} pendientes</span>}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Transcripción + análisis de ganchos con Claude
+          </p>
+        </div>
+        <button
+          onClick={handleQueueAll}
+          disabled={!reels.length || queueingDisabled(reels)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg whitespace-nowrap"
+        >
+          <Sparkles size={13} />
+          Analizar videos
+        </button>
+      </div>
+      {queuingMsg && (
+        <p className="text-xs text-indigo-400 -mt-2">{queuingMsg}</p>
+      )}
+
+      {/* Video cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {videos.map((v) => (
+          <VideoCard
+            key={v.id}
+            video={v}
+            onAdapt={() => setAdapting(v.id)}
+          />
+        ))}
+      </div>
+
+      {adapting && (
+        <AdaptModal
+          videoId={adapting}
+          onClose={() => setAdapting(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function queueingDisabled(reels: CompetitorVideo[]) {
+  // If every reel already analyzed, disable.
+  return reels.length > 0 && reels.every((r) => r.analyzedAt);
+}
+
+function VideoCard({
+  video: v,
+  onAdapt,
+}: {
+  video: CompetitorVideo;
+  onAdapt: () => void;
+}) {
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const isAnalyzed = !!v.analyzedAt;
+  const score = v.analysisScore ?? 0;
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col">
+      <div className="flex gap-3 p-3">
+        <div className="relative w-20 h-20 shrink-0 bg-gray-800 rounded-lg overflow-hidden">
+          {v.thumbnail
+            ? <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
+            : <span className="flex items-center justify-center h-full text-gray-600 text-2xl">🎬</span>}
+          {v.isReel && (
+            <span className="absolute top-1 left-1 bg-pink-600 text-white text-[9px] px-1 rounded font-bold">REEL</span>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            {v.views > 0 && <span className="flex items-center gap-1"><Eye size={11} />{fmtNum(v.views)}</span>}
+            <span className="flex items-center gap-1"><Heart size={11} />{fmtNum(v.likes)}</span>
+            <span className="flex items-center gap-1"><MessageCircle size={11} />{fmtNum(v.comments)}</span>
+          </div>
+
+          <p className="text-[10px] text-gray-500 mt-1">
+            {isAnalyzed
+              ? <span className="text-green-400">✓ Analizado</span>
+              : v.isReel
+                ? <span className="text-amber-400">⏳ Pendiente de análisis</span>
+                : <span>Imagen</span>}
+          </p>
+
+          {v.url && (
+            <a href={v.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5 mt-1">
+              Ver en Instagram <ExternalLink size={9} />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {isAnalyzed && (
+        <div className="px-3 pb-3 space-y-2">
+          {v.hookText && (
+            <p className="text-xs text-gray-200 leading-relaxed border-l-2 border-indigo-500 pl-2">
+              <b>Hook:</b> "{v.hookText}"
+            </p>
+          )}
+          {score > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-gray-500 uppercase">Score</span>
+              <div className="flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-pink-500"
+                  style={{ width: `${Math.min(100, score * 10)}%` }}
+                />
+              </div>
+              <span className="text-xs font-semibold text-white">{score}/10</span>
+            </div>
+          )}
+
+          <div className="flex gap-1.5 text-[11px]">
+            {v.transcript && (
+              <button
+                onClick={() => setShowTranscript(!showTranscript)}
+                className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded flex items-center gap-1"
+              >
+                <FileText size={10} />Transcripción
+              </button>
+            )}
+            {(v.whyItWorks || v.keyTakeaway) && (
+              <button
+                onClick={() => setShowAnalysis(!showAnalysis)}
+                className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded flex items-center gap-1"
+              >
+                <Sparkles size={10} />Análisis
+              </button>
+            )}
+          </div>
+
+          {showTranscript && v.transcript && (
+            <div className="bg-black/40 rounded p-2 text-[11px] text-gray-300 max-h-32 overflow-y-auto whitespace-pre-wrap">
+              {v.transcript}
+            </div>
+          )}
+          {showAnalysis && (
+            <div className="bg-indigo-950/30 border border-indigo-800/40 rounded p-2 text-[11px] text-gray-300 space-y-1">
+              {v.hookType && <p><b className="text-indigo-400">Tipo de hook:</b> {v.hookType}</p>}
+              {v.emotionTrigger && <p><b className="text-indigo-400">Emoción:</b> {v.emotionTrigger}</p>}
+              {v.whyItWorks && <p><b className="text-indigo-400">Por qué funciona:</b> {v.whyItWorks}</p>}
+              {v.keyTakeaway && <p><b className="text-indigo-400">Para replicar:</b> {v.keyTakeaway}</p>}
+            </div>
+          )}
+
+          <button
+            onClick={onAdapt}
+            className="w-full px-3 py-2 bg-gradient-to-r from-indigo-600 to-pink-600 hover:opacity-90 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5"
+          >
+            <Mic size={11} /> Adaptar a mi voz
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdaptModal({
+  videoId,
+  onClose,
+}: {
+  videoId: string;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [adapted, setAdapted] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const generate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await apiFetch<{ script?: string; error?: string }>(
+        `/api/content-brain/adapt`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ competitorPostId: videoId, userId: USER_ID }),
+        },
+      );
+      if (r.script) setAdapted(r.script);
+      else setError(r.error ?? 'Endpoint /content-brain/adapt aún no disponible');
+    } catch (err) {
+      setError(`Endpoint pendiente de implementar. Usa la transcripción + análisis manualmente por ahora.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold flex items-center gap-2"><Mic size={16} /> Adaptar a mi voz</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={16} /></button>
+        </div>
+
+        {!adapted && !loading && !error && (
+          <>
+            <p className="text-xs text-gray-400 mb-4">
+              Genera un guión para tu propio video usando el hook y estructura de este competidor, adaptado a tu voz y nicho.
+            </p>
+            <button
+              onClick={generate}
+              className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg"
+            >
+              ✨ Generar guión
+            </button>
+          </>
+        )}
+
+        {loading && <p className="text-sm text-gray-400 text-center py-8">Generando con Claude...</p>}
+
+        {error && (
+          <div className="bg-amber-950/40 border border-amber-800/40 rounded-lg p-3 text-xs text-amber-300">
+            {error}
+          </div>
+        )}
+
+        {adapted && (
+          <div className="space-y-3">
+            <div className="bg-black/40 rounded-lg p-3 text-sm text-gray-200 whitespace-pre-wrap">{adapted}</div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { navigator.clipboard.writeText(adapted); }}
+                className="flex-1 px-3 py-2 text-xs border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800"
+              >
+                Copiar
+              </button>
+              <a
+                href={`/posts/new?script=${encodeURIComponent(adapted)}`}
+                className="flex-1 px-3 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white text-center rounded-lg font-medium"
+              >
+                Crear post
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

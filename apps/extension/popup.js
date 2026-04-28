@@ -130,12 +130,17 @@ document.querySelectorAll('.sort-btn').forEach((btn) => {
 
 syncBtn.addEventListener('click', async () => {
   syncBtn.disabled = true
-  setStatus('Capturando datos...', '')
+  setStatus('Capturando posts...', '')
   try {
     const data = await sendToTab({ action: 'scrape_for_socialdrop' })
     if (!data?.ok) throw new Error(data?.error ?? 'no data')
+    if (!data.posts?.length) {
+      setStatus('No se detectaron posts en este perfil', 'warn')
+      syncBtn.disabled = false
+      return
+    }
 
-    setStatus(`Enviando ${data.posts.length} posts...`, '')
+    setStatus(`Enviando ${data.posts.length} posts a SocialDrop...`, '')
     const res = await fetch(`${API_URL}/api/competitors/ingest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -149,10 +154,15 @@ syncBtn.addEventListener('click', async () => {
 
     if (!res.ok) throw new Error(`API ${res.status}`)
     const result = await res.json()
-    setStatus(`✓ ${result.imported ?? data.posts.length} posts enviados`, 'success')
+    setStatus(
+      `✓ Sincronizado (${result.imported ?? data.posts.length} posts) — abriendo análisis...`,
+      'success',
+    )
 
     setTimeout(() => {
-      chrome.tabs.create({ url: `${API_URL}/competitors` })
+      chrome.tabs.create({
+        url: `${API_URL}/competitors?username=${encodeURIComponent(data.profile.username || '')}`,
+      })
     }, 1500)
   } catch (err) {
     setStatus(`Error: ${err.message}`, 'error')
