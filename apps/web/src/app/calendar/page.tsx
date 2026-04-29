@@ -302,7 +302,7 @@ export default function CalendarPage() {
 
                     <div className="mt-1 space-y-1">
                       {dayPosts.slice(0, 3).map((p) => {
-                        const plat = p.integrations[0]?.integration?.platform ?? 'FACEBOOK';
+                        const platforms = p.integrations.map((i) => i.integration.platform);
                         return (
                           <div
                             key={p.id}
@@ -313,11 +313,19 @@ export default function CalendarPage() {
                               e.dataTransfer.effectAllowed = 'move';
                             }}
                             onClick={(e) => { e.stopPropagation(); setSelected(p); }}
-                            title={`${PLATFORM_LABELS[plat] ?? plat} — ${p.content.slice(0, 60)}`}
-                            className="truncate text-[11px] px-2 py-0.5 rounded text-white cursor-grab active:cursor-grabbing"
-                            style={{ background: PLATFORM_COLORS[plat] ?? '#6366f1' }}
+                            title={`${platforms.map((pl) => PLATFORM_LABELS[pl] ?? pl).join(', ')} — ${p.content.slice(0, 60)}`}
+                            className="truncate text-[11px] px-2 py-0.5 rounded bg-gray-700/80 text-gray-200 cursor-grab active:cursor-grabbing flex items-center gap-1"
                           >
-                            {p.content.slice(0, 30) || '(sin contenido)'}
+                            <span className="flex gap-0.5 shrink-0">
+                              {(platforms.length > 0 ? platforms : ['FACEBOOK']).slice(0, 4).map((pl) => (
+                                <span
+                                  key={pl}
+                                  className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
+                                  style={{ background: PLATFORM_COLORS[pl] ?? '#6366f1' }}
+                                />
+                              ))}
+                            </span>
+                            <span className="truncate">{p.content.slice(0, 25) || '(sin contenido)'}</span>
                           </div>
                         );
                       })}
@@ -360,7 +368,7 @@ export default function CalendarPage() {
               </span>
             </div>
             <div className="flex gap-2 pt-2">
-              {(selected.status === 'SCHEDULED' || selected.status === 'ERROR' || selected.status === 'PENDING') && (
+              {(selected.status === 'SCHEDULED' || selected.status === 'ERROR' || selected.status === 'PENDING' || selected.status === 'DRAFT') && (
                 <button
                   onClick={() => { setEditPost(selected as EditablePost); setSelected(null); }}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 rounded-lg text-sm font-medium"

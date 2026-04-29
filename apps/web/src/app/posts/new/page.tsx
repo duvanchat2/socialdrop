@@ -8,18 +8,9 @@ import { compressVideo, compressImage } from '@/lib/compressMedia';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
+  Upload, X, Film, Image as ImageIcon, Loader2, Users as UsersIcon,
   CalendarClock, Send, FileText, ListOrdered, CheckCircle2, AlertCircle,
 } from 'lucide-react';
-
-const PLATFORM_LIMITS: Record<string, number> = {
-  FACEBOOK: 63206,
-  INSTAGRAM: 2200,
-  TWITTER: 280,
-  TIKTOK: 2200,
-  LINKEDIN: 3000,
-  YOUTUBE: 5000,
-};
 
 const PLATFORM_COLORS: Record<string, string> = {
   FACEBOOK: '#1877F2',
@@ -50,6 +41,11 @@ interface FileEntry {
   uploadedFileName?: string;
   uploadedMediaType?: 'IMAGE' | 'VIDEO';
   error?: string;
+  // Per-file captions
+  socialCaption?: string;
+  ytTitle?: string;
+  ytDescription?: string;
+  ytTags?: string;
 }
 
 const PLATFORM_ORDER = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'TWITTER', 'LINKEDIN', 'YOUTUBE'];
@@ -60,16 +56,10 @@ export default function NewPostPage() {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [caption, setCaption] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-
-  // YouTube-specific fields
-  const [ytTitle, setYtTitle] = useState('');
-  const [ytDescription, setYtDescription] = useState('');
-  const [ytTags, setYtTags] = useState('');
 
   const userId = 'demo-user';
 
@@ -99,13 +89,7 @@ export default function NewPostPage() {
   }, [integrations, selectedAccountIds]);
 
   const youtubeSelected = selectedPlatforms.includes('YOUTUBE');
-
-  const maxChars = useMemo(() => {
-    if (selectedPlatforms.length === 0) return 280;
-    return Math.min(...selectedPlatforms.map((p) => PLATFORM_LIMITS[p] ?? 2200));
-  }, [selectedPlatforms]);
-
-  const overLimit = caption.length > maxChars;
+  const hasSocial = selectedPlatforms.some((p) => p !== 'YOUTUBE');
 
   const toggleAccount = (id: string) => {
     setSelectedAccountIds((prev) => {
@@ -208,23 +192,33 @@ export default function NewPostPage() {
       apiFetch(`/api/queue/assign`, { method: 'POST', body: JSON.stringify({ postId }) }),
   });
 
-  const buildBasePayload = () => ({
-    content: caption,
-    platforms: selectedPlatforms,
-    mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
-    ...(youtubeSelected && ytTitle && {
-      youtubeTitle: ytTitle,
-      youtubeDescription: ytDescription || undefined,
-      youtubeTags: ytTags || undefined,
-    }),
-  });
+  const buildBasePayload = () => {
+    const first = readyEntries[0];
+    const socialCap = first?.socialCaption ?? '';
+    const ytDesc = first?.ytDescription ?? '';
+    return {
+      content: youtubeSelected && !hasSocial ? (ytDesc || socialCap) : socialCap,
+      platforms: selectedPlatforms,
+      mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
+      ...(youtubeSelected && first?.ytTitle && {
+        youtubeTitle: first.ytTitle,
+        youtubeDescription: first.ytDescription || undefined,
+        youtubeTags: first.ytTags || undefined,
+      }),
+    };
+  };
 
   const commonGuards = (): boolean => {
-    if (!caption) { toast.error('Escribe el contenido del post'); return false; }
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
-    if (overLimit) { toast.error(`El contenido excede ${maxChars} caracteres`); return false; }
     if (pendingCount > 0) { toast.error('Espera a que terminen todas las subidas'); return false; }
-    if (youtubeSelected && !ytTitle) { toast.error('El título es requerido para YouTube'); return false; }
+    if (readyEntries.length > 0) {
+      if (hasSocial && !readyEntries[0].socialCaption) {
+        toast.error('Escribe el caption para el primer archivo'); return false;
+      }
+      if (youtubeSelected && !readyEntries[0].ytTitle) {
+        toast.error('El título de YouTube es requerido'); return false;
+      }
+    }
     return true;
   };
 
@@ -260,7 +254,6 @@ export default function NewPostPage() {
   };
 
   const handleSaveDraft = async () => {
-    if (!caption) { toast.error('Escribe el contenido del post'); return; }
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return; }
     try {
       await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString(), status: 'DRAFT' });
@@ -285,7 +278,7 @@ export default function NewPostPage() {
     }
   };
 
-  const busy = createPost.isPending || assignToQueue.isPending || pendingCount > 0;
+  const busy = createPost.isPending || assignToQueue.isPending;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -294,111 +287,61 @@ export default function NewPostPage() {
         <p className="text-sm text-gray-400">Redacta y programa tu contenido.</p>
       </header>
 
-      {/* Card 1 — Content */}
+      {/* Card 1 — Media & Captions */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
-          <Edit3 size={16} className="text-indigo-400" />
-          <h2 className="font-semibold">Contenido</h2>
+          <ImageIcon size={16} className="text-indigo-400" />
+          <h2 className="font-semibold">Media y Captions</h2>
         </div>
-        <p className="text-xs text-gray-500 mb-3">Escribe el caption y adjunta medios.</p>
+        <p className="text-xs text-gray-500 mb-3">
+          Sube tus archivos y escribe el caption por archivo.
+        </p>
 
-        <div className="relative">
-          <textarea
-            data-testid="caption-input"
-            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
-            rows={4}
-            placeholder="¿Qué quieres publicar?"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-          />
-          <span className={`absolute bottom-2 right-3 text-xs ${overLimit ? 'text-red-400' : 'text-gray-500'}`}>
-            {caption.length} / {maxChars}
-          </span>
-        </div>
-
-        {/* Media section */}
-        <div className="mt-4">
-          <div className="flex items-center gap-2 mb-2">
-            <ImageIcon size={15} className="text-indigo-400" />
-            <span className="text-sm font-medium">Media</span>
-            <span className="text-xs text-gray-500">({fileEntries.length}/{MAX_FILES})</span>
-          </div>
-
-          {fileEntries.length < MAX_FILES && (
-            <div
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
-                isDragging ? 'border-indigo-400 bg-indigo-950/30' : 'border-gray-800 hover:border-gray-600 bg-gray-950'
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm"
-                className="hidden"
-                onChange={(e) => e.target.files && handleFiles(e.target.files)}
-              />
-              <div className="flex flex-col items-center gap-1 text-gray-400">
-                <Upload size={22} />
-                <p className="text-sm">Arrastra o haz clic para subir</p>
-                <p className="text-xs text-gray-600">Imágenes y videos · Los videos se comprimirán</p>
-              </div>
-            </div>
-          )}
-
-          {fileEntries.length > 0 && (
-            <div className="grid grid-cols-1 gap-2 mt-3">
-              {fileEntries.map((e) => (
-                <FileCard key={e.id} entry={e} onRemove={() => removeFile(e.id)} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* YouTube metadata */}
-        {youtubeSelected && (
-          <div className="mt-4 p-4 bg-red-950/20 border border-red-900/40 rounded-xl space-y-3">
-            <p className="text-sm font-semibold text-red-400 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-              Datos de YouTube
-            </p>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Título <span className="text-red-400">*</span> <span className="text-gray-600">(máx 100)</span></label>
-              <input
-                type="text"
-                maxLength={100}
-                placeholder="Título del video en YouTube"
-                value={ytTitle}
-                onChange={(e) => setYtTitle(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Descripción <span className="text-gray-600">(máx 5000)</span></label>
-              <textarea
-                rows={3}
-                maxLength={5000}
-                placeholder="Descripción del video (opcional, usa el caption si se deja vacío)"
-                value={ytDescription}
-                onChange={(e) => setYtDescription(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Tags <span className="text-gray-600">(separados por coma)</span></label>
-              <input
-                type="text"
-                placeholder="shorts, tutorial, vlog"
-                value={ytTags}
-                onChange={(e) => setYtTags(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
+        {fileEntries.length < MAX_FILES && (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition-colors ${
+              isDragging ? 'border-indigo-400 bg-indigo-950/30' : 'border-gray-800 hover:border-gray-600 bg-gray-950'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm"
+              className="hidden"
+              onChange={(e) => e.target.files && handleFiles(e.target.files)}
+            />
+            <div className="flex flex-col items-center gap-1 text-gray-400">
+              <Upload size={22} />
+              <p className="text-sm">Arrastra o haz clic para subir</p>
+              <p className="text-xs text-gray-600">Imágenes y videos · Los videos se comprimirán</p>
             </div>
           </div>
+        )}
+
+        {fileEntries.length > 0 && (
+          <div className="grid grid-cols-1 gap-3 mt-3">
+            {fileEntries.map((e) => (
+              <FileCard
+                key={e.id}
+                entry={e}
+                hasSocial={hasSocial}
+                hasYoutube={youtubeSelected}
+                onRemove={() => removeFile(e.id)}
+                onUpdate={(patch) => updateEntry(e.id, patch)}
+              />
+            ))}
+          </div>
+        )}
+
+        {fileEntries.length === 0 && (
+          <p className="text-xs text-gray-600 mt-2 text-center">
+            Añade al menos un archivo para escribir el caption.
+          </p>
         )}
       </section>
 
@@ -476,7 +419,7 @@ export default function NewPostPage() {
             type="button"
             data-testid="add-to-queue-btn"
             onClick={handleAddToQueue}
-            disabled={busy || overLimit}
+            disabled={busy}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
           >
             <ListOrdered size={16} />
@@ -486,7 +429,7 @@ export default function NewPostPage() {
             type="button"
             data-testid="submit-post-btn"
             onClick={scheduledAt ? handleSchedule : handlePublishNow}
-            disabled={busy || overLimit}
+            disabled={busy}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors text-white"
           >
             <Send size={16} />
@@ -509,53 +452,131 @@ export default function NewPostPage() {
 }
 
 /* ─── FileCard ──────────────────────────────────────────────────────────────── */
-function FileCard({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => void }) {
+interface FileCardProps {
+  entry: FileEntry;
+  hasSocial: boolean;
+  hasYoutube: boolean;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<FileEntry>) => void;
+}
+
+function FileCard({ entry: e, hasSocial, hasYoutube, onRemove, onUpdate }: FileCardProps) {
   const isVideo = e.originalFile.type.startsWith('video/');
+  const showCaptions = hasSocial || hasYoutube;
 
   return (
-    <div className="flex gap-3 bg-gray-950 border border-gray-800 rounded-xl p-3">
-      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-800 relative">
-        {e.thumbnail ? (
-          <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            {isVideo ? <Film size={20} /> : <ImageIcon size={20} />}
-          </div>
-        )}
-        {isVideo && e.duration != null && (
-          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] px-1 rounded">
-            {Math.floor(e.duration / 60)}:{String(Math.round(e.duration % 60)).padStart(2, '0')}
-          </span>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm text-gray-100 truncate">{e.originalFile.name}</p>
-            <p className="text-xs text-gray-500">
-              {fmtSize(e.originalSize)}
-              {e.compressedSize != null && e.compressedSize < e.originalSize && (
-                <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
-              )}
-            </p>
-          </div>
-          <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0">
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="mt-1.5">
-          {e.status === 'compressing' && <InlineProgress label={`Comprimiendo… ${e.progress}%`} pct={e.progress} />}
-          {e.status === 'uploading' && <InlineProgress label={`Subiendo… ${e.progress}%`} pct={e.progress} />}
-          {e.status === 'done' && (
-            <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 size={11} />Subido</span>
+    <div className="bg-gray-950 border border-gray-800 rounded-xl p-3 space-y-3">
+      {/* File info row */}
+      <div className="flex gap-3">
+        <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-gray-800 relative">
+          {e.thumbnail ? (
+            <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              {isVideo ? <Film size={18} /> : <ImageIcon size={18} />}
+            </div>
           )}
-          {e.status === 'error' && (
-            <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={11} />{e.error}</span>
+          {isVideo && e.duration != null && (
+            <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] px-1 rounded">
+              {Math.floor(e.duration / 60)}:{String(Math.round(e.duration % 60)).padStart(2, '0')}
+            </span>
           )}
         </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm text-gray-100 truncate">{e.originalFile.name}</p>
+              <p className="text-xs text-gray-500">
+                {fmtSize(e.originalSize)}
+                {e.compressedSize != null && e.compressedSize < e.originalSize && (
+                  <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+                )}
+              </p>
+            </div>
+            <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="mt-1.5">
+            {e.status === 'compressing' && <InlineProgress label={`Comprimiendo… ${e.progress}%`} pct={e.progress} />}
+            {e.status === 'uploading' && <InlineProgress label={`Subiendo… ${e.progress}%`} pct={e.progress} />}
+            {e.status === 'done' && (
+              <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 size={11} />Subido</span>
+            )}
+            {e.status === 'error' && (
+              <span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={11} />{e.error}</span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Caption fields — only shown when platforms are selected */}
+      {showCaptions && (
+        <div className="space-y-2 pt-1 border-t border-gray-800">
+          {/* Social caption */}
+          {hasSocial && (
+            <div>
+              <label className="text-[10px] text-gray-500 mb-1 block uppercase tracking-wide">Caption</label>
+              <textarea
+                rows={2}
+                placeholder="Caption para redes sociales…"
+                value={e.socialCaption ?? ''}
+                onChange={(ev) => onUpdate({ socialCaption: ev.target.value })}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
+              />
+            </div>
+          )}
+
+          {/* YouTube fields */}
+          {hasYoutube && (
+            <div className="space-y-2 p-3 bg-red-950/20 border border-red-900/30 rounded-lg">
+              <p className="text-[10px] text-red-400 font-semibold uppercase tracking-wide flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />YouTube
+              </p>
+              <div>
+                <label className="text-[10px] text-gray-500 mb-1 block">
+                  Título <span className="text-red-400">*</span> <span className="text-gray-600">(máx 100)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={100}
+                  placeholder="Título del video"
+                  value={e.ytTitle ?? ''}
+                  onChange={(ev) => onUpdate({ ytTitle: ev.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 mb-1 block">
+                  Descripción <span className="text-gray-600">(máx 5000, opcional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  maxLength={5000}
+                  placeholder="Descripción del video…"
+                  value={e.ytDescription ?? ''}
+                  onChange={(ev) => onUpdate({ ytDescription: ev.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 mb-1 block">
+                  Tags <span className="text-gray-600">(separados por coma)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="shorts, tutorial, vlog"
+                  value={e.ytTags ?? ''}
+                  onChange={(ev) => onUpdate({ ytTags: ev.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

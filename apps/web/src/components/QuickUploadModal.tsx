@@ -28,16 +28,20 @@ interface FileEntry {
   uploadedUrl?: string;
   uploadedFileName?: string;
   error?: string;
+  // Per-file captions
+  socialCaption?: string;
+  ytTitle?: string;
+  ytDescription?: string;
+  ytTags?: string;
 }
 
 export function QuickUploadModal({ date, initialFiles = [], platforms = [], onClose }: Props) {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
-  const [caption, setCaption] = useState('');
-  const [ytTitle, setYtTitle] = useState('');
 
   const youtubeSelected = platforms.includes('YOUTUBE');
+  const hasSocial = platforms.some((p) => p !== 'YOUTUBE');
 
   const createPost = useMutation({
     mutationFn: (data: object) =>
@@ -104,19 +108,24 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   const readyUrls = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
 
   const handleSave = () => {
-    if (youtubeSelected && !ytTitle) {
-      toast.error('El título es requerido para YouTube');
+    const first = entries.find((e) => e.status === 'done');
+    if (youtubeSelected && !first?.ytTitle) {
+      toast.error('El título de YouTube es requerido');
       return;
     }
     const scheduledAt = new Date(date);
     scheduledAt.setHours(9, 0, 0, 0);
     createPost.mutate({
-      content: caption || '(Borrador sin contenido)',
+      content: first?.socialCaption || first?.ytDescription || '(Borrador sin contenido)',
       scheduledAt: scheduledAt.toISOString(),
       platforms: [],
       status: 'DRAFT',
       mediaUrls: readyUrls,
-      ...(youtubeSelected && ytTitle && { youtubeTitle: ytTitle }),
+      ...(youtubeSelected && first?.ytTitle && {
+        youtubeTitle: first.ytTitle,
+        youtubeDescription: first.ytDescription || undefined,
+        youtubeTags: first.ytTags || undefined,
+      }),
     });
   };
 
@@ -132,29 +141,6 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
         </div>
-
-        <textarea
-          rows={3}
-          placeholder="Caption (opcional)"
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
-        />
-
-        {/* YouTube title field */}
-        {youtubeSelected && (
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Título YouTube <span className="text-red-400">*</span></label>
-            <input
-              type="text"
-              maxLength={100}
-              placeholder="Título del video"
-              value={ytTitle}
-              onChange={(e) => setYtTitle(e.target.value)}
-              className="w-full bg-gray-950 border border-red-900/40 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-            />
-          </div>
-        )}
 
         {/* Upload zone */}
         <div
@@ -180,13 +166,20 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
         {entries.length > 0 && (
           <div className="space-y-2">
             {entries.map((e) => (
-              <FileRow key={e.id} entry={e} onRemove={() => {
-                setEntries((prev) => {
-                  const found = prev.find((x) => x.id === e.id);
-                  if (found?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(found.thumbnail);
-                  return prev.filter((x) => x.id !== e.id);
-                });
-              }} />
+              <FileRow
+                key={e.id}
+                entry={e}
+                hasSocial={hasSocial}
+                hasYoutube={youtubeSelected}
+                onUpdate={(patch) => updateEntry(e.id, patch)}
+                onRemove={() => {
+                  setEntries((prev) => {
+                    const found = prev.find((x) => x.id === e.id);
+                    if (found?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(found.thumbnail);
+                    return prev.filter((x) => x.id !== e.id);
+                  });
+                }}
+              />
             ))}
           </div>
         )}
@@ -209,54 +202,111 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
 }
 
 /* ─── FileRow ── */
-function FileRow({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => void }) {
+interface FileRowProps {
+  entry: FileEntry;
+  hasSocial: boolean;
+  hasYoutube: boolean;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<FileEntry>) => void;
+}
+
+function FileRow({ entry: e, hasSocial, hasYoutube, onRemove, onUpdate }: FileRowProps) {
   const isVideo = e.originalFile.type.startsWith('video/');
+  const showCaptions = (hasSocial || hasYoutube) && e.status === 'done';
 
   return (
-    <div className="flex gap-2 items-center bg-gray-800 rounded-lg p-2">
-      <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
-        {e.thumbnail ? (
-          <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            {isVideo ? <Film size={16} /> : <ImageIcon size={16} />}
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
-        <p className="text-[10px] text-gray-500">
-          {fmtSize(e.originalSize)}
-          {e.compressedSize != null && e.compressedSize < e.originalSize && (
-            <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+    <div className="bg-gray-800 rounded-lg p-2 space-y-2">
+      {/* File info */}
+      <div className="flex gap-2 items-center">
+        <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
+          {e.thumbnail ? (
+            <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              {isVideo ? <Film size={16} /> : <ImageIcon size={16} />}
+            </div>
           )}
-        </p>
-        {e.status === 'compressing' && (
-          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-            <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
+          <p className="text-[10px] text-gray-500">
+            {fmtSize(e.originalSize)}
+            {e.compressedSize != null && e.compressedSize < e.originalSize && (
+              <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+            )}
           </p>
-        )}
-        {e.status === 'uploading' && (
-          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-            <Loader2 className="animate-spin" size={9} />Subiendo… {e.progress}%
-          </p>
-        )}
-        {e.status === 'done' && (
-          <p className="text-[10px] text-green-400 flex items-center gap-1">
-            <CheckCircle2 size={9} />Subido
-          </p>
-        )}
-        {e.status === 'error' && (
-          <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">
-            <AlertCircle size={9} />{e.error}
-          </p>
-        )}
+          {e.status === 'compressing' && (
+            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+              <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
+            </p>
+          )}
+          {e.status === 'uploading' && (
+            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+              <Loader2 className="animate-spin" size={9} />Subiendo… {e.progress}%
+            </p>
+          )}
+          {e.status === 'done' && (
+            <p className="text-[10px] text-green-400 flex items-center gap-1">
+              <CheckCircle2 size={9} />Subido
+            </p>
+          )}
+          {e.status === 'error' && (
+            <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">
+              <AlertCircle size={9} />{e.error}
+            </p>
+          )}
+        </div>
+
+        <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
+          <X size={12} />
+        </button>
       </div>
 
-      <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
-        <X size={12} />
-      </button>
+      {/* Caption fields (shown after upload completes) */}
+      {showCaptions && (
+        <div className="space-y-2 pt-1 border-t border-gray-700">
+          {hasSocial && (
+            <textarea
+              rows={2}
+              placeholder="Caption…"
+              value={e.socialCaption ?? ''}
+              onChange={(ev) => onUpdate({ socialCaption: ev.target.value })}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
+            />
+          )}
+          {hasYoutube && (
+            <div className="space-y-1.5 p-2 bg-red-950/20 border border-red-900/30 rounded-lg">
+              <p className="text-[10px] text-red-400 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />YouTube
+              </p>
+              <input
+                type="text"
+                maxLength={100}
+                placeholder="Título *"
+                value={e.ytTitle ?? ''}
+                onChange={(ev) => onUpdate({ ytTitle: ev.target.value })}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+              <textarea
+                rows={2}
+                maxLength={5000}
+                placeholder="Descripción (opcional)"
+                value={e.ytDescription ?? ''}
+                onChange={(ev) => onUpdate({ ytDescription: ev.target.value })}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+              />
+              <input
+                type="text"
+                placeholder="Tags: shorts, tutorial…"
+                value={e.ytTags ?? ''}
+                onChange={(ev) => onUpdate({ ytTags: ev.target.value })}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
