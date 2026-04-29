@@ -1,7 +1,6 @@
 'use client';
 import { useState, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { API_URL } from '@/lib/api';
 
 function LoginForm() {
   const router = useRouter();
@@ -16,7 +15,8 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
+      // Use relative URL — nginx proxies /api/* to the NestJS backend
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),

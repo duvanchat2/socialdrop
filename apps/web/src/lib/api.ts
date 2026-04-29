@@ -1,4 +1,9 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
+// In the browser, use relative URLs so nginx proxies /api/* correctly.
+// In SSR (Node.js), fall back to NEXT_PUBLIC_API_URL or localhost.
+function getApiBase(): string {
+  if (typeof window !== 'undefined') return '';   // browser: relative URL
+  return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
+}
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -7,7 +12,7 @@ function getToken(): string | null {
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -35,3 +40,6 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     throw new Error(`Unexpected non-JSON response: ${text.slice(0, 100)}`);
   }
 }
+
+/** @deprecated kept for compatibility — use apiFetch instead */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
