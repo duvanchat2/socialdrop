@@ -11,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { WebhookService } from './webhook.service.js';
+import { Public } from '../auth/auth.public.js';
 
+@Public()
 @ApiTags('webhooks')
 @Controller('webhooks')
 export class WebhookController {

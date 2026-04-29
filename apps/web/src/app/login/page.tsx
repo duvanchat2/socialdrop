@@ -1,34 +1,47 @@
 'use client';
-
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { API_URL } from '@/lib/api';
 
 function LoginForm() {
-  const router       = useRouter();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const res = await fetch('/auth', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ password }),
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
 
-    setLoading(false);
+      if (!res.ok) {
+        setError('Contraseña incorrecta');
+        return;
+      }
 
-    if (res.ok) {
+      const { token, expiresAt } = await res.json() as { token: string; expiresAt: string };
+
+      // Save in localStorage so apiFetch() can include it as Authorization header
+      localStorage.setItem('auth-token', token);
+
+      // Save as cookie so Next.js middleware can protect pages server-side
+      const maxAge = Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000);
+      document.cookie = `auth-token=${token}; path=/; max-age=${maxAge}; SameSite=Strict`;
+
       const from = searchParams.get('from') ?? '/';
       router.replace(from);
-    } else {
-      setError('Contraseña incorrecta');
+    } catch {
+      setError('Error de conexión. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -57,7 +70,7 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !password}
             className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium transition-colors"
           >
             {loading ? 'Verificando...' : 'Entrar'}

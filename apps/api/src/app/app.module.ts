@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
+import { AuthModule } from '../modules/auth/auth.module.js';
+import { AuthGuard } from '../modules/auth/auth.guard.js';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -78,11 +80,13 @@ import redisConfig from '../config/redis.config.js';
     YoutubeModule,
     UsersModule,
     BrainModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })
 export class AppModule {}

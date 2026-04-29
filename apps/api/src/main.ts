@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app/app.module';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
@@ -17,6 +18,9 @@ async function bootstrap() {
 
   // Security headers
   app.use(helmet());
+
+  // Cookie parser — needed so AuthGuard can read the auth-token cookie
+  app.use(cookieParser());
 
   // Serve uploaded files as static assets so Instagram/TikTok can fetch them
   app.useStaticAssets(uploadDir, { prefix: '/uploads' });
