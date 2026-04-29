@@ -12,7 +12,8 @@ import { AuthGuard } from './auth.guard.js';
       useFactory: (config: ConfigService): JwtModuleOptions => ({
         secret: config.get<string>('JWT_SECRET') ?? 'default-jwt-secret-change-in-production',
         signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRY') ?? '7d',
+          // cast needed: newer @nestjs/jwt types expiresIn as StringValue (ms package)
+          expiresIn: (config.get<string>('JWT_EXPIRY') ?? '7d') as never,
         },
       }),
       inject: [ConfigService],
