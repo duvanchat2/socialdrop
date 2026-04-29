@@ -2,6 +2,7 @@ import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/commo
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service.js';
 import { Public } from './auth.public.js';
+import { LoginDto } from './login.dto.js';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -12,10 +13,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @ApiOperation({ summary: 'Authenticate with app password, receive JWT' })
-  login(@Body() body: { password: string }) {
-    if (!body?.password) {
-      throw new HttpException('password is required', HttpStatus.BAD_REQUEST);
-    }
+  login(@Body() body: LoginDto) {
     const result = this.authService.login(body.password);
     if (!result) throw new HttpException('Contraseña incorrecta', HttpStatus.UNAUTHORIZED);
     return result;
