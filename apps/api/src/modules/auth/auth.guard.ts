@@ -20,7 +20,7 @@ export class AuthGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest<{
       headers: { authorization?: string };
-      cookies?: { token?: string };
+      cookies?: Record<string, string | undefined>;
       user?: unknown;
     }>();
 
