@@ -236,7 +236,11 @@ export class InstagramProvider extends SocialAbstract {
   }
 
   private async postReel(token: string, igUserId: string, content: PostContent): Promise<PublishResult> {
-    this.logger.log(`[Instagram] Reel: creating container for video_url=${content.mediaUrls![0]}`);
+    const mediaUrl = content.mediaUrls![0];
+    if (!mediaUrl.startsWith('https://')) {
+      throw new Error(`[Instagram] Reel video URL must start with https:// — got: ${mediaUrl.slice(0, 80)}`);
+    }
+    this.logger.log(`[Instagram] Reel: creating container for video_url=${mediaUrl}`);
     const containerData = await this.igFetch(
       `${this.BASE_URL}/${igUserId}/media`,
       {
@@ -260,14 +264,19 @@ export class InstagramProvider extends SocialAbstract {
     while (status !== 'FINISHED' && pollAttempts < maxPollAttempts) {
       await new Promise(r => setTimeout(r, 5000));
       const statusData = await this.igFetch(
-        `${this.BASE_URL}/${containerData.id}?fields=status_code&access_token=${token}`,
+        `${this.BASE_URL}/${containerData.id}?fields=status_code,status,error_message&access_token=${token}`,
         { method: 'GET' },
         `poll status attempt ${pollAttempts + 1}`,
-      ) as { status_code?: string };
+      ) as { status_code?: string; status?: string; error_message?: string };
       status = (statusData as any).status_code ?? '';
       pollAttempts++;
-      this.logger.log(`[Instagram] Reel status poll ${pollAttempts}: ${status}`);
-      if (status === 'ERROR') throw new Error('[Instagram] Reel processing failed — Instagram returned ERROR status');
+      this.logger.log(
+        `[Instagram] Reel status poll ${pollAttempts}: status_code=${status} | status=${(statusData as any).status ?? 'n/a'} | error=${(statusData as any).error_message || 'none'}`,
+      );
+      if (status === 'ERROR') {
+        const errMsg = (statusData as any).error_message || 'No error_message returned by Instagram';
+        throw new Error(`[Instagram] Reel processing failed — ${errMsg}`);
+      }
     }
 
     if (status !== 'FINISHED') throw new Error('[Instagram] Reel processing timed out after 100s');

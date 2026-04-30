@@ -94,12 +94,16 @@ export async function compressVideo(
     await ffmpeg.exec([
       '-i', inName,
       '-vcodec', 'libx264',
+      '-profile:v', 'baseline',
+      '-level', '3.1',
       '-crf', crf,
-      '-vf', scale,
+      '-preset', 'fast',
+      '-vf', `${scale},fps=30`,
+      '-pix_fmt', 'yuv420p',
       '-acodec', 'aac',
+      '-ar', '44100',
       '-b:a', '128k',
       '-movflags', '+faststart',
-      '-preset', 'fast',
       outName,
     ]);
 
