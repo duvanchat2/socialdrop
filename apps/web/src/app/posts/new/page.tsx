@@ -66,8 +66,7 @@ export default function NewPostPage() {
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  // YouTube-specific fields
-  const [ytTitle, setYtTitle] = useState('');
+  // YouTube extras (title = caption, only desc + tags needed separately)
   const [ytDescription, setYtDescription] = useState('');
   const [ytTags, setYtTags] = useState('');
 
@@ -212,8 +211,8 @@ export default function NewPostPage() {
     content: caption,
     platforms: selectedPlatforms,
     mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
-    ...(youtubeSelected && ytTitle && {
-      youtubeTitle: ytTitle,
+    ...(youtubeSelected && caption && {
+      youtubeTitle: caption.slice(0, 100),
       youtubeDescription: ytDescription || undefined,
       youtubeTags: ytTags || undefined,
     }),
@@ -224,7 +223,6 @@ export default function NewPostPage() {
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
     if (overLimit) { toast.error(`El contenido excede ${maxChars} caracteres`); return false; }
     if (pendingCount > 0) { toast.error('Espera a que terminen todas las subidas'); return false; }
-    if (youtubeSelected && !ytTitle) { toast.error('El título es requerido para YouTube'); return false; }
     return true;
   };
 
@@ -359,30 +357,25 @@ export default function NewPostPage() {
           )}
         </div>
 
-        {/* YouTube metadata */}
+        {/* YouTube extras — title is taken from caption above */}
         {youtubeSelected && (
           <div className="mt-4 p-4 bg-red-950/20 border border-red-900/40 rounded-xl space-y-3">
             <p className="text-sm font-semibold text-red-400 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-              Datos de YouTube
+              YouTube
+            </p>
+            <p className="text-xs text-gray-500">
+              El caption de arriba se usará como título en YouTube
+              {caption.length > 100 && (
+                <span className="text-yellow-400 ml-1">(se recortará a 100 caracteres)</span>
+              )}
             </p>
             <div>
-              <label className="text-xs text-gray-400 mb-1 block">Título <span className="text-red-400">*</span> <span className="text-gray-600">(máx 100)</span></label>
-              <input
-                type="text"
-                maxLength={100}
-                placeholder="Título del video en YouTube"
-                value={ytTitle}
-                onChange={(e) => setYtTitle(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Descripción <span className="text-gray-600">(máx 5000)</span></label>
+              <label className="text-xs text-gray-400 mb-1 block">Descripción <span className="text-gray-600">(opcional, máx 5000)</span></label>
               <textarea
                 rows={3}
                 maxLength={5000}
-                placeholder="Descripción del video (opcional, usa el caption si se deja vacío)"
+                placeholder="Descripción del video..."
                 value={ytDescription}
                 onChange={(e) => setYtDescription(e.target.value)}
                 className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"

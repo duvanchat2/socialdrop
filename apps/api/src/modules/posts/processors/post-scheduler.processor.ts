@@ -365,14 +365,14 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
         },
       });
 
-      // Schedule media deletion 24h after successful publish
+      // Delete media files 5 minutes after successful publish (enough time for CDN caching)
       if (!hasError && mediaUrls.length > 0) {
         await this.schedulerQueue.add(
           'delete-media',
           { mediaUrls },
-          { delay: 24 * 60 * 60 * 1000 }, // 24 hours
+          { delay: 5 * 60 * 1000 }, // 5 minutes
         );
-        this.logger.log(`[Scheduler] Media deletion scheduled in 24h for ${mediaUrls.length} file(s) (post ${postId})`);
+        this.logger.log(`[Scheduler] Media deletion scheduled in 5min for ${mediaUrls.length} file(s) (post ${postId})`);
       }
     }
   }

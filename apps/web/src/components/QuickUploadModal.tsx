@@ -35,7 +35,8 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   const inputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [caption, setCaption] = useState('');
-  const [ytTitle, setYtTitle] = useState('');
+  const [ytDescription, setYtDescription] = useState('');
+  const [ytTags, setYtTags] = useState('');
 
   const youtubeSelected = platforms.includes('YOUTUBE');
 
@@ -104,19 +105,20 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   const readyUrls = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
 
   const handleSave = () => {
-    if (youtubeSelected && !ytTitle) {
-      toast.error('El título es requerido para YouTube');
-      return;
-    }
     const scheduledAt = new Date(date);
     scheduledAt.setHours(9, 0, 0, 0);
+    const text = caption || '(Borrador sin contenido)';
     createPost.mutate({
-      content: caption || '(Borrador sin contenido)',
+      content: text,
       scheduledAt: scheduledAt.toISOString(),
       platforms: [],
       status: 'DRAFT',
       mediaUrls: readyUrls,
-      ...(youtubeSelected && ytTitle && { youtubeTitle: ytTitle }),
+      ...(youtubeSelected && {
+        youtubeTitle: text.slice(0, 100),
+        youtubeDescription: ytDescription || undefined,
+        youtubeTags: ytTags || undefined,
+      }),
     });
   };
 
@@ -133,26 +135,46 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
         </div>
 
-        <textarea
-          rows={3}
-          placeholder="Caption (opcional)"
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
-        />
+        <div>
+          <textarea
+            rows={3}
+            placeholder={youtubeSelected ? 'Caption / Título YouTube (opcional)' : 'Caption (opcional)'}
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
+          />
+          {youtubeSelected && (
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              Este texto se usará como título en YouTube
+              {caption.length > 100 && <span className="text-yellow-400 ml-1">(se recortará a 100 chars)</span>}
+            </p>
+          )}
+        </div>
 
-        {/* YouTube title field */}
+        {/* YouTube extras */}
         {youtubeSelected && (
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">Título YouTube <span className="text-red-400">*</span></label>
-            <input
-              type="text"
-              maxLength={100}
-              placeholder="Título del video"
-              value={ytTitle}
-              onChange={(e) => setYtTitle(e.target.value)}
-              className="w-full bg-gray-950 border border-red-900/40 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-            />
+          <div className="space-y-2">
+            <div>
+              <label className="text-[10px] text-gray-500 mb-0.5 block">Descripción YouTube (opcional)</label>
+              <textarea
+                rows={2}
+                maxLength={5000}
+                placeholder="Descripción del video..."
+                value={ytDescription}
+                onChange={(e) => setYtDescription(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 mb-0.5 block">Tags (separados por coma)</label>
+              <input
+                type="text"
+                placeholder="shorts, tutorial, vlog"
+                value={ytTags}
+                onChange={(e) => setYtTags(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+            </div>
           </div>
         )}
 
