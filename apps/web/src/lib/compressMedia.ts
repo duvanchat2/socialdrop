@@ -80,7 +80,11 @@ export async function compressVideo(
   file: File,
   onProgress?: (pct: number) => void,
   onLoading?: () => void,
+  onQueued?: () => void,   // called while waiting for a previous compression to finish
 ): Promise<File> {
+  // If another compression is running, signal queued state before waiting
+  if (_compressionUnlock !== null) onQueued?.();
+
   // Queue behind any ongoing compression (ffmpeg.wasm is single-threaded)
   await acquireCompressionLock();
 
@@ -116,7 +120,7 @@ export async function compressVideo(
       '-level', '3.1',
       '-crf', crf,
       '-preset', 'fast',
-      '-vf', `${scale},fps=30`,
+      '-vf', scale,
       '-pix_fmt', 'yuv420p',
       '-acodec', 'aac',
       '-ar', '44100',
