@@ -1,0 +1,26 @@
+import { Module } from '@nestjs/common';
+import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthController } from './auth.controller.js';
+import { AuthService } from './auth.service.js';
+import { AuthGuard } from './auth.guard.js';
+
+@Module({
+  imports: [
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService): JwtModuleOptions => ({
+        secret: config.get<string>('JWT_SECRET') ?? 'default-jwt-secret-change-in-production',
+        signOptions: {
+          // cast needed: newer @nestjs/jwt types expiresIn as StringValue (ms package)
+          expiresIn: (config.get<string>('JWT_EXPIRY') ?? '7d') as never,
+        },
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, AuthGuard],
+  exports: [AuthGuard, JwtModule],
+})
+export class AuthModule {}
