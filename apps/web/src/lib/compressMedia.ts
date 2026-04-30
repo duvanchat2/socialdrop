@@ -16,20 +16,6 @@ import type { FFmpeg } from '@ffmpeg/ffmpeg';
 let ffmpegInstance: FFmpeg | null = null;
 let loadingPromise: Promise<FFmpeg> | null = null;
 
-/**
- * Serialization lock — ffmpeg.wasm can't safely run two exec() calls
- * concurrently on the same instance.  All compressVideo calls queue here.
- */
-let _compressionUnlock: (() => void) | null = null;
-let _compressionLock: Promise<void> = Promise.resolve();
-
-function acquireCompressionLock(): Promise<void> {
-  const prev = _compressionLock;
-  let unlock!: () => void;
-  _compressionLock = new Promise<void>((res) => { unlock = res; });
-  _compressionUnlock = unlock;
-  return prev.then(() => { /* lock acquired */ });
-}
 
 const CDN = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
 
@@ -80,14 +66,7 @@ export async function compressVideo(
   file: File,
   onProgress?: (pct: number) => void,
   onLoading?: () => void,
-  onQueued?: () => void,   // called while waiting for a previous compression to finish
 ): Promise<File> {
-  // If another compression is running, signal queued state before waiting
-  if (_compressionUnlock !== null) onQueued?.();
-
-  // Queue behind any ongoing compression (ffmpeg.wasm is single-threaded)
-  await acquireCompressionLock();
-
   onLoading?.();
   onProgress?.(0);
 
@@ -152,9 +131,6 @@ export async function compressVideo(
     return compressed.size < file.size ? compressed : file;
   } finally {
     ffmpeg.off('progress', onFFmpegProgress);
-    // Release the lock so the next queued compression can proceed
-    _compressionUnlock?.();
-    _compressionUnlock = null;
   }
 }
 

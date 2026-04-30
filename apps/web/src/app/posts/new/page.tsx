@@ -35,7 +35,7 @@ interface FileEntry {
   duration?: number;
   originalSize: number;
   compressedSize?: number;
-  status: 'queued' | 'compressing' | 'uploading' | 'done' | 'error';
+  status: 'compressing' | 'uploading' | 'done' | 'error';
   progress: number;
   uploadedUrl?: string;
   uploadedFileName?: string;
@@ -138,12 +138,7 @@ export default function NewPostPage() {
     try {
       let compressed: File;
       if (isVideo) {
-        compressed = await compressVideo(
-          file,
-          (pct) => updateEntry(id, { status: 'compressing', progress: pct }),
-          undefined,
-          () => updateEntry(id, { status: 'queued', progress: 0 }),
-        );
+        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
       } else {
         compressed = await compressImage(file);
       }
@@ -181,7 +176,7 @@ export default function NewPostPage() {
   };
 
   const readyEntries  = fileEntries.filter((e) => e.status === 'done');
-  const pendingCount  = fileEntries.filter((e) => e.status === 'queued' || e.status === 'compressing' || e.status === 'uploading').length;
+  const pendingCount  = fileEntries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
 
   // Build payload using first file's captions (each file has its own caption stored)
   const buildBasePayload = () => {
@@ -489,7 +484,6 @@ function FileCard({ entry: e, hasSocial, hasYoutube, onRemove, onUpdate }: FileC
           </div>
 
           <div className="mt-1.5">
-            {e.status === 'queued'      && <span className="text-xs text-yellow-500 flex items-center gap-1"><Loader2 className="animate-spin" size={10} />En cola…</span>}
             {e.status === 'compressing' && <InlineProgress label={`Comprimiendo… ${e.progress}%`} pct={e.progress} />}
             {e.status === 'uploading'   && <InlineProgress label={`Subiendo… ${e.progress}%`}    pct={e.progress} />}
             {e.status === 'done'        && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 size={11} />Subido</span>}

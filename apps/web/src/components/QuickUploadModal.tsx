@@ -29,7 +29,7 @@ interface FileEntry {
   duration?: number;
   originalSize: number;
   compressedSize?: number;
-  status: 'queued' | 'compressing' | 'uploading' | 'done' | 'error';
+  status: 'compressing' | 'uploading' | 'done' | 'error';
   progress: number;
   uploadedUrl?: string;
   uploadedFileName?: string;
@@ -90,12 +90,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
     try {
       let compressed: File;
       if (isVideo) {
-        compressed = await compressVideo(
-          file,
-          (pct) => updateEntry(id, { status: 'compressing', progress: pct }),
-          undefined,
-          () => updateEntry(id, { status: 'queued', progress: 0 }),
-        );
+        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
       } else {
         compressed = await compressImage(file);
       }
@@ -116,7 +111,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
 
   if (!date) return null;
 
-  const pendingCount = entries.filter((e) => e.status === 'queued' || e.status === 'compressing' || e.status === 'uploading').length;
+  const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
   const readyUrls    = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
 
   const handleSave = () => {
@@ -269,11 +264,6 @@ function FileRow({ entry: e, hasSocial, hasYoutube, onUpdate, onRemove }: FileRo
               <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
             )}
           </p>
-          {e.status === 'queued' && (
-            <p className="text-[10px] text-yellow-500 flex items-center gap-1">
-              <Loader2 className="animate-spin" size={9} />En cola…
-            </p>
-          )}
           {e.status === 'compressing' && (
             <p className="text-[10px] text-gray-400 flex items-center gap-1">
               <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
