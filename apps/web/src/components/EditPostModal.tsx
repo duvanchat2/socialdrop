@@ -22,6 +22,7 @@ export interface EditablePost {
   status: PostStatus;
   scheduledAt: string;
   integrations: { integration: { platform: string } }[];
+  metadata?: { youtube?: { title?: string; description?: string; tags?: string[] } };
 }
 
 function toLocalInput(iso: string): string {
@@ -37,15 +38,19 @@ interface Props {
 
 export function EditPostModal({ post, onClose }: Props) {
   const qc = useQueryClient();
-  const [content,     setContent]     = useState('');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [platforms,   setPlatforms]   = useState<string[]>([]);
+  const [content,       setContent]       = useState('');
+  const [scheduledAt,   setScheduledAt]   = useState('');
+  const [platforms,     setPlatforms]     = useState<string[]>([]);
+  const [ytDescription, setYtDescription] = useState('');
+  const [ytTags,        setYtTags]        = useState('');
 
   useEffect(() => {
     if (post) {
       setContent(post.content);
       setScheduledAt(toLocalInput(post.scheduledAt));
       setPlatforms(post.integrations.map(pi => pi.integration.platform));
+      setYtDescription(post.metadata?.youtube?.description ?? '');
+      setYtTags(post.metadata?.youtube?.tags?.join(', ') ?? '');
     }
   }, [post]);
 
@@ -68,16 +73,25 @@ export function EditPostModal({ post, onClose }: Props) {
 
   if (!post) return null;
 
-  const canEdit = post.status === 'SCHEDULED' || post.status === 'ERROR' || post.status === 'PENDING';
+  // DRAFTs are fully editable too
+  const canEdit = post.status === 'SCHEDULED' || post.status === 'ERROR'
+    || post.status === 'PENDING' || post.status === 'DRAFT';
+
+  const youtubeSelected = platforms.includes('YOUTUBE');
 
   function handleSave() {
-    if (!content.trim())    { toast.error('El caption no puede estar vacío'); return; }
-    if (!platforms.length)  { toast.error('Selecciona al menos una plataforma'); return; }
-    if (!scheduledAt)       { toast.error('Selecciona una fecha y hora'); return; }
+    if (!content.trim())   { toast.error('El caption no puede estar vacío'); return; }
+    if (!platforms.length) { toast.error('Selecciona al menos una plataforma'); return; }
+    if (!scheduledAt)      { toast.error('Selecciona una fecha y hora'); return; }
     updateMutation.mutate({
       content,
       scheduledAt: new Date(scheduledAt).toISOString(),
       platforms,
+      ...(youtubeSelected && content && {
+        youtubeTitle: content.slice(0, 100),
+        youtubeDescription: ytDescription || undefined,
+        youtubeTags: ytTags || undefined,
+      }),
     });
   }
 
@@ -96,7 +110,7 @@ export function EditPostModal({ post, onClose }: Props) {
 
   return (
     <div data-testid="edit-post-modal" className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg p-6 space-y-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center">
           <h3 className="font-semibold text-lg">Editar Post</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
@@ -113,8 +127,11 @@ export function EditPostModal({ post, onClose }: Props) {
           )}
         </div>
 
+        {/* Caption — also used as YouTube title */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Caption</label>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            {youtubeSelected ? 'Caption / Título YouTube' : 'Caption'}
+          </label>
           <textarea
             rows={4}
             value={content}
@@ -122,8 +139,43 @@ export function EditPostModal({ post, onClose }: Props) {
             disabled={!canEdit}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 focus:outline-none focus:border-indigo-500 resize-none disabled:opacity-50"
           />
+          {youtubeSelected && content.length > 100 && (
+            <p className="text-xs text-yellow-400 mt-0.5">El título de YouTube se recortará a 100 caracteres</p>
+          )}
         </div>
 
+        {/* YouTube extras */}
+        {youtubeSelected && canEdit && (
+          <div className="p-3 bg-red-950/20 border border-red-900/40 rounded-xl space-y-3">
+            <p className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+              YouTube (extras opcionales)
+            </p>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Descripción</label>
+              <textarea
+                rows={2}
+                maxLength={5000}
+                placeholder="Descripción del video..."
+                value={ytDescription}
+                onChange={e => setYtDescription(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Tags (separados por coma)</label>
+              <input
+                type="text"
+                placeholder="shorts, tutorial, vlog"
+                value={ytTags}
+                onChange={e => setYtTags(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Date */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">Fecha y hora</label>
           <input
@@ -135,6 +187,7 @@ export function EditPostModal({ post, onClose }: Props) {
           />
         </div>
 
+        {/* Platforms */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Plataformas</label>
           <div className="flex flex-wrap gap-2">

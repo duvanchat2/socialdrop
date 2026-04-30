@@ -8,11 +8,17 @@ import { compressVideo, compressImage } from '@/lib/compressMedia';
 import { toast } from 'sonner';
 import { X, Upload, Loader2, Film, Image as ImageIcon, CheckCircle2, AlertCircle } from 'lucide-react';
 
+const PLATFORM_OPTIONS = [
+  { id: 'INSTAGRAM', label: 'IG',       color: '#E1306C' },
+  { id: 'TIKTOK',    label: 'TikTok',   color: '#000000' },
+  { id: 'FACEBOOK',  label: 'FB',       color: '#1877F2' },
+  { id: 'TWITTER',   label: 'X',        color: '#1DA1F2' },
+  { id: 'YOUTUBE',   label: 'YouTube',  color: '#FF0000' },
+];
+
 interface Props {
   date: Date | null;
   initialFiles?: File[];
-  /** Platform IDs already selected in the calendar — used to show YouTube fields */
-  platforms?: string[];
   onClose: () => void;
 }
 
@@ -28,17 +34,25 @@ interface FileEntry {
   uploadedUrl?: string;
   uploadedFileName?: string;
   error?: string;
+  caption: string;
+  ytDescription: string;
+  ytTags: string;
 }
 
-export function QuickUploadModal({ date, initialFiles = [], platforms = [], onClose }: Props) {
+export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
-  const [caption, setCaption] = useState('');
-  const [ytDescription, setYtDescription] = useState('');
-  const [ytTags, setYtTags] = useState('');
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
 
-  const youtubeSelected = platforms.includes('YOUTUBE');
+  const hasSocial  = selectedPlatforms.some(p => p !== 'YOUTUBE');
+  const hasYoutube = selectedPlatforms.includes('YOUTUBE');
+
+  const togglePlatform = (id: string) => {
+    setSelectedPlatforms(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   const createPost = useMutation({
     mutationFn: (data: object) =>
@@ -61,10 +75,9 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
 
     setEntries((prev) => [
       ...prev,
-      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: 'compressing', progress: 0 },
+      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: 'compressing', progress: 0, caption: '', ytDescription: '', ytTags: '' },
     ]);
 
-    // Thumbnail
     try {
       if (isVideo) {
         const meta = await getVideoMeta(file);
@@ -74,7 +87,6 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
       }
     } catch { /* non-critical */ }
 
-    // Compress → upload
     try {
       let compressed: File;
       if (isVideo) {
@@ -83,16 +95,14 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
         compressed = await compressImage(file);
       }
       updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
-
       const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
-
       updateEntry(id, { status: 'done', progress: 100, uploadedUrl: result.url, uploadedFileName: result.fileName });
     } catch (err) {
       updateEntry(id, { status: 'error', error: (err as Error).message });
     }
   }, [updateEntry]);
 
-  const handleFiles = useCallback(async (list: FileList | File[]) => {
+  const handleFiles = useCallback((list: FileList | File[]) => {
     Array.from(list).forEach(processFile);
   }, [processFile]);
 
@@ -102,29 +112,31 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   if (!date) return null;
 
   const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
-  const readyUrls = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
+  const readyUrls    = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
 
   const handleSave = () => {
+    const first = entries[0];
+    const text  = first?.caption || '(Borrador sin contenido)';
     const scheduledAt = new Date(date);
     scheduledAt.setHours(9, 0, 0, 0);
-    const text = caption || '(Borrador sin contenido)';
     createPost.mutate({
       content: text,
       scheduledAt: scheduledAt.toISOString(),
-      platforms: [],
+      platforms: selectedPlatforms,
       status: 'DRAFT',
       mediaUrls: readyUrls,
-      ...(youtubeSelected && {
+      ...(hasYoutube && {
         youtubeTitle: text.slice(0, 100),
-        youtubeDescription: ytDescription || undefined,
-        youtubeTags: ytTags || undefined,
+        youtubeDescription: first?.ytDescription || undefined,
+        youtubeTags: first?.ytTags || undefined,
       }),
     });
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-semibold text-lg">Nuevo borrador</h3>
@@ -135,48 +147,27 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
         </div>
 
+        {/* Platform selector */}
         <div>
-          <textarea
-            rows={3}
-            placeholder={youtubeSelected ? 'Caption / Título YouTube (opcional)' : 'Caption (opcional)'}
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-indigo-500 resize-none"
-          />
-          {youtubeSelected && (
-            <p className="text-[10px] text-gray-500 mt-0.5">
-              Este texto se usará como título en YouTube
-              {caption.length > 100 && <span className="text-yellow-400 ml-1">(se recortará a 100 chars)</span>}
-            </p>
-          )}
-        </div>
-
-        {/* YouTube extras */}
-        {youtubeSelected && (
-          <div className="space-y-2">
-            <div>
-              <label className="text-[10px] text-gray-500 mb-0.5 block">Descripción YouTube (opcional)</label>
-              <textarea
-                rows={2}
-                maxLength={5000}
-                placeholder="Descripción del video..."
-                value={ytDescription}
-                onChange={(e) => setYtDescription(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-gray-500 mb-0.5 block">Tags (separados por coma)</label>
-              <input
-                type="text"
-                placeholder="shorts, tutorial, vlog"
-                value={ytTags}
-                onChange={(e) => setYtTags(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
+          <p className="text-xs text-gray-500 mb-2">Plataformas</p>
+          <div className="flex flex-wrap gap-1.5">
+            {PLATFORM_OPTIONS.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => togglePlatform(p.id)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                  selectedPlatforms.includes(p.id)
+                    ? 'border-indigo-500 bg-indigo-950 text-white'
+                    : 'border-gray-700 bg-gray-800 text-gray-400'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
+                {p.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* Upload zone */}
         <div
@@ -198,21 +189,29 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
           </div>
         </div>
 
-        {/* File list */}
+        {/* File list with per-file captions */}
         {entries.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {entries.map((e) => (
-              <FileRow key={e.id} entry={e} onRemove={() => {
-                setEntries((prev) => {
-                  const found = prev.find((x) => x.id === e.id);
-                  if (found?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(found.thumbnail);
-                  return prev.filter((x) => x.id !== e.id);
-                });
-              }} />
+              <FileRow
+                key={e.id}
+                entry={e}
+                hasSocial={hasSocial}
+                hasYoutube={hasYoutube}
+                onUpdate={(patch) => updateEntry(e.id, patch)}
+                onRemove={() => {
+                  setEntries((prev) => {
+                    const found = prev.find((x) => x.id === e.id);
+                    if (found?.thumbnail?.startsWith('blob:')) URL.revokeObjectURL(found.thumbnail);
+                    return prev.filter((x) => x.id !== e.id);
+                  });
+                }}
+              />
             ))}
           </div>
         )}
 
+        {/* Actions */}
         <div className="flex gap-2 justify-end pt-1">
           <button onClick={onClose} className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200">
             Cancelar
@@ -230,55 +229,115 @@ export function QuickUploadModal({ date, initialFiles = [], platforms = [], onCl
   );
 }
 
-/* ─── FileRow ── */
-function FileRow({ entry: e, onRemove }: { entry: FileEntry; onRemove: () => void }) {
-  const isVideo = e.originalFile.type.startsWith('video/');
+/* ─── FileRow ──────────────────────────────────────────────────────── */
+interface FileRowProps {
+  entry: FileEntry;
+  hasSocial: boolean;
+  hasYoutube: boolean;
+  onUpdate: (patch: Partial<FileEntry>) => void;
+  onRemove: () => void;
+}
+
+function FileRow({ entry: e, hasSocial, hasYoutube, onUpdate, onRemove }: FileRowProps) {
+  const isVideo    = e.originalFile.type.startsWith('video/');
+  const showFields = hasSocial || hasYoutube;
 
   return (
-    <div className="flex gap-2 items-center bg-gray-800 rounded-lg p-2">
-      <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
-        {e.thumbnail ? (
-          <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            {isVideo ? <Film size={16} /> : <ImageIcon size={16} />}
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
-        <p className="text-[10px] text-gray-500">
-          {fmtSize(e.originalSize)}
-          {e.compressedSize != null && e.compressedSize < e.originalSize && (
-            <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+    <div className="bg-gray-800 rounded-xl p-3 space-y-2">
+      {/* File info */}
+      <div className="flex gap-2 items-center">
+        <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
+          {e.thumbnail ? (
+            <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              {isVideo ? <Film size={16} /> : <ImageIcon size={16} />}
+            </div>
           )}
-        </p>
-        {e.status === 'compressing' && (
-          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-            <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
+          <p className="text-[10px] text-gray-500">
+            {fmtSize(e.originalSize)}
+            {e.compressedSize != null && e.compressedSize < e.originalSize && (
+              <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+            )}
           </p>
-        )}
-        {e.status === 'uploading' && (
-          <p className="text-[10px] text-gray-400 flex items-center gap-1">
-            <Loader2 className="animate-spin" size={9} />Subiendo… {e.progress}%
-          </p>
-        )}
-        {e.status === 'done' && (
-          <p className="text-[10px] text-green-400 flex items-center gap-1">
-            <CheckCircle2 size={9} />Subido
-          </p>
-        )}
-        {e.status === 'error' && (
-          <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">
-            <AlertCircle size={9} />{e.error}
-          </p>
-        )}
+          {e.status === 'compressing' && (
+            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+              <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
+            </p>
+          )}
+          {e.status === 'uploading' && (
+            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+              <Loader2 className="animate-spin" size={9} />Subiendo… {e.progress}%
+            </p>
+          )}
+          {e.status === 'done' && (
+            <p className="text-[10px] text-green-400 flex items-center gap-1">
+              <CheckCircle2 size={9} />Subido
+            </p>
+          )}
+          {e.status === 'error' && (
+            <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">
+              <AlertCircle size={9} />{e.error}
+            </p>
+          )}
+        </div>
+
+        <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
+          <X size={12} />
+        </button>
       </div>
 
-      <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
-        <X size={12} />
-      </button>
+      {/* Caption fields */}
+      {showFields && (
+        <div className="space-y-2 pt-1 border-t border-gray-700">
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5 block">
+              {hasYoutube ? 'Caption / Título YouTube' : 'Caption'}
+            </label>
+            <textarea
+              rows={2}
+              placeholder={hasYoutube ? 'Caption o título del video…' : 'Caption…'}
+              value={e.caption}
+              onChange={(ev) => onUpdate({ caption: ev.target.value })}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 resize-none"
+            />
+          </div>
+
+          {hasYoutube && (
+            <>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5 block">
+                  Descripción{hasSocial ? ' (YT + redes)' : ' YouTube'} <span className="normal-case text-gray-600">(opcional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  maxLength={5000}
+                  placeholder="Descripción del video…"
+                  value={e.ytDescription}
+                  onChange={(ev) => onUpdate({ ytDescription: ev.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-red-500/60 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5 block">
+                  Tags YouTube <span className="normal-case text-gray-600">(separados por coma)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="shorts, tutorial, vlog"
+                  value={e.ytTags}
+                  onChange={(ev) => onUpdate({ ytTags: ev.target.value })}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-red-500/60"
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -288,7 +347,6 @@ function fmtSize(b: number) {
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// Runs handleFiles(initialFiles) only once on mount
 function useInitialUpload(initial: File[], handleFiles: (f: File[]) => void) {
   const ran = useRef(false);
   if (!ran.current && initial.length > 0) {
