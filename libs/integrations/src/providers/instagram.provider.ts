@@ -302,9 +302,10 @@ export class InstagramProvider extends SocialAbstract {
     let status = '';
     let pollAttempts = 0;
     const maxPollAttempts = 20;
+    // error_message is NOT a valid field for media containers (causes API error 100)
     const pollUrl =
       `${this.BASE_URL}/${containerData.id}` +
-      `?fields=status_code,status,error_message` +
+      `?fields=status_code,status` +
       `&access_token=${token}`;
 
     while (status !== 'FINISHED' && pollAttempts < maxPollAttempts) {
@@ -314,7 +315,7 @@ export class InstagramProvider extends SocialAbstract {
       // Raw fetch so we always see the full response body, even on 4xx
       let pollText = '';
       let pollHttpStatus = 0;
-      let statusData: { status_code?: string; status?: string; error_message?: string } = {};
+      let statusData: { status_code?: string; status?: string } = {};
       try {
         const pollRes = await fetch(pollUrl);
         pollHttpStatus = pollRes.status;
@@ -349,14 +350,11 @@ export class InstagramProvider extends SocialAbstract {
 
       status = statusData.status_code ?? '';
       this.logger.log(
-        `[Instagram] Poll ${pollAttempts} parsed: status_code="${status}" | ` +
-        `status="${statusData.status ?? 'n/a'}" | ` +
-        `error_message="${statusData.error_message || 'none'}"`,
+        `[Instagram] Poll ${pollAttempts} parsed: status_code="${status}" | status="${statusData.status ?? 'n/a'}"`,
       );
 
       if (status === 'ERROR') {
-        const errMsg = statusData.error_message || 'No error_message returned by Instagram';
-        throw new Error(`[Instagram] Reel processing failed — ${errMsg}`);
+        throw new Error(`[Instagram] Reel processing failed — Instagram returned ERROR status (no further detail available)`);
       }
     }
 
