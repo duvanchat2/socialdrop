@@ -57,4 +57,20 @@ export class CreatePostDto {
   @IsOptional()
   @IsIn(['POST', 'REEL', 'STORY'])
   instagramType?: 'POST' | 'REEL' | 'STORY';
+
+  /**
+   * Per-file metadata for multi-media posts.
+   * Index aligns with mediaUrls — filesMeta[0] applies to mediaUrls[0], etc.
+   * Used by the backend splitter to assign the correct caption and instagramType
+   * to each individual post when splitting multiple videos/images.
+   */
+  @IsOptional()
+  @IsArray()
+  filesMeta?: Array<{
+    caption?: string;
+    instagramType?: string;
+    youtubeTitle?: string;
+    youtubeTags?: string;
+    youtubeDescription?: string;
+  }>;
 }

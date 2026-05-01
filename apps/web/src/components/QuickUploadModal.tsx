@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { uploadFileXHR } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
-import { compressVideo, compressImage } from '@/lib/compressMedia';
+import { compressImage } from '@/lib/compressMedia';
 import { toast } from 'sonner';
 import { X, Upload, Loader2, Film, Image as ImageIcon, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -77,7 +77,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
 
     setEntries((prev) => [
       ...prev,
-      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: 'compressing', progress: 0, caption: '', ytDescription: '', ytTags: '' },
+      { id, originalFile: file, thumbnail: '', originalSize: file.size, status: isVideo ? 'uploading' : 'compressing', progress: 0, caption: '', ytDescription: '', ytTags: '' },
     ]);
 
     try {
@@ -90,15 +90,17 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
     } catch { /* non-critical */ }
 
     try {
-      let compressed: File;
       if (isVideo) {
-        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
+        // Upload original — no re-encoding, preserves full quality
+        updateEntry(id, { status: 'uploading', progress: 0 });
+        const result = await uploadFileXHR(file, (pct) => updateEntry(id, { progress: pct }));
+        updateEntry(id, { status: 'done', progress: 100, uploadedUrl: result.url, uploadedFileName: result.fileName });
       } else {
-        compressed = await compressImage(file);
+        const compressed = await compressImage(file);
+        updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
+        const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
+        updateEntry(id, { status: 'done', progress: 100, uploadedUrl: result.url, uploadedFileName: result.fileName });
       }
-      updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
-      const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
-      updateEntry(id, { status: 'done', progress: 100, uploadedUrl: result.url, uploadedFileName: result.fileName });
     } catch (err) {
       updateEntry(id, { status: 'error', error: (err as Error).message });
     }
@@ -211,7 +213,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
           <div className="flex flex-col items-center gap-1 text-gray-400">
             <Upload size={20} />
             <p className="text-sm">Haz clic o arrastra archivos</p>
-            <p className="text-xs text-gray-600">Los videos se comprimirán automáticamente</p>
+            <p className="text-xs text-gray-600">Imágenes y videos · Calidad original</p>
           </div>
         </div>
 

@@ -40,20 +40,28 @@ export class PostsService {
     if (!userId) throw new BadRequestException('userId is required');
 
     const needsSplit = dto.platforms?.some(p => SINGLE_VIDEO_PLATFORMS.has(p as string));
-    const videoUrls  = (dto.mediaUrls ?? []).filter(isVideo);
-    const imageUrls  = (dto.mediaUrls ?? []).filter(url => !isVideo(url));
+    const allUrls = dto.mediaUrls ?? [];
 
-    if (needsSplit && videoUrls.length > 1) {
+    if (needsSplit && allUrls.length > 1) {
       this.logger.log(
-        `Splitting ${videoUrls.length} videos into separate posts ` +
+        `Splitting ${allUrls.length} media files into individual posts ` +
         `(platforms: ${dto.platforms?.join(', ')})`,
       );
       const posts: object[] = [];
-      for (const videoUrl of videoUrls) {
-        posts.push(await this.createSingle(userId, { ...dto, mediaUrls: [videoUrl] }));
-      }
-      if (imageUrls.length > 0) {
-        posts.push(await this.createSingle(userId, { ...dto, mediaUrls: imageUrls }));
+      for (let i = 0; i < allUrls.length; i++) {
+        const url = allUrls[i];
+        const meta = dto.filesMeta?.[i];
+        posts.push(await this.createSingle(userId, {
+          ...dto,
+          // Per-file caption overrides top-level content
+          content: meta?.caption || dto.content,
+          mediaUrls: [url],
+          // Per-file instagramType; fallback: auto-detect from URL
+          instagramType: (meta?.instagramType as any) || (isVideo(url) ? 'REEL' : 'POST'),
+          ...(meta?.youtubeTitle       && { youtubeTitle:       meta.youtubeTitle }),
+          ...(meta?.youtubeTags        && { youtubeTags:        meta.youtubeTags }),
+          ...(meta?.youtubeDescription && { youtubeDescription: meta.youtubeDescription }),
+        }));
       }
       return posts;
     }

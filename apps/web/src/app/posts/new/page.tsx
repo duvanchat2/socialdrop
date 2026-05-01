@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { uploadFileXHR } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
-import { compressVideo, compressImage } from '@/lib/compressMedia';
+import { compressImage } from '@/lib/compressMedia';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
@@ -42,9 +42,13 @@ interface FileEntry {
   uploadedMediaType?: 'IMAGE' | 'VIDEO';
   error?: string;
   // Per-file captions
-  caption: string;       // social caption AND YouTube title (sliced to 100)
-  ytDescription: string; // YouTube description (also rich caption for social)
-  ytTags: string;        // YouTube tags
+  caption: string;
+  ytDescription: string;
+  ytTags: string;
+  // Per-file Instagram format (auto-detected, user can override)
+  instagramType: 'POST' | 'REEL' | 'STORY';
+  // Cross-post: also publish this file as a Story (in addition to primary type)
+  alsoAsStory: boolean;
 }
 
 const PLATFORM_ORDER = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'TWITTER', 'LINKEDIN', 'YOUTUBE'];
@@ -59,7 +63,6 @@ export default function NewPostPage() {
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [instagramType, setInstagramType] = useState<'POST' | 'REEL' | 'STORY'>('REEL');
 
   const userId = 'demo-user';
 
@@ -125,11 +128,15 @@ export default function NewPostPage() {
         originalFile: file,
         thumbnail: '',
         originalSize: file.size,
-        status: 'compressing',
+        // Videos skip compression → start directly as 'uploading'
+        status: isVideo ? 'uploading' : 'compressing',
         progress: 0,
         caption: '',
         ytDescription: '',
         ytTags: '',
+        // Auto-detect: videos → Reel, images → Post
+        instagramType: isVideo ? 'REEL' : 'POST',
+        alsoAsStory: false,
       },
     ]);
 
@@ -143,21 +150,28 @@ export default function NewPostPage() {
     } catch { /* non-critical */ }
 
     try {
-      let compressed: File;
       if (isVideo) {
-        compressed = await compressVideo(file, (pct) => updateEntry(id, { progress: pct }));
+        // Upload original — no re-encoding, preserves full quality
+        const result = await uploadFileXHR(file, (pct) => updateEntry(id, { progress: pct }));
+        updateEntry(id, {
+          status: 'done',
+          progress: 100,
+          uploadedUrl: result.url,
+          uploadedFileName: result.fileName,
+          uploadedMediaType: result.mediaType,
+        });
       } else {
-        compressed = await compressImage(file);
+        const compressed = await compressImage(file);
+        updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
+        const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
+        updateEntry(id, {
+          status: 'done',
+          progress: 100,
+          uploadedUrl: result.url,
+          uploadedFileName: result.fileName,
+          uploadedMediaType: result.mediaType,
+        });
       }
-      updateEntry(id, { compressedSize: compressed.size, status: 'uploading', progress: 0 });
-      const result = await uploadFileXHR(compressed, (pct) => updateEntry(id, { progress: pct }));
-      updateEntry(id, {
-        status: 'done',
-        progress: 100,
-        uploadedUrl: result.url,
-        uploadedFileName: result.fileName,
-        uploadedMediaType: result.mediaType,
-      });
     } catch (err) {
       updateEntry(id, { status: 'error', error: (err as Error).message });
     }
@@ -185,22 +199,95 @@ export default function NewPostPage() {
   const readyEntries  = fileEntries.filter((e) => e.status === 'done');
   const pendingCount  = fileEntries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
 
-  // Build payload using first file's captions (each file has its own caption stored)
-  const buildBasePayload = () => {
-    const first = fileEntries[0];
-    const content = first?.caption || '(Borrador sin contenido)';
+  /**
+   * Build one or more post payloads.
+   *
+   * When Instagram is selected, files are grouped by their per-file instagramType
+   * so each format (Reel / Post / Story) becomes a separate API call.
+   * Files with alsoAsStory=true generate an additional Story post.
+   * Non-Instagram platforms are attached to the first (or only) payload.
+   * filesMeta carries per-file caption / instagramType for the backend splitter.
+   */
+  const buildPayloads = (extraFields: object = {}) => {
     const hasInstagram = selectedPlatforms.includes('INSTAGRAM');
-    return {
-      content,
-      platforms: selectedPlatforms,
-      mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
-      ...(hasInstagram && { instagramType }),
-      ...(hasYoutube && first && {
-        youtubeTitle: content.slice(0, 100),
-        youtubeDescription: first.ytDescription || undefined,
-        youtubeTags: first.ytTags || undefined,
-      }),
-    };
+    const nonIgPlatforms = selectedPlatforms.filter(p => p !== 'INSTAGRAM');
+
+    if (!hasInstagram || readyEntries.length === 0) {
+      // No Instagram → single payload; backend will split videos per platform rules
+      const first = readyEntries[0] ?? fileEntries[0];
+      const content = first?.caption || '(Borrador sin contenido)';
+      const filesMeta = readyEntries.map(e => ({
+        caption: e.caption || undefined,
+        instagramType: e.instagramType,
+        ...(hasYoutube && {
+          youtubeTitle: e.caption.slice(0, 100) || undefined,
+          youtubeTags: e.ytTags || undefined,
+        }),
+      }));
+      return [{
+        content,
+        platforms: selectedPlatforms,
+        mediaUrls: readyEntries.map(f => f.uploadedUrl!),
+        filesMeta,
+        ...(hasYoutube && first && {
+          youtubeTitle: content.slice(0, 100),
+          youtubeDescription: first.ytDescription || undefined,
+          youtubeTags: first.ytTags || undefined,
+        }),
+        ...extraFields,
+      }];
+    }
+
+    const payloads: object[] = [];
+
+    // Group ready entries by instagramType
+    const byType = new Map<string, typeof readyEntries>();
+    for (const entry of readyEntries) {
+      const t = entry.instagramType;
+      if (!byType.has(t)) byType.set(t, []);
+      byType.get(t)!.push(entry);
+    }
+
+    let firstGroup = true;
+    for (const [type, entries] of byType) {
+      const first = entries[0];
+      const content = first?.caption || '(Borrador sin contenido)';
+      payloads.push({
+        content,
+        // Non-IG platforms only attached to first group to avoid duplicates
+        platforms: ['INSTAGRAM', ...(firstGroup ? nonIgPlatforms : [])],
+        mediaUrls: entries.map(f => f.uploadedUrl!),
+        instagramType: type,
+        filesMeta: entries.map(e => ({
+          caption: e.caption || undefined,
+          instagramType: e.instagramType,
+        })),
+        ...(hasYoutube && firstGroup && first && {
+          youtubeTitle: content.slice(0, 100),
+          youtubeDescription: first.ytDescription || undefined,
+          youtubeTags: first.ytTags || undefined,
+        }),
+        ...extraFields,
+      });
+      firstGroup = false;
+    }
+
+    // "También como Historia" — extra Story post per file
+    for (const entry of readyEntries) {
+      if (entry.alsoAsStory && entry.instagramType !== 'STORY') {
+        const content = entry.caption || '(Borrador sin contenido)';
+        payloads.push({
+          content,
+          platforms: ['INSTAGRAM'],
+          mediaUrls: [entry.uploadedUrl!],
+          instagramType: 'STORY',
+          filesMeta: [{ caption: entry.caption || undefined, instagramType: 'STORY' as const }],
+          ...extraFields,
+        });
+      }
+    }
+
+    return payloads;
   };
 
   const createPost = useMutation({
@@ -222,7 +309,8 @@ export default function NewPostPage() {
   const handlePublishNow = async () => {
     if (!commonGuards()) return;
     try {
-      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString() });
+      const payloads = buildPayloads({ scheduledAt: new Date().toISOString() });
+      for (const payload of payloads) await createPost.mutateAsync(payload);
       toast.success('Publicando ahora…');
       qc.invalidateQueries({ queryKey: ['posts'] });
       qc.invalidateQueries({ queryKey: ['posts-all'] });
@@ -233,14 +321,18 @@ export default function NewPostPage() {
   const handleAddToQueue = async () => {
     if (!commonGuards()) return;
     try {
-      const post = await createPost.mutateAsync({
-        ...buildBasePayload(),
-        scheduledAt: new Date().toISOString(),
-        status: 'DRAFT',
-      }) as { id: string };
-      const result = await assignToQueue.mutateAsync(post.id) as { slot: { dayOfWeek: number; hour: number; minute: number } };
-      const { slot } = result;
-      toast.success(`Añadido a la cola (día ${slot.dayOfWeek} - ${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')})`);
+      const payloads = buildPayloads({ scheduledAt: new Date().toISOString(), status: 'DRAFT' });
+      // Create all posts then assign each to the queue
+      const created = await Promise.all(payloads.map(p => createPost.mutateAsync(p)));
+      // Backend may return a single post or an array of posts (auto-split)
+      const ids = (created as any[]).flat().map((p: any) => p.id).filter(Boolean) as string[];
+      const results = await Promise.all(ids.map(id => assignToQueue.mutateAsync(id)));
+      const firstSlot = (results[0] as any)?.slot;
+      if (firstSlot) {
+        toast.success(`Añadido a la cola (día ${firstSlot.dayOfWeek} - ${String(firstSlot.hour).padStart(2, '0')}:${String(firstSlot.minute).padStart(2, '0')})`);
+      } else {
+        toast.success('Posts añadidos a la cola');
+      }
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
@@ -249,7 +341,8 @@ export default function NewPostPage() {
   const handleSaveDraft = async () => {
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return; }
     try {
-      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date().toISOString(), status: 'DRAFT' });
+      const payloads = buildPayloads({ scheduledAt: new Date().toISOString(), status: 'DRAFT' });
+      for (const payload of payloads) await createPost.mutateAsync(payload);
       toast.success('Borrador guardado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
@@ -260,7 +353,8 @@ export default function NewPostPage() {
     if (!commonGuards()) return;
     if (!scheduledAt) { toast.error('Elige fecha y hora'); return; }
     try {
-      await createPost.mutateAsync({ ...buildBasePayload(), scheduledAt: new Date(scheduledAt).toISOString() });
+      const payloads = buildPayloads({ scheduledAt: new Date(scheduledAt).toISOString() });
+      for (const payload of payloads) await createPost.mutateAsync(payload);
       toast.success('Post programado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
       router.push('/calendar');
@@ -314,7 +408,7 @@ export default function NewPostPage() {
             <div className="flex flex-col items-center gap-1 text-gray-400">
               <Upload size={22} />
               <p className="text-sm">Arrastra o haz clic para subir</p>
-              <p className="text-xs text-gray-600">Imágenes y videos · Los videos se comprimirán</p>
+              <p className="text-xs text-gray-600">Imágenes y videos · Calidad original</p>
             </div>
           </div>
         )}
@@ -328,6 +422,7 @@ export default function NewPostPage() {
                 entry={e}
                 hasSocial={hasSocial}
                 hasYoutube={hasYoutube}
+                hasInstagram={selectedPlatforms.includes('INSTAGRAM')}
                 onRemove={() => removeFile(e.id)}
                 onUpdate={(patch) => updateEntry(e.id, patch)}
               />
@@ -405,37 +500,7 @@ export default function NewPostPage() {
           ))}
         </div>
 
-        {/* Instagram type selector — shown once Instagram account is selected */}
-        {selectedPlatforms.includes('INSTAGRAM') && (
-          <div className="mt-4 p-4 bg-gray-950 border border-pink-800/50 rounded-xl">
-            <p className="text-sm font-semibold text-pink-400 mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />
-              Formato en Instagram
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                { type: 'POST',  label: 'Post',    emoji: '📷', desc: 'Imagen o carrusel en el feed' },
-                { type: 'REEL',  label: 'Reel',    emoji: '🎬', desc: 'Video corto en el feed' },
-                { type: 'STORY', label: 'Historia', emoji: '⏱', desc: 'Desaparece en 24h' },
-              ] as const).map(({ type, label, emoji, desc }) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setInstagramType(type)}
-                  className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl border transition-all text-center ${
-                    instagramType === type
-                      ? 'bg-pink-600/20 border-pink-500 text-white'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-200'
-                  }`}
-                >
-                  <span className="text-xl">{emoji}</span>
-                  <span className="text-xs font-semibold">{label}</span>
-                  <span className="text-[10px] text-gray-500 leading-tight">{desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Instagram type is now set per-file in each FileCard */}
       </section>
 
       {/* Actions */}
@@ -492,13 +557,20 @@ interface FileCardProps {
   entry: FileEntry;
   hasSocial: boolean;
   hasYoutube: boolean;
+  hasInstagram: boolean;
   onRemove: () => void;
   onUpdate: (patch: Partial<FileEntry>) => void;
 }
 
-function FileCard({ entry: e, hasSocial, hasYoutube, onRemove, onUpdate }: FileCardProps) {
+const IG_TYPES = [
+  { value: 'REEL'  as const, label: 'Reel',     emoji: '🎬' },
+  { value: 'POST'  as const, label: 'Post',      emoji: '📷' },
+  { value: 'STORY' as const, label: 'Historia',  emoji: '⏱' },
+];
+
+function FileCard({ entry: e, hasSocial, hasYoutube, hasInstagram, onRemove, onUpdate }: FileCardProps) {
   const isVideo = e.originalFile.type.startsWith('video/');
-  const showFields = hasSocial || hasYoutube;
+  const showFields = hasSocial || hasYoutube || hasInstagram;
 
   return (
     <div className="bg-gray-950 border border-gray-800 rounded-xl p-3 space-y-3">
@@ -544,7 +616,42 @@ function FileCard({ entry: e, hasSocial, hasYoutube, onRemove, onUpdate }: FileC
         </div>
       </div>
 
-      {/* Caption fields — always show so user can type while compressing */}
+      {/* Per-file Instagram type selector */}
+      {hasInstagram && (
+        <div className="pt-2 border-t border-gray-800 space-y-2">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide">Tipo en Instagram</p>
+          <div className="flex gap-1.5">
+            {IG_TYPES.map(({ value, label, emoji }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => onUpdate({ instagramType: value })}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  e.instagramType === value
+                    ? 'bg-pink-500/20 border-pink-500 text-pink-300'
+                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                {emoji} {label}
+              </button>
+            ))}
+          </div>
+          {/* "También como Historia" — only for Reel / Post content */}
+          {e.instagramType !== 'STORY' && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={e.alsoAsStory}
+                onChange={(ev) => onUpdate({ alsoAsStory: ev.target.checked })}
+                className="rounded border-gray-600 bg-gray-800 text-pink-500 focus:ring-pink-500"
+              />
+              <span className="text-xs text-gray-400">También publicar como Historia</span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Caption fields — always show so user can type while uploading */}
       {showFields && (
         <div className="space-y-2 pt-1 border-t border-gray-800">
           {/* Caption / Title */}
