@@ -90,7 +90,10 @@ export class InstagramProvider extends SocialAbstract {
       );
     }
 
-    this.logger.log(`[Instagram] ◄ ${step} | HTTP ${res.status} | id=${(data as any).id ?? 'n/a'}`);
+    // Log full raw success body so poll fields (status_code, error_message, etc.) are visible
+    this.logger.log(
+      `[Instagram] ◄ ${step} | HTTP ${res.status} | body: ${responseText.slice(0, 800)}`,
+    );
     return data;
   }
 
@@ -299,20 +302,60 @@ export class InstagramProvider extends SocialAbstract {
     let status = '';
     let pollAttempts = 0;
     const maxPollAttempts = 20;
+    const pollUrl =
+      `${this.BASE_URL}/${containerData.id}` +
+      `?fields=status_code,status,error_message` +
+      `&access_token=${token}`;
+
     while (status !== 'FINISHED' && pollAttempts < maxPollAttempts) {
       await new Promise(r => setTimeout(r, 5000));
-      const statusData = await this.igFetch(
-        `${this.BASE_URL}/${containerData.id}?fields=status_code,status,error_message&access_token=${token}`,
-        { method: 'GET' },
-        `poll status attempt ${pollAttempts + 1}`,
-      ) as { status_code?: string; status?: string; error_message?: string };
-      status = (statusData as any).status_code ?? '';
       pollAttempts++;
+
+      // Raw fetch so we always see the full response body, even on 4xx
+      let pollText = '';
+      let pollHttpStatus = 0;
+      let statusData: { status_code?: string; status?: string; error_message?: string } = {};
+      try {
+        const pollRes = await fetch(pollUrl);
+        pollHttpStatus = pollRes.status;
+        pollText = await pollRes.text();
+        this.logger.log(
+          `[Instagram] Poll ${pollAttempts}/${maxPollAttempts} ` +
+          `HTTP ${pollHttpStatus} | raw: ${pollText.slice(0, 800)}`,
+        );
+        if (!pollRes.ok) {
+          // Parse for structured error if possible
+          let errMsg = `HTTP ${pollHttpStatus}: ${pollText.slice(0, 300)}`;
+          try {
+            const errJson = JSON.parse(pollText);
+            if (errJson.error) {
+              const e = errJson.error;
+              this.logger.error(
+                `[Instagram] Poll error ► code=${e.code} | subcode=${e.error_subcode ?? 'n/a'} | ` +
+                `type=${e.type} | message="${e.message}" | fbtrace_id=${e.fbtrace_id ?? 'n/a'}`,
+              );
+              errMsg = `code=${e.code} subcode=${e.error_subcode ?? 'n/a'}: ${e.message}`;
+              if (e.code === 190 || e.code === 102) throw new RefreshTokenError(`[Instagram] Poll token error: ${errMsg}`);
+            }
+          } catch (parseErr) { if (parseErr instanceof RefreshTokenError) throw parseErr; }
+          throw new Error(`[Instagram] Poll failed — ${errMsg}`);
+        }
+        statusData = JSON.parse(pollText);
+      } catch (fetchErr) {
+        if (fetchErr instanceof RefreshTokenError) throw fetchErr;
+        this.logger.error(`[Instagram] Poll ${pollAttempts} fetch threw: ${(fetchErr as Error).message}`);
+        throw fetchErr;
+      }
+
+      status = statusData.status_code ?? '';
       this.logger.log(
-        `[Instagram] Reel status poll ${pollAttempts}: status_code=${status} | status=${(statusData as any).status ?? 'n/a'} | error=${(statusData as any).error_message || 'none'}`,
+        `[Instagram] Poll ${pollAttempts} parsed: status_code="${status}" | ` +
+        `status="${statusData.status ?? 'n/a'}" | ` +
+        `error_message="${statusData.error_message || 'none'}"`,
       );
+
       if (status === 'ERROR') {
-        const errMsg = (statusData as any).error_message || 'No error_message returned by Instagram';
+        const errMsg = statusData.error_message || 'No error_message returned by Instagram';
         throw new Error(`[Instagram] Reel processing failed — ${errMsg}`);
       }
     }
