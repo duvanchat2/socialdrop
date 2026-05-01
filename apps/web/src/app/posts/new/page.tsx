@@ -361,37 +361,6 @@ export default function NewPostPage() {
         </div>
         <p className="text-xs text-gray-500 mb-3">Elige en qué cuentas publicar.</p>
 
-        {/* Instagram type selector — only when Instagram is selected */}
-        {selectedPlatforms.includes('INSTAGRAM') && (
-          <div className="mb-4 p-3 bg-gray-950 border border-pink-900/40 rounded-xl">
-            <p className="text-xs text-pink-400 font-semibold mb-2 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />
-              Tipo de publicación en Instagram
-            </p>
-            <div className="flex gap-2">
-              {(['POST', 'REEL', 'STORY'] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setInstagramType(type)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                    instagramType === type
-                      ? 'bg-pink-600 border-pink-500 text-white'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  {type === 'POST' ? '📷 Post' : type === 'REEL' ? '🎬 Reel' : '⏱ Historia'}
-                </button>
-              ))}
-            </div>
-            {instagramType === 'STORY' && (
-              <p className="text-[10px] text-gray-500 mt-2">
-                Las historias desaparecen después de 24h. Para videos, máximo 60 segundos.
-              </p>
-            )}
-          </div>
-        )}
-
         {groupedByPlatform.length === 0 && (
           <p className="text-sm text-gray-500 py-6 text-center">
             No hay cuentas conectadas.{' '}
@@ -435,6 +404,38 @@ export default function NewPostPage() {
             </div>
           ))}
         </div>
+
+        {/* Instagram type selector — shown once Instagram account is selected */}
+        {selectedPlatforms.includes('INSTAGRAM') && (
+          <div className="mt-4 p-4 bg-gray-950 border border-pink-800/50 rounded-xl">
+            <p className="text-sm font-semibold text-pink-400 mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />
+              Formato en Instagram
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { type: 'POST',  label: 'Post',    emoji: '📷', desc: 'Imagen o carrusel en el feed' },
+                { type: 'REEL',  label: 'Reel',    emoji: '🎬', desc: 'Video corto en el feed' },
+                { type: 'STORY', label: 'Historia', emoji: '⏱', desc: 'Desaparece en 24h' },
+              ] as const).map(({ type, label, emoji, desc }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setInstagramType(type)}
+                  className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl border transition-all text-center ${
+                    instagramType === type
+                      ? 'bg-pink-600/20 border-pink-500 text-white'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-200'
+                  }`}
+                >
+                  <span className="text-xl">{emoji}</span>
+                  <span className="text-xs font-semibold">{label}</span>
+                  <span className="text-[10px] text-gray-500 leading-tight">{desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Actions */}
