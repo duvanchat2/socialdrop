@@ -28,31 +28,69 @@ export class InstagramProvider extends SocialAbstract {
    * an `error` field (Meta Graph API returns HTTP 200 even for errors sometimes).
    */
   private async igFetch(url: string, options: RequestInit = {}, step = 'request'): Promise<IgApiResponse> {
+    // ── Full request log ─────────────────────────────────────────────────
+    const method = (options.method ?? 'GET').toUpperCase();
+    const safeBody = options.body ? String(options.body).substring(0, 500) : '(none)';
+    // Strip access_token value from URL for log readability
+    const safeUrl = url.replace(/access_token=[^&]+/, 'access_token=***');
+    this.logger.log(
+      `[Instagram] ► ${step} | ${method} ${safeUrl} | body: ${safeBody}`,
+    );
+
     const res = await this.throttledFetch(url, options);
-    const body = await res.text();
+    const responseText = await res.text();
+
+    // ── Full response log on non-2xx ─────────────────────────────────────
+    if (!res.ok) {
+      this.logger.error(
+        `[Instagram] ✗ ${step} | HTTP ${res.status} | raw: ${responseText.slice(0, 1000)}`,
+      );
+      let data: IgApiResponse = {};
+      try { data = JSON.parse(responseText) as IgApiResponse; } catch { /* non-JSON */ }
+
+      if (data.error) {
+        const e = data.error;
+        this.logger.error(
+          `[Instagram] API Error ► code=${e.code} | subcode=${(e as any).error_subcode ?? 'n/a'} | ` +
+          `type=${e.type} | message="${e.message}" | fbtrace_id=${e.fbtrace_id ?? 'n/a'}`,
+        );
+        if (res.status === 401 || e.code === 190) {
+          throw new RefreshTokenError(`[Instagram] ${step} token error ${e.code}: ${e.message}`);
+        }
+        throw new Error(
+          `[Instagram] ${step} HTTP ${res.status} code=${e.code} subcode=${(e as any).error_subcode ?? 'n/a'}: ${e.message}`,
+        );
+      }
+
+      const msg = responseText.slice(0, 300);
+      if (res.status === 401) throw new RefreshTokenError(`[Instagram] ${step} HTTP 401: ${msg}`);
+      throw new Error(`[Instagram] ${step} HTTP ${res.status}: ${msg}`);
+    }
+
+    // ── Parse success body ───────────────────────────────────────────────
     let data: IgApiResponse;
     try {
-      data = JSON.parse(body) as IgApiResponse;
+      data = JSON.parse(responseText) as IgApiResponse;
     } catch {
-      throw new Error(`[Instagram] ${step}: non-JSON response (HTTP ${res.status}): ${body.slice(0, 200)}`);
+      throw new Error(`[Instagram] ${step}: non-JSON response (HTTP ${res.status}): ${responseText.slice(0, 200)}`);
     }
 
-    if (!res.ok) {
-      const msg = data.error?.message ?? body.slice(0, 200);
-      const code = data.error?.code ?? res.status;
-      const err = new Error(`[Instagram] ${step} HTTP ${res.status} (code ${code}): ${msg}`);
-      if (res.status === 401 || code === 190) throw new RefreshTokenError(err.message);
-      throw err;
-    }
-
+    // Meta sometimes returns HTTP 200 with an error payload
     if (data.error) {
-      const { message, code, type } = data.error;
-      const errMsg = `[Instagram] ${step} API error ${code} (${type}): ${message}`;
-      this.logger.error(errMsg);
-      if (code === 190 || code === 102) throw new RefreshTokenError(errMsg);
-      throw new Error(errMsg);
+      const e = data.error;
+      this.logger.error(
+        `[Instagram] API Error (200 body) ► code=${e.code} | subcode=${(e as any).error_subcode ?? 'n/a'} | ` +
+        `type=${e.type} | message="${e.message}" | fbtrace_id=${e.fbtrace_id ?? 'n/a'}`,
+      );
+      if (e.code === 190 || e.code === 102) {
+        throw new RefreshTokenError(`[Instagram] ${step} token error ${e.code}: ${e.message}`);
+      }
+      throw new Error(
+        `[Instagram] ${step} API error code=${e.code} subcode=${(e as any).error_subcode ?? 'n/a'}: ${e.message}`,
+      );
     }
 
+    this.logger.log(`[Instagram] ◄ ${step} | HTTP ${res.status} | id=${(data as any).id ?? 'n/a'}`);
     return data;
   }
 
