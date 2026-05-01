@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'change-this-secret';
 const COOKIE_NAME = 'sd_sess';
-const PUBLIC_PATHS = ['/login', '/auth'];
+const PUBLIC_PATHS = ['/login', '/auth', '/privacy', '/terms', '/support', '/landing'];
 
 async function computeToken(): Promise<string> {
   const encoder = new TextEncoder();

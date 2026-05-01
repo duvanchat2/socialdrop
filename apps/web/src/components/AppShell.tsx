@@ -126,8 +126,13 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
         <nav className="flex-1 p-3 space-y-1">
           <NavLinks onClose={onClose} />
         </nav>
-        <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400 dark:text-gray-600">
-          v1.0.0
+        <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400 dark:text-gray-600 space-y-2">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Privacidad</Link>
+            <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Términos</Link>
+            <Link href="/support" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Soporte</Link>
+          </div>
+          <p>v1.0.0</p>
         </div>
       </aside>
     </>

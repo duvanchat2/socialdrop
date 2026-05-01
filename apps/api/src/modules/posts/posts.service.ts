@@ -12,6 +12,13 @@ interface FindAllOptions {
   limit?: number;
 }
 
+/** Platforms that only support ONE video per post */
+const SINGLE_VIDEO_PLATFORMS = new Set(['INSTAGRAM', 'TIKTOK', 'YOUTUBE']);
+
+function isVideo(url: string): boolean {
+  return /\.(mp4|mov|avi|webm)(\?|$)/i.test(url);
+}
+
 @Injectable()
 export class PostsService {
   private readonly logger = new Logger(PostsService.name);
@@ -21,9 +28,40 @@ export class PostsService {
     @InjectQueue('post-scheduler') private readonly schedulerQueue: Queue,
   ) {}
 
-  async create(userId: string, dto: CreatePostDto) {
+  /**
+   * Create one or more posts from a DTO.
+   *
+   * If the selected platforms include Instagram / TikTok / YouTube AND the
+   * caller sends multiple video URLs, we automatically split them: one post
+   * per video (so each platform receives a single video as required by their
+   * APIs).  Images are bundled together in a separate post (carousel).
+   */
+  async create(userId: string, dto: CreatePostDto): Promise<object | object[]> {
     if (!userId) throw new BadRequestException('userId is required');
 
+    const needsSplit = dto.platforms?.some(p => SINGLE_VIDEO_PLATFORMS.has(p as string));
+    const videoUrls  = (dto.mediaUrls ?? []).filter(isVideo);
+    const imageUrls  = (dto.mediaUrls ?? []).filter(url => !isVideo(url));
+
+    if (needsSplit && videoUrls.length > 1) {
+      this.logger.log(
+        `Splitting ${videoUrls.length} videos into separate posts ` +
+        `(platforms: ${dto.platforms?.join(', ')})`,
+      );
+      const posts: object[] = [];
+      for (const videoUrl of videoUrls) {
+        posts.push(await this.createSingle(userId, { ...dto, mediaUrls: [videoUrl] }));
+      }
+      if (imageUrls.length > 0) {
+        posts.push(await this.createSingle(userId, { ...dto, mediaUrls: imageUrls }));
+      }
+      return posts;
+    }
+
+    return this.createSingle(userId, dto);
+  }
+
+  private async createSingle(userId: string, dto: CreatePostDto) {
     const integrations = await this.prisma.integration.findMany({
       where: { userId, platform: { in: dto.platforms as any[] } },
     });
@@ -32,10 +70,10 @@ export class PostsService {
     const youtubeMetadata = (dto.youtubeTitle || dto.youtubeDescription || dto.youtubeTags)
       ? {
           youtube: {
-            title: dto.youtubeTitle ?? undefined,
+            title:       dto.youtubeTitle       ?? undefined,
             description: dto.youtubeDescription ?? undefined,
             tags: dto.youtubeTags
-              ? dto.youtubeTags.split(',').map((t) => t.trim()).filter(Boolean)
+              ? dto.youtubeTags.split(',').map(t => t.trim()).filter(Boolean)
               : undefined,
           },
         }
@@ -44,41 +82,33 @@ export class PostsService {
     const post = await this.prisma.post.create({
       data: {
         userId,
-        content: dto.content,
+        content:     dto.content,
         scheduledAt: new Date(dto.scheduledAt),
-        status: (dto.status ?? 'SCHEDULED') as PostStatus,
+        status:      (dto.status ?? 'SCHEDULED') as PostStatus,
         ...(youtubeMetadata && { metadata: youtubeMetadata as any }),
         integrations: {
-          create: integrations.map((int) => ({
+          create: integrations.map(int => ({
             integrationId: int.id,
             status: 'PENDING',
           })),
         },
-        // Save external URLs as Media records so the scheduler can access them
         media: dto.mediaUrls?.length
           ? {
-              create: dto.mediaUrls.map((url) => {
-                const isVideo = /\.(mp4|mov|avi|webm)(\?|$)/i.test(url);
-                return {
-                  url,
-                  mimeType: isVideo ? 'video/mp4' : 'image/jpeg',
-                  fileName: url.split('/').pop()?.split('?')[0] ?? 'media',
-                  fileSize: 0,
-                  mediaType: isVideo ? 'VIDEO' : 'IMAGE',
-                };
-              }),
+              create: dto.mediaUrls.map(url => ({
+                url,
+                mimeType:  isVideo(url) ? 'video/mp4' : 'image/jpeg',
+                fileName:  url.split('/').pop()?.split('?')[0] ?? 'media',
+                fileSize:  0,
+                mediaType: isVideo(url) ? 'VIDEO' : 'IMAGE',
+              })),
             }
           : undefined,
       },
       include: { integrations: { include: { integration: true } }, media: true },
     });
 
-    // Enqueue the scan job to pick it up when the time comes
-    await this.schedulerQueue.add(
-      'scan',
-      { type: 'scan' },
-      { repeat: { every: 60_000 } },
-    );
+    // Trigger scan (idempotent — repeatable job already registered)
+    await this.schedulerQueue.add('scan', { type: 'scan' }, { repeat: { every: 60_000 } });
 
     this.logger.log(`Post created: ${post.id} scheduled for ${post.scheduledAt}`);
     return post;
@@ -114,10 +144,7 @@ export class PostsService {
   async findOne(id: string) {
     const post = await this.prisma.post.findUnique({
       where: { id },
-      include: {
-        integrations: { include: { integration: true } },
-        media: true,
-      },
+      include: { integrations: { include: { integration: true } }, media: true },
     });
     if (!post) throw new NotFoundException(`Post ${id} not found`);
     return post;
@@ -132,21 +159,19 @@ export class PostsService {
     const updated = await this.prisma.post.update({
       where: { id },
       data: {
-        ...(dto.content && { content: dto.content }),
+        ...(dto.content    && { content:     dto.content }),
         ...(dto.scheduledAt && { scheduledAt: new Date(dto.scheduledAt) }),
       },
       include: { integrations: { include: { integration: true } }, media: true },
     });
 
-    // Update platform integrations if platforms changed
     if (dto.platforms && post.userId) {
       const integrations = await this.prisma.integration.findMany({
         where: { userId: post.userId, platform: { in: dto.platforms as any[] } },
       });
-
       await this.prisma.postIntegration.deleteMany({ where: { postId: id } });
       await this.prisma.postIntegration.createMany({
-        data: integrations.map((int) => ({
+        data: integrations.map(int => ({
           postId: id,
           integrationId: int.id,
           status: 'PENDING' as const,
@@ -167,17 +192,14 @@ export class PostsService {
     if (post.status !== 'ERROR') {
       throw new BadRequestException('Only failed posts can be retried');
     }
-
     await this.prisma.post.update({
       where: { id },
       data: { status: 'SCHEDULED', retryCount: 0, errorMessage: null },
     });
-
     await this.prisma.postIntegration.updateMany({
       where: { postId: id, status: 'ERROR' },
-      data: { status: 'PENDING', errorMessage: null },
+      data:  { status: 'PENDING', errorMessage: null },
     });
-
     this.logger.log(`Post ${id} queued for retry`);
     return { message: 'Post queued for retry', id };
   }

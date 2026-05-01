@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
-  CalendarClock, Send, FileText, ListOrdered, CheckCircle2, AlertCircle,
+  CalendarClock, Send, FileText, ListOrdered, CheckCircle2, AlertCircle, Info,
 } from 'lucide-react';
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -89,6 +89,12 @@ export default function NewPostPage() {
 
   const hasSocial   = selectedPlatforms.some(p => p !== 'YOUTUBE');
   const hasYoutube  = selectedPlatforms.includes('YOUTUBE');
+
+  const SINGLE_VIDEO_PLATFORMS = ['INSTAGRAM', 'TIKTOK', 'YOUTUBE'];
+  const videoCount = fileEntries.filter(e => e.originalFile.type.startsWith('video/')).length;
+  const needsSplitWarning =
+    videoCount > 1 &&
+    selectedPlatforms.some(p => SINGLE_VIDEO_PLATFORMS.includes(p));
 
   const toggleAccount = (id: string) => {
     setSelectedAccountIds((prev) => {
@@ -332,6 +338,17 @@ export default function NewPostPage() {
           </p>
         )}
       </section>
+
+      {/* Multi-video split banner */}
+      {needsSplitWarning && (
+        <div className="flex items-start gap-3 bg-amber-950/40 border border-amber-700/50 rounded-xl px-4 py-3 text-sm text-amber-300">
+          <Info size={16} className="shrink-0 mt-0.5 text-amber-400" />
+          <p>
+            Subiste <strong>{videoCount} videos</strong> y seleccionaste plataformas que solo admiten un video por post (Instagram, TikTok, YouTube).
+            Se creará <strong>un post separado por cada video</strong> de forma automática.
+          </p>
+        </div>
+      )}
 
       {/* Card 2 — Select Accounts */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-5">
