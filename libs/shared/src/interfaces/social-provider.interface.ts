@@ -18,6 +18,8 @@ export interface PostContent {
   text: string;
   mediaUrls?: string[];
   mediaType?: MediaType;
+  /** Instagram-specific publish type. Defaults to REEL for video, POST for images. */
+  instagramType?: 'POST' | 'REEL' | 'STORY';
   metadata?: {
     youtube?: {
       title?: string;

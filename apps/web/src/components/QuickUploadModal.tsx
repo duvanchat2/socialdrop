@@ -44,9 +44,11 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [instagramType, setInstagramType] = useState<'POST' | 'REEL' | 'STORY'>('REEL');
 
-  const hasSocial  = selectedPlatforms.some(p => p !== 'YOUTUBE');
-  const hasYoutube = selectedPlatforms.includes('YOUTUBE');
+  const hasSocial    = selectedPlatforms.some(p => p !== 'YOUTUBE');
+  const hasYoutube   = selectedPlatforms.includes('YOUTUBE');
+  const hasInstagram = selectedPlatforms.includes('INSTAGRAM');
 
   const togglePlatform = (id: string) => {
     setSelectedPlatforms(prev =>
@@ -125,6 +127,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
       platforms: selectedPlatforms,
       status: 'DRAFT',
       mediaUrls: readyUrls,
+      ...(hasInstagram && { instagramType }),
       ...(hasYoutube && {
         youtubeTitle: text.slice(0, 100),
         youtubeDescription: first?.ytDescription || undefined,
@@ -168,6 +171,29 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
             ))}
           </div>
         </div>
+
+        {/* Instagram type selector */}
+        {hasInstagram && (
+          <div className="p-3 bg-gray-950 border border-pink-900/40 rounded-xl">
+            <p className="text-xs text-pink-400 font-semibold mb-2">Tipo Instagram</p>
+            <div className="flex gap-2">
+              {(['POST', 'REEL', 'STORY'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setInstagramType(type)}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    instagramType === type
+                      ? 'bg-pink-600 border-pink-500 text-white'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  {type === 'POST' ? '📷 Post' : type === 'REEL' ? '🎬 Reel' : '⏱ Historia'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Upload zone */}
         <div

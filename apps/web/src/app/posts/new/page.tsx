@@ -59,6 +59,7 @@ export default function NewPostPage() {
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [instagramType, setInstagramType] = useState<'POST' | 'REEL' | 'STORY'>('REEL');
 
   const userId = 'demo-user';
 
@@ -188,10 +189,12 @@ export default function NewPostPage() {
   const buildBasePayload = () => {
     const first = fileEntries[0];
     const content = first?.caption || '(Borrador sin contenido)';
+    const hasInstagram = selectedPlatforms.includes('INSTAGRAM');
     return {
       content,
       platforms: selectedPlatforms,
       mediaUrls: readyEntries.map((f) => f.uploadedUrl!),
+      ...(hasInstagram && { instagramType }),
       ...(hasYoutube && first && {
         youtubeTitle: content.slice(0, 100),
         youtubeDescription: first.ytDescription || undefined,
@@ -357,6 +360,37 @@ export default function NewPostPage() {
           <h2 className="font-semibold">Seleccionar Cuentas</h2>
         </div>
         <p className="text-xs text-gray-500 mb-3">Elige en qué cuentas publicar.</p>
+
+        {/* Instagram type selector — only when Instagram is selected */}
+        {selectedPlatforms.includes('INSTAGRAM') && (
+          <div className="mb-4 p-3 bg-gray-950 border border-pink-900/40 rounded-xl">
+            <p className="text-xs text-pink-400 font-semibold mb-2 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-pink-500 inline-block" />
+              Tipo de publicación en Instagram
+            </p>
+            <div className="flex gap-2">
+              {(['POST', 'REEL', 'STORY'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setInstagramType(type)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                    instagramType === type
+                      ? 'bg-pink-600 border-pink-500 text-white'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  {type === 'POST' ? '📷 Post' : type === 'REEL' ? '🎬 Reel' : '⏱ Historia'}
+                </button>
+              ))}
+            </div>
+            {instagramType === 'STORY' && (
+              <p className="text-[10px] text-gray-500 mt-2">
+                Las historias desaparecen después de 24h. Para videos, máximo 60 segundos.
+              </p>
+            )}
+          </div>
+        )}
 
         {groupedByPlatform.length === 0 && (
           <p className="text-sm text-gray-500 py-6 text-center">

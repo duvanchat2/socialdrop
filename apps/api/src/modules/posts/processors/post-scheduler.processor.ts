@@ -240,12 +240,16 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     await this.debugLog.push(userId, 'log', platform,
       `[${platform}] Calling provider.post() | content="${pi.post.content.slice(0, 80)}..." | mediaUrls=${JSON.stringify(mediaUrls)}`);
 
-    // Pull YouTube metadata from the post's JSON blob (if any)
-    const postMeta = (pi.post as any).metadata as { youtube?: { title?: string; description?: string; tags?: string[] } } | null;
+    // Pull metadata from the post's JSON blob (YouTube fields + instagramType)
+    const postMeta = (pi.post as any).metadata as {
+      youtube?: { title?: string; description?: string; tags?: string[] };
+      instagramType?: 'POST' | 'REEL' | 'STORY';
+    } | null;
     const postContent = {
       text: pi.post.content,
       mediaUrls,
       mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
+      ...(postMeta?.instagramType && { instagramType: postMeta.instagramType }),
       ...(postMeta?.youtube && { metadata: { youtube: postMeta.youtube } }),
     };
 

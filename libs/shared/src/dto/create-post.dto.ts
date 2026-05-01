@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsArray, IsEnum, IsOptional } from 'class-validator';
+import { IsString, IsDateString, IsArray, IsEnum, IsOptional, IsIn } from 'class-validator';
 import { Platform, PostStatus } from '../enums/index.js';
 
 export class CreatePostDto {
@@ -45,4 +45,16 @@ export class CreatePostDto {
   @IsOptional()
   @IsString()
   youtubeTags?: string;
+
+  // ── Instagram-specific ────────────────────────────────────────────────────
+
+  /**
+   * Instagram publish type.
+   * - POST  → single image or carousel
+   * - REEL  → short video (default for video uploads)
+   * - STORY → ephemeral story (image or video, disappears after 24h)
+   */
+  @IsOptional()
+  @IsIn(['POST', 'REEL', 'STORY'])
+  instagramType?: 'POST' | 'REEL' | 'STORY';
 }

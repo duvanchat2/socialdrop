@@ -14,6 +14,10 @@ interface IgApiResponse {
   };
 }
 
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|mov|avi|webm)(\?|$)/i.test(url);
+}
+
 @Injectable()
 export class InstagramProvider extends SocialAbstract {
   private readonly logger = new Logger(InstagramProvider.name);
@@ -163,7 +167,18 @@ export class InstagramProvider extends SocialAbstract {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         let result: PublishResult;
-        if (content.mediaType === 'VIDEO') {
+
+        if (content.instagramType === 'STORY') {
+          // ── Story (image or video) ───────────────────────────────────────
+          if (content.mediaType === 'VIDEO' || (content.mediaUrls?.[0] && isVideoUrl(content.mediaUrls[0]))) {
+            this.logger.log(`[Instagram] Attempt ${attempt + 1}: postVideoStory`);
+            result = await this.postVideoStory(accessToken, igUserId, content);
+          } else {
+            this.logger.log(`[Instagram] Attempt ${attempt + 1}: postImageStory`);
+            result = await this.postImageStory(accessToken, igUserId, content);
+          }
+        } else if (content.mediaType === 'VIDEO') {
+          // ── Reel (default for VIDEO) ─────────────────────────────────────
           this.logger.log(`[Instagram] Attempt ${attempt + 1}: postReel`);
           result = await this.postReel(accessToken, igUserId, content);
         } else if (content.mediaUrls && content.mediaUrls.length > 1) {
@@ -272,6 +287,135 @@ export class InstagramProvider extends SocialAbstract {
         }),
       },
       'publish carousel',
+    );
+    return { platformPostId: publishData.id! };
+  }
+
+  // ─── Stories ──────────────────────────────────────────────────────────────
+
+  /**
+   * Publish an image Story.
+   * Same permissions as Posts/Reels — no extra token scope needed.
+   */
+  private async postImageStory(token: string, igUserId: string, content: PostContent): Promise<PublishResult> {
+    const imageUrl = content.mediaUrls?.[0];
+    if (!imageUrl) throw new Error('[Instagram] Story requires at least one media URL');
+
+    this.logger.log(`[Instagram] Story image: creating container url=${imageUrl}`);
+    const containerData = await this.igFetch(
+      `${this.BASE_URL}/${igUserId}/media`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_url: imageUrl,
+          media_type: 'STORIES',
+          access_token: token,
+        }),
+      },
+      'create story image container',
+    );
+    this.logger.log(`[Instagram] Story image: containerId=${containerData.id} — publishing...`);
+
+    const publishData = await this.igFetch(
+      `${this.BASE_URL}/${igUserId}/media_publish`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creation_id: containerData.id, access_token: token }),
+      },
+      'publish story image',
+    );
+    return { platformPostId: publishData.id! };
+  }
+
+  /**
+   * Publish a video Story (same poll flow as Reels, but media_type=STORIES).
+   * Max duration: 60 seconds. Recommended aspect ratio: 9:16.
+   */
+  private async postVideoStory(token: string, igUserId: string, content: PostContent): Promise<PublishResult> {
+    const videoUrl = content.mediaUrls?.[0];
+    if (!videoUrl) throw new Error('[Instagram] Video story requires at least one media URL');
+    if (!videoUrl.startsWith('https://')) {
+      throw new Error(`[Instagram] Story video URL must be HTTPS — got: ${videoUrl.slice(0, 80)}`);
+    }
+
+    this.logger.log(`[Instagram] Story video: creating container url=${videoUrl}`);
+    const containerData = await this.igFetch(
+      `${this.BASE_URL}/${igUserId}/media`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_url: videoUrl,
+          media_type: 'STORIES',
+          access_token: token,
+        }),
+      },
+      'create story video container',
+    );
+    this.logger.log(`[Instagram] Story video: containerId=${containerData.id} — polling...`);
+
+    // Poll for processing completion (same pattern as Reels)
+    const pollUrl =
+      `${this.BASE_URL}/${containerData.id}` +
+      `?fields=status_code,status` +
+      `&access_token=${token}`;
+
+    let status = '';
+    let pollAttempts = 0;
+    const maxPollAttempts = 20;
+
+    while (status !== 'FINISHED' && pollAttempts < maxPollAttempts) {
+      await new Promise(r => setTimeout(r, 5000));
+      pollAttempts++;
+
+      let pollText = '';
+      let pollHttpStatus = 0;
+      let statusData: { status_code?: string; status?: string } = {};
+      try {
+        const pollRes = await fetch(pollUrl);
+        pollHttpStatus = pollRes.status;
+        pollText = await pollRes.text();
+        this.logger.log(
+          `[Instagram] Story poll ${pollAttempts}/${maxPollAttempts} HTTP ${pollHttpStatus} | raw: ${pollText.slice(0, 400)}`,
+        );
+        if (!pollRes.ok) {
+          let errMsg = `HTTP ${pollHttpStatus}: ${pollText.slice(0, 200)}`;
+          try {
+            const errJson = JSON.parse(pollText);
+            if (errJson.error) {
+              const e = errJson.error;
+              if (e.code === 190 || e.code === 102) throw new RefreshTokenError(`[Instagram] Story poll token error: ${e.message}`);
+              errMsg = `code=${e.code}: ${e.message}`;
+            }
+          } catch (pe) { if (pe instanceof RefreshTokenError) throw pe; }
+          throw new Error(`[Instagram] Story poll failed — ${errMsg}`);
+        }
+        statusData = JSON.parse(pollText);
+      } catch (fetchErr) {
+        if (fetchErr instanceof RefreshTokenError) throw fetchErr;
+        throw fetchErr;
+      }
+
+      status = statusData.status_code ?? '';
+      this.logger.log(`[Instagram] Story poll ${pollAttempts}: status_code="${status}"`);
+      if (status === 'ERROR') {
+        throw new Error('[Instagram] Story video processing failed — Instagram returned ERROR status');
+      }
+    }
+
+    if (status !== 'FINISHED') throw new Error('[Instagram] Story video processing timed out');
+
+    this.logger.log(`[Instagram] Story video: publishing containerId=${containerData.id}`);
+    const publishData = await this.igFetch(
+      `${this.BASE_URL}/${igUserId}/media_publish`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creation_id: containerData.id, access_token: token }),
+      },
+      'publish story video',
     );
     return { platformPostId: publishData.id! };
   }
