@@ -7,6 +7,12 @@
       "runtimeArgs": ["next", "dev", "--port", "3000"],
       "cwd": "apps/web",
       "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nx", "serve", "api"],
+      "port": 3333
     }
   ]
 }

@@ -22,4 +22,13 @@ export class StatsController {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.statsService.getByPlatform(userId);
   }
+
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Get creator dashboard KPIs: followers, engagement, reach, publish success rate' })
+  @ApiQuery({ name: 'userId', required: true })
+  @ApiQuery({ name: 'period', required: false, description: '7d | 14d | 30d | 90d (default 7d)' })
+  dashboard(@Query('userId') userId: string, @Query('period') period?: string) {
+    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
+    return this.statsService.getDashboard(userId, period);
+  }
 }
