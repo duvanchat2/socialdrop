@@ -18,6 +18,17 @@ function fmtBogota(iso: string) {
 
 interface StatsOverview { published: number; pending: number; failed: number; total: number; today: number; }
 
+interface DashboardKpis {
+  followers: number;
+  followersDeltaWoW: number;
+  avgEngagementRate: number;
+  totalReach: number;
+  totalImpressions: number;
+  publishSuccessRate: number;
+  postsThisWeek: number;
+  postsLastWeek: number;
+}
+
 interface PostIntegrationDetail {
   id: string;
   status: string;
@@ -45,6 +56,11 @@ export default function DashboardPage() {
     queryFn: () => apiFetch<StatsOverview>(`/api/stats/overview?userId=${userId}`),
   });
 
+  const kpis = useQuery({
+    queryKey: ['stats-dashboard'],
+    queryFn: () => apiFetch<DashboardKpis>(`/api/stats/dashboard?userId=${userId}&period=7d`),
+  });
+
   const posts = useQuery({
     queryKey: ['posts'],
     queryFn: () => apiFetch<Post[]>(`/api/posts?userId=${userId}&limit=20`),
@@ -67,11 +83,19 @@ export default function DashboardPage() {
     onError: (e: Error) => toast.error(`Error: ${e.message}`),
   });
 
-  const STAT_CARDS = [
+  const postsDeltaWoW = kpis.data && kpis.data.postsLastWeek > 0
+    ? +(((kpis.data.postsThisWeek - kpis.data.postsLastWeek) / kpis.data.postsLastWeek) * 100).toFixed(1)
+    : null;
+
+  const STAT_CARDS: { label: string; value: number | string; color: string; clickable: boolean; delta?: number | null }[] = [
     { label: 'Publicados hoy', value: stats.data?.today ?? 0, color: 'text-green-400', clickable: false },
     { label: 'Programados', value: stats.data?.pending ?? 0, color: 'text-blue-400', clickable: false },
     { label: 'Fallidos', value: stats.data?.failed ?? 0, color: 'text-red-400', clickable: true },
     { label: 'Total', value: stats.data?.total ?? 0, color: 'text-gray-300', clickable: false },
+    { label: 'Seguidores', value: kpis.data?.followers ?? 0, color: 'text-indigo-400', clickable: false, delta: kpis.data?.followersDeltaWoW },
+    { label: 'Engagement', value: `${(kpis.data?.avgEngagementRate ?? 0).toFixed(2)}%`, color: 'text-pink-400', clickable: false },
+    { label: 'Alcance', value: kpis.data?.totalReach ?? 0, color: 'text-yellow-400', clickable: false },
+    { label: 'Tasa de éxito', value: `${(kpis.data?.publishSuccessRate ?? 0).toFixed(1)}%`, color: 'text-teal-400', clickable: false, delta: postsDeltaWoW },
   ];
 
   return (
@@ -80,7 +104,7 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {STAT_CARDS.map(({ label, value, color, clickable }) => (
+        {STAT_CARDS.map(({ label, value, color, clickable, delta }) => (
           <div
             key={label}
             data-testid={`stat-card-${label.toLowerCase().replace(/\s+/g, '-')}`}
@@ -91,9 +115,14 @@ export default function DashboardPage() {
           >
             <p className="text-sm text-gray-400">{label}</p>
             <p className={`text-3xl font-bold mt-1 ${color}`}>
-              {stats.isLoading ? <Loader2 className="animate-spin" size={24} /> : value}
+              {(stats.isLoading || kpis.isLoading) ? <Loader2 className="animate-spin" size={24} /> : value}
             </p>
-            {clickable && value > 0 && (
+            {delta !== undefined && delta !== null && (
+              <p className={`text-xs mt-1 ${delta >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
+                {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}% vs semana anterior
+              </p>
+            )}
+            {clickable && typeof value === 'number' && value > 0 && (
               <p className="text-xs text-red-400/70 mt-1">Click para ver detalles →</p>
             )}
           </div>
