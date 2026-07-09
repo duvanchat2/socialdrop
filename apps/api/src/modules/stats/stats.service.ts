@@ -46,22 +46,51 @@ export class StatsService {
   }
 
   async getByPlatform(userId: string) {
-    const byPlatform = await this.prisma.integration.findMany({
+    const integrations = await this.prisma.integration.findMany({
       where: { userId },
-      include: {
-        posts: {
-          select: { status: true },
-        },
-      },
+      select: { id: true, platform: true },
     });
+    if (integrations.length === 0) return [];
 
-    return byPlatform.map((int) => ({
-      platform: int.platform,
-      accountName: int.accountName,
-      published: int.posts.filter((p) => p.status === 'PUBLISHED').length,
-      pending: int.posts.filter((p) => p.status === 'PENDING').length,
-      failed: int.posts.filter((p) => p.status === 'ERROR').length,
-    }));
+    const [statusCounts, engagementByPlatform] = await Promise.all([
+      this.prisma.postIntegration.groupBy({
+        by: ['integrationId', 'status'],
+        where: { integrationId: { in: integrations.map((i) => i.id) } },
+        _count: { _all: true },
+      }),
+      this.prisma.postAnalytics.groupBy({
+        by: ['platform'],
+        where: { userId },
+        _avg: { engagementRate: true },
+      }),
+    ]);
+
+    const countsByIntegration = new Map<string, Map<string, number>>();
+    for (const row of statusCounts) {
+      if (!countsByIntegration.has(row.integrationId)) countsByIntegration.set(row.integrationId, new Map());
+      countsByIntegration.get(row.integrationId)!.set(row.status, row._count._all);
+    }
+    const engagementMap = new Map(engagementByPlatform.map((e) => [e.platform, e._avg.engagementRate ?? 0]));
+
+    const byPlatform = new Map<string, { platform: string; published: number; pending: number; failed: number; avgEngagementRate: number }>();
+    for (const integ of integrations) {
+      const entry = byPlatform.get(integ.platform) ?? {
+        platform: integ.platform,
+        published: 0,
+        pending: 0,
+        failed: 0,
+        avgEngagementRate: engagementMap.get(integ.platform) ?? 0,
+      };
+      const counts = countsByIntegration.get(integ.id);
+      if (counts) {
+        entry.published += counts.get('PUBLISHED') ?? 0;
+        entry.pending += counts.get('PENDING') ?? 0;
+        entry.failed += counts.get('ERROR') ?? 0;
+      }
+      byPlatform.set(integ.platform, entry);
+    }
+
+    return [...byPlatform.values()];
   }
 
   async getDashboard(userId: string, period = '7d') {
