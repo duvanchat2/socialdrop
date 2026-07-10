@@ -10,6 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Queue } from 'bullmq';
 import { BrainService } from './brain.service.js';
 import { TranscriptionService } from './transcription.service.js';
@@ -28,14 +29,14 @@ export class BrainController {
   /** GET /api/content-brain?userId=xxx */
   @Get()
   @ApiOperation({ summary: 'Get ContentBrain for a user' })
-  getBrain(@Query('userId') userId = 'demo-user') {
+  getBrain(@CurrentUser() userId: string) {
     return this.brainService.getBrain(userId);
   }
 
   /** GET /api/content-brain/performance?userId=xxx */
   @Get('performance')
   @ApiOperation({ summary: 'Get performance stats + recent viral scripts' })
-  getPerformance(@Query('userId') userId = 'demo-user') {
+  getPerformance(@CurrentUser() userId: string) {
     return this.brainService.getPerformance(userId);
   }
 
@@ -43,7 +44,7 @@ export class BrainController {
   @Get('scripts')
   @ApiOperation({ summary: 'List generated scripts' })
   listScripts(
-    @Query('userId') userId = 'demo-user',
+    @CurrentUser() userId: string,
     @Query('isViral') isViral?: string,
     @Query('platform') platform?: string,
   ) {

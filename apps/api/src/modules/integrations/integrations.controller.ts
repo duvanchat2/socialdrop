@@ -2,6 +2,7 @@ import {
   Controller, Get, Delete, Query, Param, Res, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { Response } from 'express';
 import { PrismaService } from '@socialdrop/prisma';
 import { IntegrationManager } from '@socialdrop/integrations';
@@ -26,7 +27,7 @@ export class IntegrationsController {
 
   @Get()
   @ApiOperation({ summary: 'List connected integrations for a user' })
-  async getUserIntegrations(@Query('userId') userId: string) {
+  async getUserIntegrations(@CurrentUser() userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.prisma.integration.findMany({
       where: { userId },
@@ -45,7 +46,7 @@ export class IntegrationsController {
   @ApiOperation({ summary: 'Start OAuth flow or save static env credentials for a platform' })
   async connect(
     @Query('platform') platform: string,
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Res() res: Response,
   ) {
     if (!platform || !userId) {

@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Query, HttpException, HttpStatus } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StrategyService, DayConfig } from './strategy.service.js';
 
@@ -9,14 +10,14 @@ export class StrategyController {
 
   @Get()
   @ApiOperation({ summary: 'Get content strategy for user' })
-  get(@Query('userId') userId: string) {
+  get(@CurrentUser() userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.strategyService.get(userId);
   }
 
   @Post()
   @ApiOperation({ summary: 'Save content strategy' })
-  save(@Query('userId') userId: string, @Body() body: { dayConfigs: DayConfig[] }) {
+  save(@CurrentUser() userId: string, @Body() body: { dayConfigs: DayConfig[] }) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.strategyService.save(userId, body.dayConfigs);
   }

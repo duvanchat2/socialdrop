@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Delete, Body, Param, Query, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { CompetitorsService } from './competitors.service.js';
 import { TranscriptionService } from '../brain/transcription.service.js';
 
@@ -16,7 +17,7 @@ export class CompetitorsController {
   @Get()
   @ApiOperation({ summary: 'List tracked competitors for a user' })
   @ApiQuery({ name: 'userId', required: true })
-  async list(@Query('userId') userId: string) {
+  async list(@CurrentUser() userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.competitorsService.list(userId);
   }
@@ -77,7 +78,7 @@ export class CompetitorsController {
   @Post(':id/summary')
   @ApiOperation({ summary: 'Run profile-level AI summary (legacy ZAI-based) for a competitor' })
   @ApiQuery({ name: 'userId', required: true })
-  async summary(@Param('id') id: string, @Query('userId') userId: string) {
+  async summary(@Param('id') id: string, @CurrentUser() userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.competitorsService.analyze(id, userId);
   }
@@ -116,7 +117,7 @@ export class CompetitorsController {
   @Get('benchmark')
   @ApiOperation({ summary: 'Compare user metrics vs all tracked competitors' })
   @ApiQuery({ name: 'userId', required: true })
-  async benchmark(@Query('userId') userId: string) {
+  async benchmark(@CurrentUser() userId: string) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.competitorsService.benchmark(userId);
   }

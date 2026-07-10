@@ -11,9 +11,11 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '@socialdrop/prisma';
 import Redis from 'ioredis';
+import { Public } from '../modules/auth/auth.public.js';
 
 @ApiTags('health')
 @Controller('health')
+@Public()
 export class HealthController {
   private readonly redis: Redis;
 
