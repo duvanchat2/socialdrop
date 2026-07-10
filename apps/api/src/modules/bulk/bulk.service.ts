@@ -142,7 +142,8 @@ export class BulkService {
       create: { id: userId, email: `${userId}@socialdrop.local`, name: userId },
     });
 
-    const integrations = await this.prisma.integration.findMany({ where: { userId } });
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+    const integrations = await this.prisma.integration.findMany({ where: { workspaceId: workspaceId ?? undefined } });
     const intMap = new Map(integrations.map((i) => [i.platform, i]));
 
     const created = await Promise.all(

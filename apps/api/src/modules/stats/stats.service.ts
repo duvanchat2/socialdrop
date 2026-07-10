@@ -46,8 +46,9 @@ export class StatsService {
   }
 
   async getByPlatform(userId: string) {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integrations = await this.prisma.integration.findMany({
-      where: { userId },
+      where: { workspaceId: workspaceId ?? undefined },
       select: { id: true, platform: true },
     });
     if (integrations.length === 0) return [];

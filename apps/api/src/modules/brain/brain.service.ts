@@ -163,8 +163,9 @@ export class BrainService {
     if (!script || !script.postId) return;
 
     // Find integration for this user + platform
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(script.userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { userId: script.userId, platform: script.platform.toUpperCase() as any },
+      where: { workspaceId: workspaceId ?? undefined, platform: script.platform.toUpperCase() as any },
     });
 
     if (!integration?.accessToken) {

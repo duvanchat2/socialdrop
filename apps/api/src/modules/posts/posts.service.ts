@@ -71,8 +71,9 @@ export class PostsService {
   }
 
   private async createSingle(userId: string, dto: CreatePostDto) {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integrations = await this.prisma.integration.findMany({
-      where: { userId, platform: { in: dto.platforms as any[] } },
+      where: { workspaceId: workspaceId ?? undefined, platform: { in: dto.platforms as any[] } },
     });
 
     // Build metadata blob (YouTube fields + Instagram type)
@@ -195,8 +196,9 @@ export class PostsService {
     });
 
     if (dto.platforms && post.userId) {
+      const workspaceId = await this.prisma.resolveWorkspaceIdForUser(post.userId);
       const integrations = await this.prisma.integration.findMany({
-        where: { userId: post.userId, platform: { in: dto.platforms as any[] } },
+        where: { workspaceId: workspaceId ?? undefined, platform: { in: dto.platforms as any[] } },
       });
       await this.prisma.postIntegration.deleteMany({ where: { postId: id } });
       await this.prisma.postIntegration.createMany({

@@ -63,8 +63,9 @@ export class MetricsService {
 
   // ── Instagram ─────────────────────────────────────────────────────────────
   async syncInstagram(userId: string): Promise<void> {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { userId, platform: 'INSTAGRAM' },
+      where: { workspaceId: workspaceId ?? undefined, platform: 'INSTAGRAM' },
     });
     if (!integration) {
       this.logger.log(`[Metrics] No INSTAGRAM integration for user ${userId}`);
@@ -140,8 +141,9 @@ export class MetricsService {
 
   // ── Facebook ──────────────────────────────────────────────────────────────
   async syncFacebook(userId: string): Promise<void> {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { userId, platform: 'FACEBOOK' },
+      where: { workspaceId: workspaceId ?? undefined, platform: 'FACEBOOK' },
     });
     if (!integration) {
       this.logger.log(`[Metrics] No FACEBOOK integration for user ${userId}`);
@@ -212,8 +214,9 @@ export class MetricsService {
     userId: string,
     postId: string,
   ): Promise<{ likes: number; comments: number; shares: number } | null> {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { userId, platform: 'FACEBOOK' },
+      where: { workspaceId: workspaceId ?? undefined, platform: 'FACEBOOK' },
     });
     if (!integration?.accessToken) return null;
 
@@ -261,8 +264,9 @@ export class MetricsService {
 
   /** Build an OAuth2Client from stored integration credentials and auto-persist refreshed tokens. */
   private async getYoutubeClient(userId: string) {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { userId, platform: 'YOUTUBE' },
+      where: { workspaceId: workspaceId ?? undefined, platform: 'YOUTUBE' },
     });
     if (!integration) return null;
 
@@ -484,10 +488,11 @@ export class MetricsService {
   // ── Sync status diagnostic ────────────────────────────────────────────────
   async getSyncStatus(userId: string) {
     const platforms = ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'TIKTOK', 'TWITTER'];
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const results = await Promise.all(
       platforms.map(async (platform) => {
         const integration = await this.prisma.integration.findFirst({
-          where: { userId, platform: platform as Platform },
+          where: { workspaceId: workspaceId ?? undefined, platform: platform as Platform },
           select: { id: true, accountName: true, profileId: true, tokenExpiry: true, createdAt: true },
         });
         const lastMetric = await this.prisma.platformMetrics.findFirst({

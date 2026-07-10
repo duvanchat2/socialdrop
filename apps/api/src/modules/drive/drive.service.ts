@@ -290,9 +290,10 @@ export class DriveService {
       }
 
       // Find matching integrations for the user
+      const workspaceId = await this.prisma.resolveWorkspaceIdForUser(driveConfig.userId);
       const integrations = await this.prisma.integration.findMany({
         where: {
-          userId: driveConfig.userId,
+          workspaceId: workspaceId ?? undefined,
           platform: { in: row.platforms },
         },
       });
