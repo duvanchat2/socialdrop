@@ -111,10 +111,19 @@ export class InstagramProvider extends SocialAbstract {
   }
 
   generateAuthUrl(userId: string): string {
+    const baseScopes = ['instagram_basic', 'instagram_content_publish', 'pages_show_list'];
+    // Messaging/comment-reply scopes require Meta App Review — only requested
+    // once that review is approved, so OAuth doesn't fail for every user in
+    // the meantime (see docs/prs/PR-30.md).
+    const messagingScopes = ['instagram_manage_messages', 'instagram_manage_comments'];
+    const scopes = this.config.get<string>('ENABLE_MESSAGING_SCOPES') === 'true'
+      ? [...baseScopes, ...messagingScopes]
+      : baseScopes;
+
     const params = new URLSearchParams({
       client_id: this.config.get<string>('INSTAGRAM_APP_ID', ''),
       redirect_uri: this.config.get<string>('INSTAGRAM_REDIRECT_URI', ''),
-      scope: 'instagram_basic,instagram_content_publish,pages_show_list',
+      scope: scopes.join(','),
       response_type: 'code',
       state: userId,
     });

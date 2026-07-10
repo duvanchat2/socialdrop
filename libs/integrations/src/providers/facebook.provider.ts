@@ -14,10 +14,19 @@ export class FacebookProvider extends SocialAbstract {
   constructor(private readonly config: ConfigService) { super(); }
 
   generateAuthUrl(userId: string): string {
+    const baseScopes = ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'];
+    // Messaging/comment-reply scopes require Meta App Review — only requested
+    // once that review is approved, so OAuth doesn't fail for every user in
+    // the meantime (see docs/prs/PR-30.md).
+    const messagingScopes = ['pages_messaging', 'pages_manage_engagement'];
+    const scopes = this.config.get<string>('ENABLE_MESSAGING_SCOPES') === 'true'
+      ? [...baseScopes, ...messagingScopes]
+      : baseScopes;
+
     const params = new URLSearchParams({
       client_id: this.config.get<string>('FACEBOOK_APP_ID', ''),
       redirect_uri: this.config.get<string>('FACEBOOK_REDIRECT_URI', ''),
-      scope: 'pages_manage_posts,pages_read_engagement,pages_show_list',
+      scope: scopes.join(','),
       response_type: 'code',
       state: userId,
     });

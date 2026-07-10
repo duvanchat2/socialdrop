@@ -215,6 +215,37 @@ export class IntegrationsController {
     };
   }
 
+  @Get(':id/permissions')
+  @UseGuards(WorkspaceGuard)
+  @ApiOperation({ summary: 'List Meta permissions actually granted for a connected account' })
+  async checkPermissions(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
+    const integration = await this.prisma.integration.findFirst({
+      where: { id, workspaceId },
+      select: { id: true, platform: true, accessToken: true },
+    });
+    if (!integration) throw new HttpException('Integration not found', HttpStatus.NOT_FOUND);
+    if (integration.platform !== 'FACEBOOK' && integration.platform !== 'INSTAGRAM') {
+      return { granted: [], declined: [], note: 'Permission listing only applies to Meta platforms' };
+    }
+
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v18.0/me/permissions?access_token=${integration.accessToken}`,
+      );
+      const data = await res.json() as { data?: Array<{ permission: string; status: 'granted' | 'declined' }> };
+      const perms = data.data ?? [];
+      return {
+        granted: perms.filter((p) => p.status === 'granted').map((p) => p.permission),
+        declined: perms.filter((p) => p.status === 'declined').map((p) => p.permission),
+        hasMessagingScopes: perms.some(
+          (p) => p.status === 'granted' && /messag|comment|engagement/.test(p.permission),
+        ),
+      };
+    } catch {
+      throw new HttpException('Could not fetch permissions from Meta', HttpStatus.BAD_GATEWAY);
+    }
+  }
+
   @Delete(':id')
   @UseGuards(WorkspaceGuard)
   @ApiOperation({ summary: 'Disconnect a platform integration' })
