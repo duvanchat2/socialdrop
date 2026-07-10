@@ -101,9 +101,15 @@ export default function CalendarPage() {
   }, []);
   useEffect(() => { localStorage.setItem('calendar-view', view); }, [view]);
 
+  const rangeStart = useMemo(() => new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1), [cursor]);
+  const rangeEnd = useMemo(() => new Date(cursor.getFullYear(), cursor.getMonth() + 2, 0), [cursor]);
+
   const { data: posts = [] } = useQuery({
-    queryKey: ['posts-all'],
-    queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user'),
+    queryKey: ['posts-calendar', cursor.getFullYear(), cursor.getMonth()],
+    queryFn: () =>
+      apiFetch<Post[]>(
+        `/api/posts/calendar?userId=demo-user&from=${rangeStart.toISOString()}&to=${rangeEnd.toISOString()}`,
+      ),
   });
 
   const updateMutation = useMutation({
@@ -114,19 +120,19 @@ export default function CalendarPage() {
       }),
     onSuccess: () => {
       toast.success('Post reprogramado');
-      qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
     },
     onError: (e: Error) => toast.error(`No se pudo reprogramar: ${e.message}`),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/posts/${id}?userId=demo-user`, { method: 'DELETE' }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['posts-all'] }); setSelected(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['posts-calendar'] }); setSelected(null); },
   });
 
   const retryMutation = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/posts/${id}/retry`, { method: 'POST' }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['posts-all'] }); setSelected(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['posts-calendar'] }); setSelected(null); },
   });
 
   const grid = useMemo(

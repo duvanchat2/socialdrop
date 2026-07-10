@@ -64,6 +64,7 @@ export function EditPostModal({ post, onClose }: Props) {
       toast.success('Post actualizado correctamente');
       qc.invalidateQueries({ queryKey: ['posts'] });
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       qc.invalidateQueries({ queryKey: ['posts-failed'] });
       qc.invalidateQueries({ queryKey: ['stats'] });
       onClose();

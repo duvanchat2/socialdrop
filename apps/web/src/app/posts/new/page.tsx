@@ -340,6 +340,7 @@ export default function NewPostPage() {
       toast.success('Publicando ahora…');
       qc.invalidateQueries({ queryKey: ['posts'] });
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };
@@ -360,6 +361,7 @@ export default function NewPostPage() {
         toast.success('Posts añadidos a la cola');
       }
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };
@@ -371,6 +373,7 @@ export default function NewPostPage() {
       for (const payload of payloads) await createPost.mutateAsync(payload);
       toast.success('Borrador guardado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };
@@ -383,6 +386,7 @@ export default function NewPostPage() {
       for (const payload of payloads) await createPost.mutateAsync(payload);
       toast.success('Post programado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };

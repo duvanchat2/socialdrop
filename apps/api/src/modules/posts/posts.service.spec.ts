@@ -103,11 +103,11 @@ describe('PostsService', () => {
       await expect(service.findAll('')).rejects.toThrow('userId is required');
     });
 
-    it('returns posts list', async () => {
+    it('returns posts list with pagination metadata', async () => {
       const posts = [{ id: 'p1' }, { id: 'p2' }];
       mockPrisma.post.findMany.mockResolvedValue(posts);
       const result = await service.findAll('demo-user');
-      expect(result).toEqual(posts);
+      expect(result).toEqual({ posts, nextCursor: null });
     });
   });
 
