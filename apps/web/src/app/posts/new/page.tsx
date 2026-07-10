@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { uploadFileXHR } from '@/lib/uploadMedia';
@@ -53,6 +53,7 @@ interface FileEntry {
 
 const PLATFORM_ORDER = ['INSTAGRAM', 'TIKTOK', 'FACEBOOK', 'TWITTER', 'LINKEDIN', 'YOUTUBE'];
 const MAX_FILES = 10;
+const MEDIA_REQUIRED_PLATFORMS = ['INSTAGRAM', 'TIKTOK', 'YOUTUBE'];
 
 export default function NewPostPage() {
   const router = useRouter();
@@ -63,12 +64,19 @@ export default function NewPostPage() {
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [textOnlyCaption, setTextOnlyCaption] = useState('');
+  const [showMoreActions, setShowMoreActions] = useState(false);
 
   const userId = 'demo-user';
 
   const { data: integrations = [] } = useQuery({
     queryKey: ['integrations', userId],
     queryFn: () => apiFetch<Integration[]>(`/api/integrations?userId=${userId}`),
+  });
+
+  const { data: queueSlots = [] } = useQuery({
+    queryKey: ['queue-slots-any', userId],
+    queryFn: () => apiFetch<unknown[]>(`/api/queue?userId=${userId}&platform=INSTAGRAM`),
   });
 
   const groupedByPlatform = useMemo(() => {
@@ -209,6 +217,16 @@ export default function NewPostPage() {
    * filesMeta carries per-file caption / instagramType for the backend splitter.
    */
   const buildPayloads = (extraFields: object = {}) => {
+    if (fileEntries.length === 0) {
+      return [{
+        content: textOnlyCaption,
+        platforms: selectedPlatforms,
+        mediaUrls: [],
+        filesMeta: [],
+        ...extraFields,
+      }];
+    }
+
     const hasInstagram = selectedPlatforms.includes('INSTAGRAM');
     const nonIgPlatforms = selectedPlatforms.filter(p => p !== 'INSTAGRAM');
 
@@ -303,6 +321,14 @@ export default function NewPostPage() {
   const commonGuards = (): boolean => {
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
     if (pendingCount > 0) { toast.error('Espera a que terminen todas las subidas'); return false; }
+    if (fileEntries.length === 0) {
+      const mediaRequired = selectedPlatforms.filter((p) => MEDIA_REQUIRED_PLATFORMS.includes(p));
+      if (mediaRequired.length > 0) {
+        toast.error(`${mediaRequired.join(', ')} requiere al menos un archivo de media`);
+        return false;
+      }
+      if (!textOnlyCaption.trim()) { toast.error('Escribe un caption'); return false; }
+    }
     return true;
   };
 
@@ -431,9 +457,20 @@ export default function NewPostPage() {
         )}
 
         {fileEntries.length === 0 && (
-          <p className="text-sm text-gray-600 text-center py-2">
-            Sube archivos para ver los campos de caption.
-          </p>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-300">
+              Caption (post de solo texto)
+            </label>
+            <textarea
+              className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500 min-h-[80px]"
+              placeholder="Escribe el caption… (Twitter/Facebook admiten posts sin media)"
+              value={textOnlyCaption}
+              onChange={(e) => setTextOnlyCaption(e.target.value)}
+            />
+            <p className="text-xs text-gray-600">
+              Instagram, TikTok y YouTube requieren al menos un archivo de media.
+            </p>
+          </div>
         )}
       </section>
 
@@ -518,35 +555,56 @@ export default function NewPostPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={handleAddToQueue}
-            disabled={busy}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors"
-          >
-            <ListOrdered size={16} />
-            Añadir a la Cola
-          </button>
-          <button
-            type="button"
-            onClick={scheduledAt ? handleSchedule : handlePublishNow}
-            disabled={busy}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors text-white"
-          >
-            <Send size={16} />
-            {scheduledAt ? 'Programar' : 'Publicar ahora'}
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveDraft}
-            disabled={busy}
-            className="col-span-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors text-gray-200 border border-gray-700"
-          >
-            <FileText size={16} />
-            Guardar borrador
-          </button>
-        </div>
+        {(() => {
+          const primaryIsQueue = !scheduledAt && queueSlots.length > 0;
+          const primary = primaryIsQueue
+            ? { label: 'Añadir a la Cola', icon: <ListOrdered size={16} />, onClick: handleAddToQueue, className: 'bg-indigo-600 hover:bg-indigo-500' }
+            : { label: scheduledAt ? 'Programar' : 'Publicar ahora', icon: <Send size={16} />, onClick: scheduledAt ? handleSchedule : handlePublishNow, className: 'bg-orange-500 hover:bg-orange-400 text-white' };
+          const secondary = [
+            !primaryIsQueue && queueSlots.length > 0 && { label: 'Añadir a la Cola', icon: <ListOrdered size={14} />, onClick: handleAddToQueue },
+            primaryIsQueue && { label: scheduledAt ? 'Programar' : 'Publicar ahora', icon: <Send size={14} />, onClick: scheduledAt ? handleSchedule : handlePublishNow },
+            { label: 'Guardar borrador', icon: <FileText size={14} />, onClick: handleSaveDraft },
+          ].filter(Boolean) as { label: string; icon: ReactNode; onClick: () => void }[];
+
+          return (
+            <div className="relative flex gap-2">
+              <button
+                type="button"
+                onClick={primary.onClick}
+                disabled={busy}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 disabled:opacity-50 rounded-lg font-medium text-sm transition-colors ${primary.className}`}
+              >
+                {primary.icon}
+                {primary.label}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMoreActions((v) => !v)}
+                disabled={busy}
+                className="px-3 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded-lg text-gray-200 border border-gray-700"
+                aria-label="Más acciones"
+              >
+                ⋯
+              </button>
+              {showMoreActions && (
+                <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-800 rounded-lg shadow-xl z-10 min-w-[180px] overflow-hidden">
+                  {secondary.map((action) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      onClick={() => { setShowMoreActions(false); action.onClick(); }}
+                      disabled={busy}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-200 hover:bg-gray-800 disabled:opacity-50 text-left"
+                    >
+                      {action.icon}
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </section>
     </div>
   );

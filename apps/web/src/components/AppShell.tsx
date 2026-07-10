@@ -19,14 +19,17 @@ const NAV_MAIN = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/calendar', label: 'Calendario', icon: Calendar },
   { href: '/queue', label: 'Cola', icon: ListOrdered },
-  { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/posts/new', label: 'Nuevo Post', icon: PlusSquare },
   { href: '/content/bulk', label: 'Subida Masiva', icon: Upload },
   { href: '/drive', label: 'Google Drive', icon: HardDrive },
   { href: '/integrations', label: 'Integraciones', icon: Settings },
+];
+
+const NAV_INSIGHTS = [
+  { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/competitors', label: 'Competencia', icon: Users },
-  { href: '/assistant', label: 'Asistente IA', icon: BotMessageSquare },
   { href: '/brain', label: 'Mi Voz', icon: Brain },
+  { href: '/assistant', label: 'Asistente IA', icon: BotMessageSquare },
 ];
 
 const NAV_AUTOMATION = [
@@ -39,7 +42,6 @@ const NAV_AUTOMATION = [
 const NAV_SETTINGS = [
   { href: '/settings/brand', label: 'Perfil de marca', icon: Briefcase },
   { href: '/settings/strategy', label: 'Estrategia', icon: BarChart2 },
-  { href: '/debug', label: 'Debug Logs', icon: Terminal },
 ];
 
 function NavLinks({ onClose }: { onClose: () => void }) {
@@ -47,6 +49,26 @@ function NavLinks({ onClose }: { onClose: () => void }) {
   return (
     <>
       {NAV_MAIN.map(({ href, label, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          onClick={onClose}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            pathname === href
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+          }`}
+        >
+          <Icon size={16} />
+          {label}
+        </Link>
+      ))}
+      <div className="pt-4 pb-1">
+        <p className="px-3 text-xs font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+          Insights
+        </p>
+      </div>
+      {NAV_INSIGHTS.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}
@@ -127,6 +149,9 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           <NavLinks onClose={onClose} />
         </nav>
         <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400 dark:text-gray-600 space-y-2">
+          <Link href="/debug" className="flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-400 transition-colors">
+            <Terminal size={12} /> Debug Logs
+          </Link>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Privacidad</Link>
             <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Términos</Link>
