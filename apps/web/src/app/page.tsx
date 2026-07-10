@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { PlatformIcon, Platform } from '@/components/PlatformIcon';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
+import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
 import { Loader2, X, RefreshCw, AlertCircle, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -59,6 +60,11 @@ export default function DashboardPage() {
   const kpis = useQuery({
     queryKey: ['stats-dashboard'],
     queryFn: () => apiFetch<DashboardKpis>(`/api/stats/dashboard?userId=${userId}&period=7d`),
+  });
+
+  const byPlatform = useQuery({
+    queryKey: ['stats-by-platform'],
+    queryFn: () => apiFetch<PlatformStat[]>(`/api/stats/by-platform?userId=${userId}`),
   });
 
   const posts = useQuery({
@@ -128,6 +134,8 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {!byPlatform.isLoading && <PlatformBreakdownChart data={byPlatform.data ?? []} />}
 
       {/* Recent posts table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
