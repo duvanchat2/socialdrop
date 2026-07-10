@@ -983,6 +983,7 @@ function TabHashtags({ analysis: a }: { analysis: PostAnalysis | null }) {
 
       {/* Table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800">
@@ -1001,6 +1002,7 @@ function TabHashtags({ analysis: a }: { analysis: PostAnalysis | null }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

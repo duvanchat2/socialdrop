@@ -155,6 +155,7 @@ export default function DashboardPage() {
         ) : (posts.data ?? []).length === 0 ? (
           <div className="text-center p-8 text-gray-500 text-sm">No hay posts todavía</div>
         ) : (
+          <div className="overflow-x-auto -mx-4 px-4">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-gray-400 text-left">
@@ -196,6 +197,7 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
