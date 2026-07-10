@@ -8,11 +8,13 @@ import {
 } from './competitors.service.js';
 import { CompetitorAnalysisProcessor } from './competitor-analysis.processor.js';
 import { BrainModule } from '../brain/brain.module.js';
+import { UsageModule } from '../usage/usage.module.js';
 
 @Module({
   imports: [
     PrismaModule,
     BrainModule,
+    UsageModule,
     BullModule.registerQueue({ name: COMPETITOR_ANALYSIS_QUEUE }),
   ],
   controllers: [CompetitorsController],

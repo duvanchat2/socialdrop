@@ -44,6 +44,7 @@ const NAV_SETTINGS = [
   { href: '/settings/brand', label: 'Perfil de marca', icon: Briefcase },
   { href: '/settings/strategy', label: 'Estrategia', icon: BarChart2 },
   { href: '/settings/workspaces', label: 'Workspaces', icon: Users },
+  { href: '/settings/usage', label: 'Consumo', icon: BarChart2 },
 ];
 
 function NavLinks({ onClose }: { onClose: () => void }) {

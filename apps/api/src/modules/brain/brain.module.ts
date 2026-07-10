@@ -9,12 +9,14 @@ import { MetricsCollectorProcessor } from './metrics-collector.processor.js';
 import { BrainUpdaterProcessor } from './brain-updater.processor.js';
 import { BrainScheduler } from './brain.scheduler.js';
 import { TranscriptionService } from './transcription.service.js';
+import { UsageModule } from '../usage/usage.module.js';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
     MetricsModule,
+    UsageModule,
     BullModule.registerQueue(
       { name: 'metrics-collector' },
       { name: 'brain-updater' },

@@ -30,6 +30,7 @@ model User {
   generatedScripts      GeneratedScript[]
   platformMetrics       PlatformMetrics[]
   postAnalytics         PostAnalytics[]
+  usageCounters         UsageCounter[]
 }
 
 enum WorkspaceRole {
@@ -62,6 +63,19 @@ model WorkspaceMember {
 enum AuthTokenType {
   VERIFY_EMAIL
   RESET_PASSWORD
+}
+
+model UsageCounter {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metric String
+  /** "YYYY-MM" billing period */
+  period String
+  count  Int    @default(0)
+
+  @@unique([userId, metric, period])
+  @@index([userId, period])
 }
 
 model AuthToken {
