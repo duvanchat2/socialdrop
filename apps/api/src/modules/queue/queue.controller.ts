@@ -33,15 +33,15 @@ export class QueueController {
 
   @Post()
   @ApiOperation({ summary: 'Create a queue slot' })
-  create(@Body() dto: CreateQueueSlotDto) {
-    return this.queue.create(dto);
+  create(@CurrentUser() userId: string, @Body() dto: CreateQueueSlotDto) {
+    return this.queue.create(userId, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a queue slot' })
-  remove(@Param('id') id: string) {
-    return this.queue.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.queue.remove(id, userId);
   }
 
   @Post('assign')

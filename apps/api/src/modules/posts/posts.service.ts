@@ -171,17 +171,17 @@ export class PostsService {
     });
   }
 
-  async findOne(id: string) {
-    const post = await this.prisma.post.findUnique({
-      where: { id },
+  async findOne(id: string, userId: string) {
+    const post = await this.prisma.post.findFirst({
+      where: { id, userId },
       include: { integrations: { include: { integration: true } }, media: true },
     });
     if (!post) throw new NotFoundException(`Post ${id} not found`);
     return post;
   }
 
-  async update(id: string, dto: UpdatePostDto) {
-    const post = await this.findOne(id);
+  async update(id: string, userId: string, dto: UpdatePostDto) {
+    const post = await this.findOne(id, userId);
     if (post.status === 'PUBLISHED') {
       throw new BadRequestException('Cannot edit an already published post');
     }
@@ -213,13 +213,13 @@ export class PostsService {
     return updated;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, userId: string) {
+    await this.findOne(id, userId);
     return this.prisma.post.delete({ where: { id } });
   }
 
-  async retry(id: string) {
-    const post = await this.findOne(id);
+  async retry(id: string, userId: string) {
+    const post = await this.findOne(id, userId);
     if (post.status !== 'ERROR') {
       throw new BadRequestException('Only failed posts can be retried');
     }

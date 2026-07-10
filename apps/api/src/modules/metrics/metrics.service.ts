@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@socialdrop/prisma';
@@ -530,7 +530,9 @@ export class MetricsService {
     return this.prisma.growthGoal.create({ data: { userId, platform, metric, target, deadline } });
   }
 
-  async deleteGoal(id: string) {
+  async deleteGoal(id: string, userId: string) {
+    const goal = await this.prisma.growthGoal.findFirst({ where: { id, userId } });
+    if (!goal) throw new NotFoundException(`GrowthGoal ${id} not found`);
     return this.prisma.growthGoal.delete({ where: { id } });
   }
 

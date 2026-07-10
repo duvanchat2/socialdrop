@@ -56,26 +56,26 @@ export class PostsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get post detail with integrations' })
   @ApiResponse({ status: 404, description: 'Post not found' })
-  findOne(@Param('id') id: string) {
-    return this.postsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.postsService.findOne(id, userId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update post caption/date/platforms' })
-  update(@Param('id') id: string, @Body() dto: UpdatePostDto) {
-    return this.postsService.update(id, dto);
+  update(@Param('id') id: string, @CurrentUser() userId: string, @Body() dto: UpdatePostDto) {
+    return this.postsService.update(id, userId, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Cancel and delete a post' })
-  remove(@Param('id') id: string) {
-    return this.postsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.postsService.remove(id, userId);
   }
 
   @Post(':id/retry')
   @ApiOperation({ summary: 'Retry a failed post' })
-  retry(@Param('id') id: string) {
-    return this.postsService.retry(id);
+  retry(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.postsService.retry(id, userId);
   }
 }

@@ -2,9 +2,6 @@ import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-
 import { Platform } from '@socialdrop/shared';
 
 export class CreateQueueSlotDto {
-  @IsString()
-  userId!: string;
-
   @IsEnum(Platform)
   platform!: Platform;
 

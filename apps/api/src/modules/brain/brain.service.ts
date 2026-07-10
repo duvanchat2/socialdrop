@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@socialdrop/prisma';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
@@ -149,7 +149,9 @@ export class BrainService {
     });
   }
 
-  async markPublished(scriptId: string, postId: string) {
+  async markPublished(scriptId: string, userId: string, postId: string) {
+    const script = await this.prisma.generatedScript.findFirst({ where: { id: scriptId, userId } });
+    if (!script) throw new NotFoundException(`GeneratedScript ${scriptId} not found`);
     return this.prisma.generatedScript.update({
       where: { id: scriptId },
       data: { postId, publishedAt: new Date() },

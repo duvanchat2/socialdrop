@@ -57,16 +57,16 @@ export class BrainController {
   /** POST /api/content-brain/scripts */
   @Post('scripts')
   @ApiOperation({ summary: 'Save a generated script' })
-  createScript(@Body() body: any) {
-    const { userId = 'demo-user', ...dto } = body;
+  createScript(@CurrentUser() userId: string, @Body() body: any) {
+    const { userId: _ignored, ...dto } = body;
     return this.brainService.createScript(userId, dto);
   }
 
   /** PATCH /api/content-brain/scripts/:id/publish */
   @Patch('scripts/:id/publish')
   @ApiOperation({ summary: 'Mark a script as published (link postId)' })
-  markPublished(@Param('id') id: string, @Body() body: { postId: string }) {
-    return this.brainService.markPublished(id, body.postId);
+  markPublished(@Param('id') id: string, @CurrentUser() userId: string, @Body() body: { postId: string }) {
+    return this.brainService.markPublished(id, userId, body.postId);
   }
 
   /** POST /api/content-brain/collect-metrics — trigger manual metrics collection */

@@ -83,18 +83,19 @@ export class MetricsController {
   @Post('goals')
   @ApiOperation({ summary: 'Create a growth goal' })
   async createGoal(
-    @Body() body: { userId: string; platform: string; metric: string; target: number; deadline: string },
+    @CurrentUser() userId: string,
+    @Body() body: { platform: string; metric: string; target: number; deadline: string },
   ) {
-    const { userId, platform, metric, target, deadline } = body;
-    if (!userId || !platform || !metric || !target || !deadline) {
-      throw new HttpException('userId, platform, metric, target and deadline are required', HttpStatus.BAD_REQUEST);
+    const { platform, metric, target, deadline } = body;
+    if (!platform || !metric || !target || !deadline) {
+      throw new HttpException('platform, metric, target and deadline are required', HttpStatus.BAD_REQUEST);
     }
     return this.metricsService.createGoal(userId, platform, metric, target, new Date(deadline));
   }
 
   @Delete('goals/:id')
   @ApiOperation({ summary: 'Delete a growth goal' })
-  async deleteGoal(@Param('id') id: string) {
-    return this.metricsService.deleteGoal(id);
+  async deleteGoal(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.metricsService.deleteGoal(id, userId);
   }
 }
