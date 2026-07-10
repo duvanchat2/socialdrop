@@ -67,6 +67,24 @@ export class QueueService {
       );
     }
 
+    const horizonEnd = new Date(from);
+    horizonEnd.setDate(horizonEnd.getDate() + SEARCH_HORIZON_DAYS);
+
+    const scheduledPosts = await this.prisma.post.findMany({
+      where: {
+        userId,
+        scheduledAt: { gte: from, lte: horizonEnd },
+        integrations: { some: { integration: { platform } } },
+      },
+      select: { scheduledAt: true },
+    });
+    const scheduledTimes = scheduledPosts.map((p) => p.scheduledAt.getTime());
+
+    const hasConflict = (candidateTime: number) =>
+      scheduledTimes.some(
+        (t) => Math.abs(t - candidateTime) <= COLLISION_MINUTES * 60_000,
+      );
+
     for (let dayOffset = 0; dayOffset < SEARCH_HORIZON_DAYS; dayOffset++) {
       const day = new Date(from);
       day.setDate(day.getDate() + dayOffset);
@@ -80,20 +98,7 @@ export class QueueService {
 
         if (candidate.getTime() <= from.getTime()) continue;
 
-        const windowStart = new Date(candidate.getTime() - COLLISION_MINUTES * 60_000);
-        const windowEnd = new Date(candidate.getTime() + COLLISION_MINUTES * 60_000);
-
-        const conflict = await this.prisma.post.findFirst({
-          where: {
-            userId,
-            scheduledAt: { gte: windowStart, lte: windowEnd },
-            integrations: {
-              some: { integration: { platform } },
-            },
-          },
-        });
-
-        if (!conflict) {
+        if (!hasConflict(candidate.getTime())) {
           return { slot, date: candidate };
         }
       }
