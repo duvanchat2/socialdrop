@@ -6,10 +6,12 @@ import { BullModule } from '@nestjs/bullmq';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
+import { TerminusModule } from '@nestjs/terminus';
 import { join } from 'path';
 import { PrismaModule } from '@socialdrop/prisma';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { HealthController } from './health.controller.js';
 import { DriveModule } from '../modules/drive/drive.module.js';
 import { PostsModule } from '../modules/posts/posts.module.js';
 import { IntegrationsModule } from '../modules/integrations/integrations.module.js';
@@ -41,6 +43,7 @@ import redisConfig from '../config/redis.config.js';
       load: [googleConfig, redisConfig],
     }),
     ScheduleModule.forRoot(),
+    TerminusModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -52,6 +55,7 @@ import redisConfig from '../config/redis.config.js';
       }),
       inject: [ConfigService],
     }),
+    BullModule.registerQueue({ name: 'post-scheduler' }),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), process.env.UPLOAD_DIRECTORY ?? './uploads'),
       serveRoot: '/uploads',
@@ -79,7 +83,7 @@ import redisConfig from '../config/redis.config.js';
     UsersModule,
     BrainModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [
     AppService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
