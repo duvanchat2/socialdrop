@@ -6,6 +6,8 @@ import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { PlatformIcon, Platform } from '@/components/PlatformIcon';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
 import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
+import { BestTimesHeatmap, BestTimes } from '@/components/BestTimesHeatmap';
+import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 import { Loader2, X, RefreshCw, AlertCircle, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -67,6 +69,11 @@ export default function DashboardPage() {
     queryFn: () => apiFetch<PlatformStat[]>(`/api/stats/by-platform?userId=${userId}`),
   });
 
+  const bestTimes = useQuery({
+    queryKey: ['stats-best-times'],
+    queryFn: () => apiFetch<BestTimes>(`/api/stats/best-times?userId=${userId}`),
+  });
+
   const posts = useQuery({
     queryKey: ['posts'],
     queryFn: () => apiFetch<Post[]>(`/api/posts?userId=${userId}&limit=20`),
@@ -108,6 +115,8 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
+      <OnboardingChecklist userId={userId} hasPosts={(posts.data ?? []).length > 0} />
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {STAT_CARDS.map(({ label, value, color, clickable, delta }) => (
@@ -137,6 +146,8 @@ export default function DashboardPage() {
 
       {!byPlatform.isLoading && <PlatformBreakdownChart data={byPlatform.data ?? []} />}
 
+      <BestTimesHeatmap data={bestTimes.data} />
+
       {/* Recent posts table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800">
@@ -147,6 +158,7 @@ export default function DashboardPage() {
         ) : (posts.data ?? []).length === 0 ? (
           <div className="text-center p-8 text-gray-500 text-sm">No hay posts todavía</div>
         ) : (
+          <div className="overflow-x-auto -mx-4 px-4">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-gray-400 text-left">
@@ -188,6 +200,7 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

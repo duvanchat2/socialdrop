@@ -31,4 +31,13 @@ export class StatsController {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.statsService.getDashboard(userId, period);
   }
+
+  @Get('best-times')
+  @ApiOperation({ summary: 'Get best day/hour slots to publish based on historical engagement' })
+  @ApiQuery({ name: 'userId', required: true })
+  @ApiQuery({ name: 'platform', required: false })
+  bestTimes(@Query('userId') userId: string, @Query('platform') platform?: string) {
+    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
+    return this.statsService.getBestTimes(userId, platform);
+  }
 }

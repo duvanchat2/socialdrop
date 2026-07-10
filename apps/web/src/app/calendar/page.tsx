@@ -92,7 +92,13 @@ export default function CalendarPage() {
   const [quickUploadFiles, setQuickUploadFiles] = useState<File[]>([]);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
-  useEffect(() => setView(getSavedView()), []);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      setView('list');
+    } else {
+      setView(getSavedView());
+    }
+  }, []);
   useEffect(() => { localStorage.setItem('calendar-view', view); }, [view]);
 
   const { data: posts = [] } = useQuery({
