@@ -49,6 +49,18 @@ export class AuthService {
           expiresAt: new Date(Date.now() + VERIFY_EMAIL_EXPIRY_MS),
         },
       });
+      // Transparent default workspace — a user with a single workspace never
+      // sees the concept (no switcher, everything scoped to it automatically).
+      const workspace = await tx.workspace.create({
+        data: { name: name?.trim() || 'Mi espacio' },
+      });
+      await tx.workspaceMember.create({
+        data: { workspaceId: workspace.id, userId: created.id, role: 'OWNER' },
+      });
+      await tx.user.update({
+        where: { id: created.id },
+        data: { lastActiveWorkspaceId: workspace.id },
+      });
       return created;
     });
 
@@ -56,7 +68,10 @@ export class AuthService {
     return { ok: true };
   }
 
-  async login(email: string, password: string): Promise<{ token: string; expiresAt: string } | null> {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ token: string; expiresAt: string; workspaceId: string | null } | null> {
     const normalizedEmail = email.toLowerCase().trim();
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !user.passwordHash) return null;
@@ -72,7 +87,7 @@ export class AuthService {
     const expirySeconds = this.parseExpiry(this.config.get<string>('JWT_EXPIRY', '7d'));
     const token = this.jwtService.sign({ sub: user.id, tokenVersion: user.tokenVersion });
     const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
-    return { token, expiresAt };
+    return { token, expiresAt, workspaceId: user.lastActiveWorkspaceId };
   }
 
   async verifyEmail(rawToken: string): Promise<{ ok: true }> {

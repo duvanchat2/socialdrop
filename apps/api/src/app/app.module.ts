@@ -35,6 +35,7 @@ import { YoutubeModule } from '../modules/youtube/youtube.module.js';
 import { UsersModule } from '../modules/users/users.module.js';
 import { BrainModule } from '../modules/brain/brain.module.js';
 import { AuthModule } from '../modules/auth/auth.module.js';
+import { WorkspacesModule } from '../modules/workspaces/workspaces.module.js';
 import googleConfig from '../config/google.config.js';
 import redisConfig from '../config/redis.config.js';
 
@@ -85,6 +86,7 @@ import redisConfig from '../config/redis.config.js';
     UsersModule,
     BrainModule,
     AuthModule,
+    WorkspacesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

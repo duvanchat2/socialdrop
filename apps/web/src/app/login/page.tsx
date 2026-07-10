@@ -4,6 +4,7 @@ import { useState, FormEvent, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
+import { setActiveWorkspaceId } from '@/lib/workspace';
 
 function LoginForm() {
   const router       = useRouter();
@@ -19,10 +20,11 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      await apiFetch('/api/auth/login', {
+      const result = await apiFetch<{ workspaceId: string | null }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
+      if (result.workspaceId) setActiveWorkspaceId(result.workspaceId);
       const from = searchParams.get('from') ?? '/';
       router.replace(from);
     } catch {

@@ -8,18 +8,46 @@ datasource db {
 }
 
 model User {
-  id              String        @id @default(uuid())
-  email           String        @unique
-  name            String?
-  passwordHash    String?
-  emailVerifiedAt DateTime?
-  tokenVersion    Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  integrations    Integration[]
-  posts           Post[]
-  driveConfigs    DriveConfig[]
-  authTokens      AuthToken[]
+  id                    String            @id @default(uuid())
+  email                 String            @unique
+  name                  String?
+  passwordHash          String?
+  emailVerifiedAt       DateTime?
+  tokenVersion          Int               @default(0)
+  lastActiveWorkspaceId String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  posts                 Post[]
+  driveConfigs          DriveConfig[]
+  authTokens            AuthToken[]
+  workspaceMemberships  WorkspaceMember[]
+}
+
+enum WorkspaceRole {
+  OWNER
+  MEMBER
+}
+
+model Workspace {
+  id           String            @id @default(uuid())
+  name         String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  members      WorkspaceMember[]
+  integrations Integration[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole
+  createdAt   DateTime      @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
 }
 
 enum AuthTokenType {
@@ -42,8 +70,8 @@ model AuthToken {
 
 model Integration {
   id           String            @id @default(uuid())
-  userId       String
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId  String
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   platform     Platform
   accountName  String?
   accessToken  String
@@ -55,8 +83,8 @@ model Integration {
   updatedAt    DateTime          @updatedAt
   posts        PostIntegration[]
 
-  @@unique([userId, platform, profileId])
-  @@index([userId])
+  @@unique([workspaceId, platform, profileId])
+  @@index([workspaceId])
 }
 
 model Post {
