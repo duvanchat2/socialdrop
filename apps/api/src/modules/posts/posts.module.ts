@@ -8,7 +8,15 @@ import { DebugModule } from '../debug/debug.module.js';
 
 @Module({
   imports: [
-    BullModule.registerQueue({ name: 'post-scheduler' }),
+    BullModule.registerQueue({
+      name: 'post-scheduler',
+      defaultJobOptions: {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+      },
+    }),
     IntegrationsModule,
     DebugModule,
   ],
