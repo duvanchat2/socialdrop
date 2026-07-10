@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Query, HttpException, HttpStatus } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { BulkService } from './bulk.service.js';
 import type { DistributeAutoParams, DistributeStrategyParams, ScheduleParams } from './bulk.types.js';
@@ -21,7 +22,7 @@ export class BulkController {
   @Post('distribute')
   @ApiOperation({ summary: 'Generate PostDraft[] preview (not saved)' })
   async distribute(
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Body() body: DistributeBody,
   ) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
@@ -47,7 +48,7 @@ export class BulkController {
 
   @Post('schedule')
   @ApiOperation({ summary: 'Create all posts from filled-in drafts' })
-  schedule(@Query('userId') userId: string, @Body() body: { drafts: ScheduleParams['drafts'] }) {
+  schedule(@CurrentUser() userId: string, @Body() body: { drafts: ScheduleParams['drafts'] }) {
     if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     return this.bulkService.scheduleAll({ drafts: body.drafts, userId });
   }

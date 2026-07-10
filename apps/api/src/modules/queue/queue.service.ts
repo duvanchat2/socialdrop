@@ -25,10 +25,10 @@ export class QueueService {
     });
   }
 
-  async create(dto: CreateQueueSlotDto) {
+  async create(userId: string, dto: CreateQueueSlotDto) {
     return this.prisma.queueSlot.create({
       data: {
-        userId: dto.userId,
+        userId,
         platform: dto.platform,
         dayOfWeek: dto.dayOfWeek,
         hour: dto.hour,
@@ -38,12 +38,10 @@ export class QueueService {
     });
   }
 
-  async remove(id: string) {
-    try {
-      await this.prisma.queueSlot.delete({ where: { id } });
-    } catch {
-      throw new NotFoundException(`QueueSlot ${id} not found`);
-    }
+  async remove(id: string, userId: string) {
+    const slot = await this.prisma.queueSlot.findFirst({ where: { id, userId } });
+    if (!slot) throw new NotFoundException(`QueueSlot ${id} not found`);
+    await this.prisma.queueSlot.delete({ where: { id } });
   }
 
   /**

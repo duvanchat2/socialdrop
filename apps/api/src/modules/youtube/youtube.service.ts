@@ -38,8 +38,9 @@ export class YoutubeService {
   }
 
   private async getAuthedClient(userId: string): Promise<{ client: OAuth2Client; integrationId: string } | null> {
+    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { userId, platform: 'YOUTUBE' },
+      where: { workspaceId: workspaceId ?? undefined, platform: 'YOUTUBE' },
     });
     if (!integration) return null;
 

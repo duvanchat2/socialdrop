@@ -11,6 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ContentService } from './content.service.js';
 
 @ApiTags('content')
@@ -21,7 +22,7 @@ export class ContentController {
   @Get()
   @ApiOperation({ summary: 'List content items' })
   findAll(
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Query('type') type?: string,
     @Query('status') status?: string,
   ) {
@@ -30,19 +31,19 @@ export class ContentController {
 
   @Post()
   @ApiOperation({ summary: 'Create content item' })
-  create(@Query('userId') userId: string, @Body() dto: any) {
+  create(@CurrentUser() userId: string, @Body() dto: any) {
     return this.contentService.create(userId ?? 'demo-user', dto);
   }
 
   @Get('drive-files')
   @ApiOperation({ summary: 'List files from configured Drive folder' })
-  getDriveFiles(@Query('userId') userId: string) {
+  getDriveFiles(@CurrentUser() userId: string) {
     return this.contentService.getDriveFiles(userId ?? 'demo-user');
   }
 
   @Post('schedule-all')
   @ApiOperation({ summary: 'Schedule all drafts with scheduledAt set' })
-  scheduleAll(@Query('userId') userId: string) {
+  scheduleAll(@CurrentUser() userId: string) {
     return this.contentService.scheduleAll(userId ?? 'demo-user');
   }
 

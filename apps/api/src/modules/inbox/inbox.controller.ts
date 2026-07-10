@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Body, Query } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { InboxService } from './inbox.service.js';
 
@@ -9,7 +10,7 @@ export class InboxController {
 
   @Get()
   @ApiOperation({ summary: 'List conversations/contacts' })
-  getConversations(@Query('userId') userId = 'demo-user') {
+  getConversations(@CurrentUser() userId: string) {
     return this.inboxService.getConversations(userId);
   }
 

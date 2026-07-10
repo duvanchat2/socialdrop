@@ -10,10 +10,12 @@ import {
   Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Public } from '../auth/auth.public.js';
 import { WebhookService } from './webhook.service.js';
 
 @ApiTags('webhooks')
 @Controller('webhooks')
+@Public()
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 

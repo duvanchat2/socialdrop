@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Delete, Patch, Param, Body, Query, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { YoutubeService } from './youtube.service.js';
 
 @ApiTags('youtube')
@@ -14,7 +15,7 @@ export class YoutubeController {
   @Post('poll')
   @ApiOperation({ summary: 'Manually trigger YouTube comment polling' })
   @ApiQuery({ name: 'userId', required: false })
-  poll(@Query('userId') userId = 'demo-user') {
+  poll(@CurrentUser() userId: string) {
     return this.youtube.pollComments(userId);
   }
 
@@ -28,7 +29,7 @@ export class YoutubeController {
   @ApiQuery({ name: 'onlyShorts', required: false })
   @ApiQuery({ name: 'limit', required: false })
   getComments(
-    @Query('userId') userId = 'demo-user',
+    @CurrentUser() userId: string,
     @Query('videoId') videoId?: string,
     @Query('onlyUnreplied') onlyUnreplied?: string,
     @Query('onlyShorts') onlyShorts?: string,
@@ -46,7 +47,7 @@ export class YoutubeController {
   @Get('stats')
   @ApiOperation({ summary: 'Comment stats for a user' })
   @ApiQuery({ name: 'userId', required: false })
-  getStats(@Query('userId') userId = 'demo-user') {
+  getStats(@CurrentUser() userId: string) {
     return this.youtube.getStats(userId);
   }
 
@@ -66,7 +67,7 @@ export class YoutubeController {
   @Get('auto-replies')
   @ApiOperation({ summary: 'List auto-reply keyword rules' })
   @ApiQuery({ name: 'userId', required: false })
-  getAutoReplies(@Query('userId') userId = 'demo-user') {
+  getAutoReplies(@CurrentUser() userId: string) {
     return this.youtube.getAutoReplies(userId);
   }
 
@@ -83,7 +84,7 @@ export class YoutubeController {
   @Patch('auto-replies/:id/toggle')
   @ApiOperation({ summary: 'Toggle auto-reply rule on/off' })
   @ApiQuery({ name: 'userId', required: false })
-  toggleAutoReply(@Param('id') id: string, @Query('userId') userId = 'demo-user') {
+  toggleAutoReply(@Param('id') id: string, @CurrentUser() userId: string) {
     return this.youtube.toggleAutoReply(id, userId);
   }
 
@@ -91,7 +92,7 @@ export class YoutubeController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete an auto-reply rule' })
   @ApiQuery({ name: 'userId', required: false })
-  deleteAutoReply(@Param('id') id: string, @Query('userId') userId = 'demo-user') {
+  deleteAutoReply(@Param('id') id: string, @CurrentUser() userId: string) {
     return this.youtube.deleteAutoReply(id, userId);
   }
 }

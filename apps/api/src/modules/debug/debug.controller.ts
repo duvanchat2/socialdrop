@@ -1,4 +1,5 @@
 import { Controller, Get, Delete, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { DebugLogService } from './debug-log.service.js';
 
@@ -12,7 +13,7 @@ export class DebugController {
   @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getLogs(
-    @Query('userId') userId = 'demo-user',
+    @CurrentUser() userId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
     return this.debugLog.getLogs(userId, Math.min(limit, 200));
@@ -21,7 +22,7 @@ export class DebugController {
   @Delete('logs')
   @ApiOperation({ summary: 'Clear debug logs for a user' })
   @ApiQuery({ name: 'userId', required: false })
-  clearLogs(@Query('userId') userId = 'demo-user') {
+  clearLogs(@CurrentUser() userId: string) {
     return this.debugLog.clearLogs(userId);
   }
 }

@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Platform } from '@socialdrop/shared';
 import { AssignSlotDto, CreateQueueSlotDto } from './dto/queue-slot.dto.js';
 import { QueueService } from './queue.service.js';
@@ -24,7 +25,7 @@ export class QueueController {
   @ApiQuery({ name: 'userId', required: true })
   @ApiQuery({ name: 'platform', required: false })
   list(
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Query('platform') platform?: Platform,
   ) {
     return this.queue.list(userId, platform);
@@ -32,15 +33,15 @@ export class QueueController {
 
   @Post()
   @ApiOperation({ summary: 'Create a queue slot' })
-  create(@Body() dto: CreateQueueSlotDto) {
-    return this.queue.create(dto);
+  create(@CurrentUser() userId: string, @Body() dto: CreateQueueSlotDto) {
+    return this.queue.create(userId, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a queue slot' })
-  remove(@Param('id') id: string) {
-    return this.queue.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.queue.remove(id, userId);
   }
 
   @Post('assign')

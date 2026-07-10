@@ -3,6 +3,7 @@ import {
   HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { FlowsService, CreateFlowDto, UpdateFlowDto } from './flows.service.js';
 
 @ApiTags('flows')
@@ -12,24 +13,24 @@ export class FlowsController {
 
   @Get()
   @ApiQuery({ name: 'userId', required: false })
-  findAll(@Query('userId') userId = 'demo-user') {
+  findAll(@CurrentUser() userId: string) {
     return this.flowsService.findAll(userId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Query('userId') userId = 'demo-user') {
+  findOne(@Param('id') id: string, @CurrentUser() userId: string) {
     return this.flowsService.findOne(id, userId);
   }
 
   @Post()
-  create(@Query('userId') userId = 'demo-user', @Body() dto: CreateFlowDto) {
+  create(@CurrentUser() userId: string, @Body() dto: CreateFlowDto) {
     return this.flowsService.create(userId, dto);
   }
 
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Query('userId') userId = 'demo-user',
+    @CurrentUser() userId: string,
     @Body() dto: UpdateFlowDto,
   ) {
     return this.flowsService.update(id, userId, dto);
@@ -37,13 +38,13 @@ export class FlowsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string, @Query('userId') userId = 'demo-user') {
+  remove(@Param('id') id: string, @CurrentUser() userId: string) {
     return this.flowsService.remove(id, userId);
   }
 
   @Patch(':id/toggle')
   @ApiOperation({ summary: 'Toggle flow active/inactive' })
-  toggle(@Param('id') id: string, @Query('userId') userId = 'demo-user') {
+  toggle(@Param('id') id: string, @CurrentUser() userId: string) {
     return this.flowsService.toggle(id, userId);
   }
 }

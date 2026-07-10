@@ -10,6 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Queue } from 'bullmq';
 import { BrainService } from './brain.service.js';
 import { TranscriptionService } from './transcription.service.js';
@@ -28,14 +29,14 @@ export class BrainController {
   /** GET /api/content-brain?userId=xxx */
   @Get()
   @ApiOperation({ summary: 'Get ContentBrain for a user' })
-  getBrain(@Query('userId') userId = 'demo-user') {
+  getBrain(@CurrentUser() userId: string) {
     return this.brainService.getBrain(userId);
   }
 
   /** GET /api/content-brain/performance?userId=xxx */
   @Get('performance')
   @ApiOperation({ summary: 'Get performance stats + recent viral scripts' })
-  getPerformance(@Query('userId') userId = 'demo-user') {
+  getPerformance(@CurrentUser() userId: string) {
     return this.brainService.getPerformance(userId);
   }
 
@@ -43,7 +44,7 @@ export class BrainController {
   @Get('scripts')
   @ApiOperation({ summary: 'List generated scripts' })
   listScripts(
-    @Query('userId') userId = 'demo-user',
+    @CurrentUser() userId: string,
     @Query('isViral') isViral?: string,
     @Query('platform') platform?: string,
   ) {
@@ -56,16 +57,16 @@ export class BrainController {
   /** POST /api/content-brain/scripts */
   @Post('scripts')
   @ApiOperation({ summary: 'Save a generated script' })
-  createScript(@Body() body: any) {
-    const { userId = 'demo-user', ...dto } = body;
+  createScript(@CurrentUser() userId: string, @Body() body: any) {
+    const { userId: _ignored, ...dto } = body;
     return this.brainService.createScript(userId, dto);
   }
 
   /** PATCH /api/content-brain/scripts/:id/publish */
   @Patch('scripts/:id/publish')
   @ApiOperation({ summary: 'Mark a script as published (link postId)' })
-  markPublished(@Param('id') id: string, @Body() body: { postId: string }) {
-    return this.brainService.markPublished(id, body.postId);
+  markPublished(@Param('id') id: string, @CurrentUser() userId: string, @Body() body: { postId: string }) {
+    return this.brainService.markPublished(id, userId, body.postId);
   }
 
   /** POST /api/content-brain/collect-metrics — trigger manual metrics collection */

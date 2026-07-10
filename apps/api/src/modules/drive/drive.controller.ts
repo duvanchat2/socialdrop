@@ -11,6 +11,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { DriveService } from './drive.service.js';
 import { ConfigureDriveDto } from '@socialdrop/shared';
 
@@ -22,7 +23,7 @@ export class DriveController {
 
   /** Returns the Google OAuth URL as JSON (for frontend use) */
   @Get('auth-url')
-  authUrl(@Query('userId') userId: string) {
+  authUrl(@CurrentUser() userId: string) {
     if (!userId) {
       throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     }
@@ -32,7 +33,7 @@ export class DriveController {
 
   /** Redirects browser to Google OAuth */
   @Get('auth')
-  auth(@Query('userId') userId: string, @Res() res: Response): void {
+  auth(@CurrentUser() userId: string, @Res() res: Response): void {
     if (!userId) {
       throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     }
@@ -83,7 +84,7 @@ export class DriveController {
 
   @Post('configure')
   async configure(
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Body() dto: ConfigureDriveDto,
   ) {
     if (!userId) {
@@ -93,7 +94,7 @@ export class DriveController {
   }
 
   @Get('status')
-  async status(@Query('userId') userId: string) {
+  async status(@CurrentUser() userId: string) {
     if (!userId) {
       throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
     }

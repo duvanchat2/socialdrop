@@ -1,7 +1,10 @@
 import {
-  Controller, Get, Delete, Query, Param, Res, HttpException, HttpStatus,
+  Controller, Get, Delete, Query, Param, Res, UseGuards, HttpException, HttpStatus, ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import type { Response } from 'express';
 import { PrismaService } from '@socialdrop/prisma';
 import { IntegrationManager } from '@socialdrop/integrations';
@@ -25,11 +28,11 @@ export class IntegrationsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List connected integrations for a user' })
-  async getUserIntegrations(@Query('userId') userId: string) {
-    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
+  @UseGuards(WorkspaceGuard)
+  @ApiOperation({ summary: 'List connected integrations for the active workspace' })
+  async getUserIntegrations(@ActiveWorkspace() workspaceId: string) {
     return this.prisma.integration.findMany({
-      where: { userId },
+      where: { workspaceId },
       select: {
         id: true,
         platform: true,
@@ -42,33 +45,27 @@ export class IntegrationsController {
   }
 
   @Get('connect')
+  @UseGuards(WorkspaceGuard)
   @ApiOperation({ summary: 'Start OAuth flow or save static env credentials for a platform' })
   async connect(
     @Query('platform') platform: string,
-    @Query('userId') userId: string,
+    @ActiveWorkspace() workspaceId: string,
     @Res() res: Response,
   ) {
-    if (!platform || !userId) {
-      throw new HttpException('platform and userId are required', HttpStatus.BAD_REQUEST);
+    if (!platform) {
+      throw new HttpException('platform is required', HttpStatus.BAD_REQUEST);
     }
 
     const platformEnum = platform.toUpperCase() as Platform;
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-
-    // Ensure user exists (auto-create for demo/development)
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      update: {},
-      create: { id: userId, email: `${userId}@socialdrop.local`, name: userId },
-    });
 
     // For platforms with static env credentials, save directly to DB
     const staticCreds = await this.resolveStaticCredentials(platformEnum);
     if (staticCreds) {
       await this.prisma.integration.upsert({
         where: {
-          userId_platform_profileId: {
-            userId,
+          workspaceId_platform_profileId: {
+            workspaceId,
             platform: platformEnum,
             profileId: staticCreds.profileId,
           },
@@ -78,7 +75,7 @@ export class IntegrationsController {
           accountName: staticCreds.accountName,
         },
         create: {
-          userId,
+          workspaceId,
           platform: platformEnum,
           accessToken: staticCreds.accessToken,
           profileId: staticCreds.profileId,
@@ -94,7 +91,10 @@ export class IntegrationsController {
     }
 
     const provider = this.integrationManager.getProvider(platformEnum);
-    const authUrl = provider.generateAuthUrl(userId);
+    // workspaceId travels through the OAuth `state` param — it's the only
+    // way to recover tenant context on the callback, since that's an
+    // external redirect and won't carry our X-Workspace-Id header.
+    const authUrl = provider.generateAuthUrl(workspaceId);
     res.redirect(authUrl);
   }
 
@@ -143,29 +143,30 @@ export class IntegrationsController {
   async callback(
     @Param('platform') platform: string,
     @Query('code') code: string,
-    @Query('state') userId: string,
+    @Query('state') workspaceId: string,
+    @CurrentUser() userId: string,
     @Res() res: Response,
   ) {
-    if (!code || !userId) {
+    if (!code || !workspaceId) {
       throw new HttpException('Missing code or state', HttpStatus.BAD_REQUEST);
     }
+
+    // Manual membership check — this is an external redirect from the OAuth
+    // provider, so it carries no X-Workspace-Id header for WorkspaceGuard.
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    });
+    if (!membership) throw new ForbiddenException('Not a member of this workspace');
 
     const platformEnum = platform.toUpperCase() as Platform;
     const provider = this.integrationManager.getProvider(platformEnum);
 
-    // Ensure user exists
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      update: {},
-      create: { id: userId, email: `${userId}@socialdrop.local`, name: userId },
-    });
-
-    const authResult = await provider.authenticate(code, userId);
+    const authResult = await provider.authenticate(code, workspaceId);
 
     await this.prisma.integration.upsert({
       where: {
-        userId_platform_profileId: {
-          userId,
+        workspaceId_platform_profileId: {
+          workspaceId,
           platform: platformEnum,
           profileId: authResult.profileId,
         },
@@ -177,7 +178,7 @@ export class IntegrationsController {
         accountName: authResult.accountName,
       },
       create: {
-        userId,
+        workspaceId,
         platform: platformEnum,
         accessToken: authResult.accessToken,
         refreshToken: authResult.refreshToken,
@@ -192,10 +193,11 @@ export class IntegrationsController {
   }
 
   @Get(':id/status')
+  @UseGuards(WorkspaceGuard)
   @ApiOperation({ summary: 'Verify if an integration token is still valid' })
-  async checkStatus(@Param('id') id: string) {
-    const integration = await this.prisma.integration.findUnique({
-      where: { id },
+  async checkStatus(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
+    const integration = await this.prisma.integration.findFirst({
+      where: { id, workspaceId },
       select: { id: true, platform: true, accountName: true, tokenExpiry: true },
     });
     if (!integration) throw new HttpException('Integration not found', HttpStatus.NOT_FOUND);
@@ -214,9 +216,10 @@ export class IntegrationsController {
   }
 
   @Delete(':id')
+  @UseGuards(WorkspaceGuard)
   @ApiOperation({ summary: 'Disconnect a platform integration' })
-  async disconnect(@Param('id') id: string) {
-    const integration = await this.prisma.integration.findUnique({ where: { id } });
+  async disconnect(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
+    const integration = await this.prisma.integration.findFirst({ where: { id, workspaceId } });
     if (!integration) throw new HttpException('Integration not found', HttpStatus.NOT_FOUND);
 
     await this.prisma.integration.delete({ where: { id } });

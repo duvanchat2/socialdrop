@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Patch, Body, Param, Query, Delete, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { PostsService } from './posts.service.js';
 import { CreatePostDto, UpdatePostDto } from '@socialdrop/shared';
 
@@ -13,7 +14,7 @@ export class PostsController {
   @Post()
   @ApiOperation({ summary: 'Create and schedule a post' })
   @ApiResponse({ status: 201, description: 'Post created' })
-  create(@Query('userId') userId: string, @Body() dto: CreatePostDto) {
+  create(@CurrentUser() userId: string, @Body() dto: CreatePostDto) {
     return this.postsService.create(userId, dto);
   }
 
@@ -26,7 +27,7 @@ export class PostsController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'cursor', required: false })
   findAll(
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Query('status') status?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -45,7 +46,7 @@ export class PostsController {
   @Get('calendar')
   @ApiOperation({ summary: 'Get posts for calendar view' })
   calendar(
-    @Query('userId') userId: string,
+    @CurrentUser() userId: string,
     @Query('from') from: string,
     @Query('to') to: string,
   ) {
@@ -55,26 +56,26 @@ export class PostsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get post detail with integrations' })
   @ApiResponse({ status: 404, description: 'Post not found' })
-  findOne(@Param('id') id: string) {
-    return this.postsService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.postsService.findOne(id, userId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update post caption/date/platforms' })
-  update(@Param('id') id: string, @Body() dto: UpdatePostDto) {
-    return this.postsService.update(id, dto);
+  update(@Param('id') id: string, @CurrentUser() userId: string, @Body() dto: UpdatePostDto) {
+    return this.postsService.update(id, userId, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Cancel and delete a post' })
-  remove(@Param('id') id: string) {
-    return this.postsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.postsService.remove(id, userId);
   }
 
   @Post(':id/retry')
   @ApiOperation({ summary: 'Retry a failed post' })
-  retry(@Param('id') id: string) {
-    return this.postsService.retry(id);
+  retry(@Param('id') id: string, @CurrentUser() userId: string) {
+    return this.postsService.retry(id, userId);
   }
 }

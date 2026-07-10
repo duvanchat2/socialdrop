@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Delete, Body, Param, Query, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { SequencesService, CreateSequenceDto } from './sequences.service.js';
 
 @ApiTags('sequences')
@@ -10,12 +11,12 @@ export class SequencesController {
   constructor(private readonly sequencesService: SequencesService) {}
 
   @Get()
-  findAll(@Query('userId') userId = 'demo-user') {
+  findAll(@CurrentUser() userId: string) {
     return this.sequencesService.findAll(userId);
   }
 
   @Post()
-  create(@Query('userId') userId = 'demo-user', @Body() dto: CreateSequenceDto) {
+  create(@CurrentUser() userId: string, @Body() dto: CreateSequenceDto) {
     return this.sequencesService.create(userId, dto);
   }
 
@@ -27,7 +28,7 @@ export class SequencesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string, @Query('userId') userId = 'demo-user') {
+  remove(@Param('id') id: string, @CurrentUser() userId: string) {
     return this.sequencesService.remove(id, userId);
   }
 }

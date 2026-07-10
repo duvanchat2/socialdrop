@@ -10,6 +10,7 @@ import {
   ListOrdered, GitBranch, Inbox, Zap, Terminal, Youtube, Brain,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
   ssr: false,
@@ -42,6 +43,7 @@ const NAV_AUTOMATION = [
 const NAV_SETTINGS = [
   { href: '/settings/brand', label: 'Perfil de marca', icon: Briefcase },
   { href: '/settings/strategy', label: 'Estrategia', icon: BarChart2 },
+  { href: '/settings/workspaces', label: 'Workspaces', icon: Users },
 ];
 
 function NavLinks({ onClose }: { onClose: () => void }) {
@@ -144,6 +146,9 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <span className="text-xl font-bold text-gray-900 dark:text-white">SocialDrop</span>
           <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">scheduler</span>
+        </div>
+        <div className="pt-3">
+          <WorkspaceSwitcher />
         </div>
         <nav className="flex-1 p-3 space-y-1">
           <NavLinks onClose={onClose} />

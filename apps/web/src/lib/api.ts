@@ -1,8 +1,16 @@
+import { getActiveWorkspaceId } from './workspace';
+
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333';
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const workspaceId = getActiveWorkspaceId();
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+      ...options?.headers,
+    },
+    credentials: 'include',
     ...options,
   });
   if (!res.ok) {
