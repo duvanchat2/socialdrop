@@ -130,7 +130,7 @@ export default function AnalyticsPage() {
 
   const { data: overview }          = useQuery({ queryKey: ['stats-overview'],  queryFn: () => apiFetch<OverviewStats>('/api/stats/overview?userId=demo-user') });
   const { data: byPlatform = [] }   = useQuery({ queryKey: ['stats-platform'],  queryFn: () => apiFetch<PlatformStat[]>('/api/stats/by-platform?userId=demo-user') });
-  const { data: posts = [] }        = useQuery({ queryKey: ['posts-all'],       queryFn: () => apiFetch<Post[]>('/api/posts?userId=demo-user') });
+  const { data: posts = [] }        = useQuery({ queryKey: ['posts-all'],       queryFn: async () => (await apiFetch<{ posts: Post[] }>('/api/posts?userId=demo-user')).posts });
   const { data: integrations = [] } = useQuery({ queryKey: ['integrations'],    queryFn: () => apiFetch<Integration[]>('/api/integrations?userId=demo-user') });
 
   const platformParam = platform !== 'ALL' ? `&platform=${platform}` : '';

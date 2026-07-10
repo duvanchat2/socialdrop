@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import {
@@ -44,6 +45,18 @@ interface ViralScript {
   saves: number | null;
   reach: number | null;
   engagementRate: number | null;
+  publishedAt: string | null;
+}
+
+interface GeneratedScriptFull {
+  id: string;
+  platform: string;
+  topic: string;
+  hook: string;
+  body: string;
+  cta: string | null;
+  hashtags: string[];
+  postId: string | null;
   publishedAt: string | null;
 }
 
@@ -110,13 +123,19 @@ function PlatformBadge({ platform }: { platform: string }) {
 /* ─── Main page ─────────────────────────────────────────────────────── */
 export default function BrainPage() {
   const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'viral' | 'patterns'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'viral' | 'unpublished' | 'patterns'>('overview');
 
   const { data, isLoading, isError } = useQuery<PerformanceData>({
     queryKey: ['brain-performance', USER_ID],
     queryFn: () => apiFetch(`/api/content-brain/performance?userId=${USER_ID}`),
     refetchInterval: 60_000,
   });
+
+  const { data: allScripts = [] } = useQuery<GeneratedScriptFull[]>({
+    queryKey: ['brain-scripts', USER_ID],
+    queryFn: () => apiFetch(`/api/content-brain/scripts?userId=${USER_ID}`),
+  });
+  const unpublishedScripts = allScripts.filter((s) => !s.postId);
 
   const triggerMetrics = useMutation({
     mutationFn: () => apiFetch('/api/content-brain/collect-metrics', { method: 'POST' }),
@@ -162,6 +181,7 @@ export default function BrainPage() {
   const tabs = [
     { id: 'overview', label: 'Resumen', icon: BarChart2 },
     { id: 'viral', label: 'Guiones virales', icon: Flame },
+    { id: 'unpublished', label: `Sin programar${unpublishedScripts.length > 0 ? ` (${unpublishedScripts.length})` : ''}`, icon: BookOpen },
     { id: 'patterns', label: 'Patrones aprendidos', icon: Sparkles },
   ] as const;
 
@@ -378,6 +398,42 @@ export default function BrainPage() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {activeTab === 'unpublished' && (
+        <div className="space-y-3">
+          {unpublishedScripts.length === 0 ? (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+              <BookOpen size={32} className="mx-auto text-gray-700 mb-3" />
+              <p className="text-gray-400 text-sm">No hay guiones sin programar</p>
+            </div>
+          ) : (
+            unpublishedScripts.map((script) => {
+              const caption = [script.hook, script.body, script.cta].filter(Boolean).join('\n\n');
+              const href = `/posts/new?scriptId=${script.id}&caption=${encodeURIComponent(caption)}&hashtags=${encodeURIComponent(script.hashtags.join(' '))}`;
+              return (
+                <div key={script.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <BookOpen size={16} className="text-indigo-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <PlatformBadge platform={script.platform} />
+                      </div>
+                      <p className="text-xs font-medium text-gray-400 mb-0.5">{script.topic}</p>
+                      <p className="text-sm text-gray-100 line-clamp-2">"{script.hook}"</p>
+                    </div>
+                    <Link
+                      href={href}
+                      className="shrink-0 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+                    >
+                      Programar este guion
+                    </Link>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}

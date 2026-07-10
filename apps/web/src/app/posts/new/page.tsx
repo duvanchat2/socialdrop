@@ -1,11 +1,11 @@
 'use client';
-import { useMemo, useState, useCallback, useRef, type ReactNode } from 'react';
+import { useMemo, useState, useCallback, useRef, Suspense, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { uploadFileXHR } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
 import { compressImage } from '@/lib/compressMedia';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
@@ -56,15 +56,30 @@ const MAX_FILES = 10;
 const MEDIA_REQUIRED_PLATFORMS = ['INSTAGRAM', 'TIKTOK', 'YOUTUBE'];
 
 export default function NewPostPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewPostPageInner />
+    </Suspense>
+  );
+}
+
+function NewPostPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const linkedScriptId = searchParams.get('scriptId');
 
   const [scheduledAt, setScheduledAt] = useState('');
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [textOnlyCaption, setTextOnlyCaption] = useState('');
+  const [textOnlyCaption, setTextOnlyCaption] = useState(() => {
+    const prefill = searchParams.get('caption') ?? '';
+    const hashtags = searchParams.get('hashtags') ?? '';
+    return hashtags ? `${prefill}\n\n${hashtags}` : prefill;
+  });
   const [showMoreActions, setShowMoreActions] = useState(false);
 
   const userId = 'demo-user';
@@ -318,6 +333,23 @@ export default function NewPostPage() {
       apiFetch(`/api/queue/assign`, { method: 'POST', body: JSON.stringify({ postId }) }),
   });
 
+  /** Closes the Brain feedback loop: links the newly created post back to the source script. */
+  const linkScriptToPost = async (created: unknown) => {
+    if (!linkedScriptId) return;
+    const flat = Array.isArray(created) ? created.flat() : [created];
+    const postId = (flat[0] as { id?: string } | undefined)?.id;
+    if (!postId) return;
+    try {
+      await apiFetch(`/api/content-brain/scripts/${linkedScriptId}/publish`, {
+        method: 'PATCH',
+        body: JSON.stringify({ postId }),
+      });
+    } catch (e) {
+      // Non-fatal: the post is already created either way
+      toast.error(`No se pudo vincular el guion: ${(e as Error).message}`);
+    }
+  };
+
   const commonGuards = (): boolean => {
     if (!selectedPlatforms.length) { toast.error('Selecciona al menos una cuenta'); return false; }
     if (pendingCount > 0) { toast.error('Espera a que terminen todas las subidas'); return false; }
@@ -336,10 +368,12 @@ export default function NewPostPage() {
     if (!commonGuards()) return;
     try {
       const payloads = buildPayloads({ scheduledAt: new Date().toISOString() });
-      for (const payload of payloads) await createPost.mutateAsync(payload);
+      const created = await Promise.all(payloads.map((p) => createPost.mutateAsync(p)));
+      await linkScriptToPost(created);
       toast.success('Publicando ahora…');
       qc.invalidateQueries({ queryKey: ['posts'] });
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };
@@ -352,6 +386,7 @@ export default function NewPostPage() {
       const created = await Promise.all(payloads.map(p => createPost.mutateAsync(p)));
       // Backend may return a single post or an array of posts (auto-split)
       const ids = (created as any[]).flat().map((p: any) => p.id).filter(Boolean) as string[];
+      await linkScriptToPost(created);
       const results = await Promise.all(ids.map(id => assignToQueue.mutateAsync(id)));
       const firstSlot = (results[0] as any)?.slot;
       if (firstSlot) {
@@ -360,6 +395,7 @@ export default function NewPostPage() {
         toast.success('Posts añadidos a la cola');
       }
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };
@@ -371,6 +407,7 @@ export default function NewPostPage() {
       for (const payload of payloads) await createPost.mutateAsync(payload);
       toast.success('Borrador guardado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };
@@ -380,9 +417,11 @@ export default function NewPostPage() {
     if (!scheduledAt) { toast.error('Elige fecha y hora'); return; }
     try {
       const payloads = buildPayloads({ scheduledAt: new Date(scheduledAt).toISOString() });
-      for (const payload of payloads) await createPost.mutateAsync(payload);
+      const created = await Promise.all(payloads.map((p) => createPost.mutateAsync(p)));
+      await linkScriptToPost(created);
       toast.success('Post programado');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       router.push('/calendar');
     } catch (e) { toast.error(`Error: ${(e as Error).message}`); }
   };

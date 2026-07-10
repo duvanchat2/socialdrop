@@ -10,6 +10,7 @@ interface FindAllOptions {
   from?: Date;
   to?: Date;
   limit?: number;
+  cursor?: string;
 }
 
 /** Platforms that only support ONE video per post */
@@ -130,7 +131,8 @@ export class PostsService {
 
   async findAll(userId: string, opts: FindAllOptions = {}) {
     if (!userId) throw new BadRequestException('userId is required');
-    return this.prisma.post.findMany({
+    const limit = opts.limit ?? 100;
+    const posts = await this.prisma.post.findMany({
       where: {
         userId,
         ...(opts.status && { status: opts.status }),
@@ -143,14 +145,27 @@ export class PostsService {
         media: true,
       },
       orderBy: { scheduledAt: 'desc' },
-      take: opts.limit ?? 100,
+      take: limit + 1,
+      ...(opts.cursor && { cursor: { id: opts.cursor }, skip: 1 }),
     });
+
+    const hasMore = posts.length > limit;
+    return {
+      posts: hasMore ? posts.slice(0, limit) : posts,
+      nextCursor: hasMore ? posts[limit - 1].id : null,
+    };
   }
 
   async getCalendar(userId: string, from: Date, to: Date) {
     return this.prisma.post.findMany({
       where: { userId, scheduledAt: { gte: from, lte: to } },
-      include: { integrations: { include: { integration: true } }, media: true },
+      select: {
+        id: true,
+        content: true,
+        status: true,
+        scheduledAt: true,
+        integrations: { select: { integration: { select: { platform: true } } } },
+      },
       orderBy: { scheduledAt: 'asc' },
     });
   }

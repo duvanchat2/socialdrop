@@ -62,6 +62,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
     onSuccess: () => {
       toast.success('Borrador creado en el calendario');
       qc.invalidateQueries({ queryKey: ['posts-all'] });
+      qc.invalidateQueries({ queryKey: ['posts-calendar'] });
       onClose();
     },
     onError: (e: Error) => toast.error(`Error: ${e.message}`),

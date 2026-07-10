@@ -76,12 +76,12 @@ export default function DashboardPage() {
 
   const posts = useQuery({
     queryKey: ['posts'],
-    queryFn: () => apiFetch<Post[]>(`/api/posts?userId=${userId}&limit=20`),
+    queryFn: async () => (await apiFetch<{ posts: Post[] }>(`/api/posts?userId=${userId}&limit=20`)).posts,
   });
 
   const failedPosts = useQuery({
     queryKey: ['posts-failed'],
-    queryFn: () => apiFetch<Post[]>(`/api/posts?userId=${userId}&status=ERROR&limit=50`),
+    queryFn: async () => (await apiFetch<{ posts: Post[] }>(`/api/posts?userId=${userId}&status=ERROR&limit=50`)).posts,
     enabled: showFailedDrawer,
   });
 

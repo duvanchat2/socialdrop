@@ -207,6 +207,56 @@ export class MetricsService {
     }
   }
 
+  /** Fetch likes/comments/shares for a single Facebook post by ID (for per-script feedback loops). */
+  async getFacebookPostMetrics(
+    userId: string,
+    postId: string,
+  ): Promise<{ likes: number; comments: number; shares: number } | null> {
+    const integration = await this.prisma.integration.findFirst({
+      where: { userId, platform: 'FACEBOOK' },
+    });
+    if (!integration?.accessToken) return null;
+
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v19.0/${postId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${integration.accessToken}`,
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as FbPost;
+      return {
+        likes: data.likes?.summary?.total_count ?? 0,
+        comments: data.comments?.summary?.total_count ?? 0,
+        shares: data.shares?.count ?? 0,
+      };
+    } catch (err) {
+      this.logger.error(`[Metrics] Facebook post metrics failed for ${postId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** Fetch views/likes for a single YouTube video by ID (for per-script feedback loops). */
+  async getYouTubeVideoMetrics(
+    userId: string,
+    videoId: string,
+  ): Promise<{ views: number; likes: number } | null> {
+    const ctx = await this.getYoutubeClient(userId);
+    if (!ctx) return null;
+
+    try {
+      const youtube = google.youtube({ version: 'v3', auth: ctx.oauth2Client });
+      const res = await youtube.videos.list({ part: ['statistics'], id: [videoId] });
+      const stats = res.data.items?.[0]?.statistics;
+      if (!stats) return null;
+      return {
+        views: parseInt(stats.viewCount ?? '0', 10),
+        likes: parseInt(stats.likeCount ?? '0', 10),
+      };
+    } catch (err) {
+      this.logger.error(`[Metrics] YouTube video metrics failed for ${videoId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
   // ── YouTube helpers ───────────────────────────────────────────────────────
 
   /** Build an OAuth2Client from stored integration credentials and auto-persist refreshed tokens. */
