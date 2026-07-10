@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@socialdrop/prisma';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
+import { MetricsService } from '../metrics/metrics.service.js';
 
 @Injectable()
 export class BrainService {
@@ -11,6 +12,7 @@ export class BrainService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly metricsService: MetricsService,
   ) {
     this.anthropic = new Anthropic({
       apiKey: this.config.get<string>('ANTHROPIC_API_KEY'),
@@ -172,8 +174,10 @@ export class BrainService {
 
     try {
       let likes = 0, saves = 0, reach = 0, follows = 0;
+      let engagementRate: number | null = null;
+      const platform = script.platform.toUpperCase();
 
-      if (script.platform.toUpperCase() === 'INSTAGRAM') {
+      if (platform === 'INSTAGRAM') {
         const url = `https://graph.facebook.com/v19.0/${script.postId}/insights?metric=saved,reach,impressions,follows&access_token=${integration.accessToken}`;
         const res = await fetch(url);
         if (res.ok) {
@@ -193,9 +197,32 @@ export class BrainService {
             likes = likeData.like_count ?? 0;
           }
         }
+        engagementRate = reach > 0 ? ((likes + saves + follows) / reach) * 100 : null;
+      } else if (platform === 'FACEBOOK') {
+        const fbMetrics = await this.metricsService.getFacebookPostMetrics(script.userId, script.postId);
+        if (fbMetrics) {
+          likes = fbMetrics.likes;
+          // Reuse `saves` field to store comments and `follows` for shares — FB has no per-post saves/follows.
+          saves = fbMetrics.comments;
+          follows = fbMetrics.shares;
+          // No per-post reach via this endpoint; use the page's latest follower count as the engagement denominator,
+          // matching the same "% of audience that engaged" scale used for Instagram.
+          const latestFbFollowers = await this.prisma.platformMetrics.findFirst({
+            where: { userId: script.userId, platform: 'FACEBOOK' },
+            orderBy: { recordedAt: 'desc' },
+          });
+          reach = latestFbFollowers?.followersCount ?? 0;
+          const totalInteractions = likes + fbMetrics.comments + fbMetrics.shares;
+          engagementRate = reach > 0 ? (totalInteractions / reach) * 100 : null;
+        }
+      } else if (platform === 'YOUTUBE') {
+        const ytMetrics = await this.metricsService.getYouTubeVideoMetrics(script.userId, script.postId);
+        if (ytMetrics) {
+          likes = ytMetrics.likes;
+          reach = ytMetrics.views;
+          engagementRate = reach > 0 ? (likes / reach) * 100 : null;
+        }
       }
-
-      const engagementRate = reach > 0 ? ((likes + saves + follows) / reach) * 100 : null;
       const VIRAL_THRESHOLD = 5; // 5% engagement rate = viral
 
       await this.prisma.generatedScript.update({
@@ -255,15 +282,22 @@ export class BrainService {
     const allScripts = await this.prisma.generatedScript.count({ where: { userId } });
     const viralCount = viralScripts.length;
 
-    const prompt = `Analiza estos ${viralCount} guiones virales de redes sociales del último mes y extrae patrones de éxito:
+    const maxEngagement = Math.max(...viralScripts.map((s) => s.engagementRate ?? 0), 1);
+    const prompt = `Analiza estos ${viralCount} guiones virales de redes sociales del último mes y extrae patrones de éxito.
+Los ejemplos están ordenados de mayor a menor engagement — dale más peso a los primeros (peso relativo entre paréntesis):
 
-${viralScripts.map((s, i) => `
+${viralScripts.map((s, i) => {
+  const weight = Math.round(((s.engagementRate ?? 0) / maxEngagement) * 100);
+  return `
 ---
-Guión ${i + 1} (${s.platform}, engagement: ${s.engagementRate?.toFixed(1)}%)
+Guión ${i + 1} (${s.platform}, engagement: ${s.engagementRate?.toFixed(1)}%, peso: ${weight})
 Hook: ${s.hook}
+Cuerpo: ${s.body}
+CTA: ${s.cta ?? '(sin CTA)'}
 Tema: ${s.topic}
 Hashtags: ${s.hashtags.join(', ')}
-`).join('\n')}
+`;
+}).join('\n')}
 
 Responde con un JSON con esta estructura exacta:
 {
@@ -271,8 +305,7 @@ Responde con un JSON con esta estructura exacta:
   "viralTopics": ["topic 1", "topic 2", ...],
   "viralFormats": ["format 1", "format 2", ...],
   "bestHashtags": ["hashtag1", "hashtag2", ...],
-  "patternSummary": "Resumen en 2-3 oraciones de los patrones clave que hacen viral el contenido de este usuario",
-  "accuracyScore": <number 0-100 representing what % of future scripts following these patterns will likely go viral>
+  "patternSummary": "Resumen en 2-3 oraciones de los patrones clave que hacen viral el contenido de este usuario"
 }`;
 
     try {
@@ -292,13 +325,36 @@ Responde con un JSON con esta estructura exacta:
         viralFormats: string[];
         bestHashtags: string[];
         patternSummary: string;
-        accuracyScore: number;
       };
 
       const avgEngResult = await this.prisma.generatedScript.aggregate({
         where: { userId, engagementRate: { not: null } },
         _avg: { engagementRate: true },
       });
+
+      // Empirical accuracy: of the scripts generated since the *previous* learning pass,
+      // what % ended up beating the historical avgEngagement baseline that was in effect at the time?
+      const previousBrain = await this.prisma.contentBrain.findUnique({ where: { userId } });
+      let accuracyScore: number | null = null;
+      if (previousBrain?.lastLearnedAt && previousBrain.avgEngagement !== null) {
+        const [beatBaseline, totalMeasured] = await Promise.all([
+          this.prisma.generatedScript.count({
+            where: {
+              userId,
+              createdAt: { gte: previousBrain.lastLearnedAt },
+              engagementRate: { gt: previousBrain.avgEngagement },
+            },
+          }),
+          this.prisma.generatedScript.count({
+            where: {
+              userId,
+              createdAt: { gte: previousBrain.lastLearnedAt },
+              engagementRate: { not: null },
+            },
+          }),
+        ]);
+        accuracyScore = totalMeasured > 0 ? Math.round((beatBaseline / totalMeasured) * 100) : null;
+      }
 
       const nextLearnAt = new Date();
       nextLearnAt.setDate(nextLearnAt.getDate() + 7); // next Sunday
@@ -311,7 +367,7 @@ Responde con un JSON con esta estructura exacta:
           viralFormats: patterns.viralFormats,
           bestHashtags: patterns.bestHashtags,
           patternSummary: patterns.patternSummary,
-          accuracyScore: patterns.accuracyScore,
+          accuracyScore,
           totalScripts: allScripts,
           viralCount,
           avgEngagement: avgEngResult._avg.engagementRate,
@@ -325,7 +381,7 @@ Responde con un JSON con esta estructura exacta:
           viralFormats: patterns.viralFormats,
           bestHashtags: patterns.bestHashtags,
           patternSummary: patterns.patternSummary,
-          accuracyScore: patterns.accuracyScore,
+          accuracyScore,
           totalScripts: allScripts,
           viralCount,
           avgEngagement: avgEngResult._avg.engagementRate,
@@ -334,7 +390,7 @@ Responde con un JSON con esta estructura exacta:
         },
       });
 
-      this.logger.log(`Brain updated for ${userId}: ${viralCount} viral scripts analysed, accuracy=${patterns.accuracyScore}%`);
+      this.logger.log(`Brain updated for ${userId}: ${viralCount} viral scripts analysed, accuracy=${accuracyScore ?? 'n/a'}%`);
     } catch (err: any) {
       this.logger.error(`Failed to update brain for ${userId}: ${err.message}`);
     }
