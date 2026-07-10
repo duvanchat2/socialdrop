@@ -183,4 +183,54 @@ export class StatsService {
 
     return result;
   }
+
+  async getBestTimes(userId: string, platform?: string) {
+    const MIN_POSTS_PER_CELL = 5;
+    const TIMEZONE = 'America/Bogota';
+
+    const rows = await this.prisma.postAnalytics.findMany({
+      where: { userId, ...(platform ? { platform } : {}), publishedAt: { not: null } },
+      select: { publishedAt: true, engagementRate: true },
+    });
+
+    // 7 (Sun-Sat) x 24 grid of { sum, count } accumulators
+    const cells: { sum: number; count: number }[][] = Array.from({ length: 7 }, () =>
+      Array.from({ length: 24 }, () => ({ sum: 0, count: 0 })),
+    );
+
+    for (const row of rows) {
+      if (!row.publishedAt) continue;
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: TIMEZONE,
+        weekday: 'short',
+        hour: 'numeric',
+        hour12: false,
+      }).formatToParts(row.publishedAt);
+      const weekdayStr = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun';
+      const hourStr = parts.find((p) => p.type === 'hour')?.value ?? '0';
+      const dayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekdayStr);
+      const hour = parseInt(hourStr, 10) % 24;
+      if (dayIndex < 0) continue;
+
+      const cell = cells[dayIndex][hour];
+      cell.sum += row.engagementRate ?? 0;
+      cell.count += 1;
+    }
+
+    const heatmap = cells.flatMap((hours, dayOfWeek) =>
+      hours.map((cell, hour) => ({
+        dayOfWeek,
+        hour,
+        avgEngagement: cell.count > 0 ? +(cell.sum / cell.count).toFixed(2) : 0,
+        count: cell.count,
+      })),
+    );
+
+    const topSlots = heatmap
+      .filter((c) => c.count >= MIN_POSTS_PER_CELL)
+      .sort((a, b) => b.avgEngagement - a.avgEngagement)
+      .slice(0, 3);
+
+    return { heatmap, topSlots, minPostsPerCell: MIN_POSTS_PER_CELL };
+  }
 }
