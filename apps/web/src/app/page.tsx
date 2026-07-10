@@ -7,6 +7,7 @@ import { PlatformIcon, Platform } from '@/components/PlatformIcon';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
 import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
 import { BestTimesHeatmap, BestTimes } from '@/components/BestTimesHeatmap';
+import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 import { Loader2, X, RefreshCw, AlertCircle, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -113,6 +114,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
+
+      <OnboardingChecklist userId={userId} hasPosts={(posts.data ?? []).length > 0} />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
