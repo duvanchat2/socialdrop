@@ -21,6 +21,15 @@ model User {
   driveConfigs          DriveConfig[]
   authTokens            AuthToken[]
   workspaceMemberships  WorkspaceMember[]
+  contentItems          ContentItem[]
+  competitors           Competitor[]
+  flows                 Flow[]
+  contacts              Contact[]
+  youtubeComments       YoutubeComment[]
+  youtubeAutoReplies    YoutubeAutoReply[]
+  generatedScripts      GeneratedScript[]
+  platformMetrics       PlatformMetrics[]
+  postAnalytics         PostAnalytics[]
 }
 
 enum WorkspaceRole {
@@ -223,6 +232,7 @@ model ContentStrategy {
 model PlatformMetrics {
   id               String   @id @default(cuid())
   userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform         String
   followersCount   Int
   followingCount   Int?
@@ -240,6 +250,7 @@ model PostAnalytics {
   id             String    @id @default(cuid())
   postId         String?
   userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform       String
   platformPostId String
   caption        String?
@@ -276,9 +287,12 @@ model ContentItem {
   status        PostStatus  @default(DRAFT)
   copyGenerated Boolean     @default(false)
   n8nJobId      String?
-  userId        String      @default("demo-user")
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  @@index([userId])
 }
 
 model GrowthGoal {
@@ -297,6 +311,7 @@ model GrowthGoal {
 model Competitor {
   id          String               @id @default(cuid())
   userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   username    String
   platform    String
   displayName String?
@@ -373,7 +388,8 @@ model QueueSlot {
 
 model Flow {
   id         String          @id @default(cuid())
-  userId     String          @default("demo-user")
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   platform   String
   trigger    String
@@ -404,7 +420,8 @@ model FlowExecution {
 
 model Contact {
   id        String   @id @default(cuid())
-  userId    String   @default("demo-user")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform  String
   accountId String
   username  String?
@@ -418,7 +435,8 @@ model Contact {
 
 model YoutubeComment {
   id              String    @id @default(cuid())
-  userId          String    @default("demo-user")
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   videoId         String
   videoTitle      String?
   commentId       String    @unique
@@ -441,7 +459,8 @@ model YoutubeComment {
 
 model YoutubeAutoReply {
   id            String   @id @default(cuid())
-  userId        String   @default("demo-user")
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   keyword       String
   replyTemplate String
   isEnabled     Boolean  @default(true)
@@ -454,6 +473,7 @@ model YoutubeAutoReply {
 model GeneratedScript {
   id             String    @id @default(cuid())
   userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform       String
   topic          String
   hook           String

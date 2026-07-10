@@ -66,7 +66,7 @@ export class FacebookProvider extends SocialAbstract {
   }
 
   async post(accessToken: string, content: PostContent): Promise<PublishResult> {
-    const pageId = this.config.get<string>('FACEBOOK_PAGE_ID', '');
+    const pageId = content.profileId || this.config.get<string>('FACEBOOK_PAGE_ID', '');
     const delays = [1000, 5000, 15000];
     let lastError: Error = new Error('Unknown error');
 

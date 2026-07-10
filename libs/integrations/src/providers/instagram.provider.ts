@@ -165,10 +165,10 @@ export class InstagramProvider extends SocialAbstract {
   }
 
   async post(accessToken: string, content: PostContent): Promise<PublishResult> {
-    const igUserId = this.config.get<string>('INSTAGRAM_ACCOUNT_ID', '');
+    const igUserId = content.profileId || this.config.get<string>('INSTAGRAM_ACCOUNT_ID', '');
     this.logger.log(`[Instagram] post() igUserId=${igUserId} mediaUrls=${JSON.stringify(content.mediaUrls)} mediaType=${content.mediaType}`);
 
-    if (!igUserId) throw new Error('[Instagram] INSTAGRAM_ACCOUNT_ID env var is not set');
+    if (!igUserId) throw new Error('[Instagram] No profileId on the integration and INSTAGRAM_ACCOUNT_ID env var is not set');
 
     const delays = [1000, 5000, 15000];
     let lastError: Error = new Error('Unknown error');

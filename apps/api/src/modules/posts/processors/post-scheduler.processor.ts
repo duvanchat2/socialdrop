@@ -249,6 +249,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
       text: pi.post.content,
       mediaUrls,
       mediaType: pi.post.media[0]?.mediaType as 'VIDEO' | 'IMAGE' | undefined,
+      ...(pi.integration.profileId && { profileId: pi.integration.profileId }),
       ...(postMeta?.instagramType && { instagramType: postMeta.instagramType }),
       ...(postMeta?.youtube && { metadata: { youtube: postMeta.youtube } }),
     };

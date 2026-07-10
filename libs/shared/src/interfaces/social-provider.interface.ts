@@ -20,6 +20,8 @@ export interface PostContent {
   mediaType?: MediaType;
   /** Instagram-specific publish type. Defaults to REEL for video, POST for images. */
   instagramType?: 'POST' | 'REEL' | 'STORY';
+  /** Per-integration account id (IG business account id / FB page id). Falls back to a static env var if omitted. */
+  profileId?: string;
   metadata?: {
     youtube?: {
       title?: string;
