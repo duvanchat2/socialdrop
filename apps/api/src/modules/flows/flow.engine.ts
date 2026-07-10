@@ -112,11 +112,15 @@ export class FlowEngine {
     if (!token) return;
     const url = `https://graph.facebook.com/v18.0/me/messages?access_token=${token}`;
     try {
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } }),
       });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        this.logger.error(`sendDM failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
+      }
     } catch (e) {
       this.logger.error(`sendDM failed: ${(e as Error).message}`);
     }
@@ -126,11 +130,15 @@ export class FlowEngine {
     if (!token) return;
     const url = `https://graph.facebook.com/v18.0/${commentId}/replies?access_token=${token}`;
     try {
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        this.logger.error(`replyComment failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
+      }
     } catch (e) {
       this.logger.error(`replyComment failed: ${(e as Error).message}`);
     }
