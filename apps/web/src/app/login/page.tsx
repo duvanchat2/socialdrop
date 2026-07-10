@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { apiFetch } from '@/lib/api';
 
 function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
@@ -16,19 +18,17 @@ function LoginForm() {
     setError('');
     setLoading(true);
 
-    const res = await fetch('/auth', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ password }),
-    });
-
-    setLoading(false);
-
-    if (res.ok) {
+    try {
+      await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
       const from = searchParams.get('from') ?? '/';
       router.replace(from);
-    } else {
-      setError('Contraseña incorrecta');
+    } catch {
+      setError('Credenciales inválidas');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -37,17 +37,26 @@ function LoginForm() {
       <div className="w-full max-w-sm space-y-6 p-8 rounded-2xl bg-gray-900 border border-gray-800 shadow-xl">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-white">SocialDrop</h1>
-          <p className="mt-1 text-sm text-gray-400">Ingresa la contraseña de acceso</p>
+          <p className="mt-1 text-sm text-gray-400">Ingresa a tu cuenta</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Correo"
+            required
+            autoFocus
+            className="w-full px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Contraseña"
             required
-            autoFocus
             className="w-full px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
 
@@ -63,6 +72,11 @@ function LoginForm() {
             {loading ? 'Verificando...' : 'Entrar'}
           </button>
         </form>
+
+        <div className="flex items-center justify-between text-sm text-gray-400">
+          <Link href="/register" className="hover:text-indigo-400">Crear cuenta</Link>
+          <Link href="/forgot-password" className="hover:text-indigo-400">Olvidé mi contraseña</Link>
+        </div>
       </div>
     </div>
   );
