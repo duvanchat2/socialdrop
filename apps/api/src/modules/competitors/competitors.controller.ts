@@ -5,6 +5,7 @@ import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { CompetitorsService } from './competitors.service.js';
 import { TranscriptionService } from '../brain/transcription.service.js';
+import { UsageService } from '../usage/usage.service.js';
 
 @ApiTags('competitors')
 @Controller('competitors')
@@ -12,6 +13,7 @@ export class CompetitorsController {
   constructor(
     private readonly competitorsService: CompetitorsService,
     private readonly transcriptionService: TranscriptionService,
+    private readonly usageService: UsageService,
   ) {}
 
   @Get()
@@ -85,7 +87,12 @@ export class CompetitorsController {
 
   @Post(':id/analyze')
   @ApiOperation({ summary: 'Queue per-video transcription + Claude analysis for all reels' })
-  async analyze(@Param('id') id: string, @Body() body: { postIds?: string[] } = {}) {
+  async analyze(
+    @Param('id') id: string,
+    @CurrentUser() userId: string,
+    @Body() body: { postIds?: string[] } = {},
+  ) {
+    await this.usageService.consume(userId, 'competitor_analysis');
     const { queued } = await this.competitorsService.queueVideoAnalysis(id, body.postIds);
     return { queued, message: `Analizando ${queued} videos...` };
   }

@@ -17,7 +17,7 @@ export class AssistantService {
     this.logger.log(`Assistant chat: "${message.slice(0, 50)}..."`);
 
     const response = await this.client.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5',
       max_tokens: 1024,
       system:
         'You are SocialDrop AI, a social media content assistant. Help users write engaging captions, plan posts, and improve their social media presence. Be concise and creative. Respond in the same language the user writes in.',

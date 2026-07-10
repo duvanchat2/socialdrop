@@ -14,6 +14,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Queue } from 'bullmq';
 import { BrainService } from './brain.service.js';
 import { TranscriptionService } from './transcription.service.js';
+import { UsageService } from '../usage/usage.service.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('brain')
@@ -22,6 +23,7 @@ export class BrainController {
   constructor(
     private readonly brainService: BrainService,
     private readonly transcriptionService: TranscriptionService,
+    private readonly usageService: UsageService,
     @InjectQueue('metrics-collector') private readonly metricsQueue: Queue,
     @InjectQueue('brain-updater') private readonly brainQueue: Queue,
   ) {}
@@ -57,7 +59,8 @@ export class BrainController {
   /** POST /api/content-brain/scripts */
   @Post('scripts')
   @ApiOperation({ summary: 'Save a generated script' })
-  createScript(@CurrentUser() userId: string, @Body() body: any) {
+  async createScript(@CurrentUser() userId: string, @Body() body: any) {
+    await this.usageService.consume(userId, 'script_generation');
     const { userId: _ignored, ...dto } = body;
     return this.brainService.createScript(userId, dto);
   }
