@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Delete, Body, Param, UseGuards, HttpException, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
 import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
