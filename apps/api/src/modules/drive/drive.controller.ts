@@ -7,8 +7,6 @@ import {
   Query,
   Res,
   UseGuards,
-  HttpException,
-  HttpStatus,
   ForbiddenException,
   Logger,
 } from '@nestjs/common';

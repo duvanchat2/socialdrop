@@ -4,7 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
 import * as argon2 from 'argon2';
 import { PrismaService } from '@socialdrop/prisma';
-import { MAIL_PROVIDER, MailProvider } from './mail-provider.interface.js';
+import { MAIL_PROVIDER } from './mail-provider.interface.js';
+import type { MailProvider } from './mail-provider.interface.js';
 
 const VERIFY_EMAIL_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h
 const RESET_PASSWORD_EXPIRY_MS = 60 * 60 * 1000; // 60min

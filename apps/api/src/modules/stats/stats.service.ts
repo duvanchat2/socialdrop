@@ -122,7 +122,7 @@ export class StatsService {
       latestFollowers,
       baselineFollowers,
       currentAnalytics,
-      prevAnalytics,
+      _prevAnalytics,
       postsThisWeek,
       postsLastWeek,
       publishedInPeriod,
@@ -159,9 +159,9 @@ export class StatsService {
       ? +(((followers - baselineTotal) / baselineTotal) * 100).toFixed(2)
       : 0;
 
-    const successDenominator = publishedInPeriod + erroredInPeriod;
+    const successDenominator = (publishedInPeriod ?? 0) + (erroredInPeriod ?? 0);
     const publishSuccessRate = successDenominator > 0
-      ? +((publishedInPeriod / successDenominator) * 100).toFixed(2)
+      ? +(((publishedInPeriod ?? 0) / successDenominator) * 100).toFixed(2)
       : 0;
 
     const result = {
