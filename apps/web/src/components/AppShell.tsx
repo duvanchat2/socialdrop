@@ -9,7 +9,7 @@ import {
   Upload, Briefcase, BarChart2, BotMessageSquare, TrendingUp, Sun, Moon, Users,
   ListOrdered, GitBranch, Inbox, Zap, Terminal, Youtube, Brain,
 } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
+import { useTheme, isLightThemeEnabled } from './ThemeProvider';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 const Toaster = dynamic(() => import('sonner').then((m) => m.Toaster), {
@@ -172,6 +172,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
+  if (!isLightThemeEnabled) return null;
   return (
     <button
       onClick={toggle}

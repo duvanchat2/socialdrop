@@ -2,19 +2,55 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-html {
-  -webkit-text-size-adjust: 100%;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif,
-    Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
-  line-height: 1.5;
-  tab-size: 4;
-  scroll-behavior: smooth;
+@theme {
+  /* Superficies — elevación por color, NO por borde ni sombra (máx 3 niveles) */
+  --color-base:      #0A0A0F;  /* página: negro real */
+  --color-surface:   #17171F;  /* card, sin borde visible */
+  --color-surface-2: #1F1F2A;  /* elevado / hover / celdas activas */
+  /* Tinta */
+  --color-ink:       #F2F2F7;  /* primario */
+  --color-ink-muted: #8E8FA3;  /* secundario/labels */
+  /* Acentos semánticos (texto/íconos; SIEMPRE con ícono o signo, nunca solo color) */
+  --color-accent:    #6366F1;  /* violeta de marca — se conserva el actual del sidebar */
+  --color-positive:  #A3E635;  /* lima: deltas ▲, publicado */
+  --color-warning:   #FBBF24;  /* ámbar: deltas ▼, errores, alertas */
+  /* Series de gráficas — orden FIJO, validado CVD/contraste sobre #17171F */
+  --color-chart-1: #7C7AF5;
+  --color-chart-2: #3FA34D;
+  --color-chart-3: #C77F00;
+  --color-chart-4: #3A9BDC;
+  /* Radios */
+  --radius-card: 16px;
+  --radius-chip: 10px;
+  --radius-pill: 999px;
+  /* Motion (consumidos por PR #34) */
+  --duration-hover: 175ms;
+  --duration-enter: 350ms;
+  --ease-out: cubic-bezier(0.16,1,0.3,1);
+  /* Tipografía */
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-body-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono-nums: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 }
-body {
-  font-family: inherit;
-  line-height: inherit;
-  margin: 0;
+
+/* Un-layered rules always beat @layer utilities regardless of specificity
+   in Tailwind v4's cascade — html/body font-family must live in @layer base
+   so the font-body utility class on <body> can actually win. */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif,
+      Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
+    line-height: 1.5;
+    tab-size: 4;
+    scroll-behavior: smooth;
+  }
+  body {
+    font-family: inherit;
+    line-height: inherit;
+    margin: 0;
+  }
 }
 h1,
 h2,

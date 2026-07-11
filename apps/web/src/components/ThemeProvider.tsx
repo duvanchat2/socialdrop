@@ -10,6 +10,9 @@ interface ThemeCtx {
 
 const ThemeContext = createContext<ThemeCtx>({ theme: 'dark', toggle: () => {} });
 
+/** Light theme is deprecated for this phase (dark-first design system, PR #33) — reversible via env flag. */
+export const isLightThemeEnabled = process.env.NEXT_PUBLIC_ENABLE_LIGHT_THEME === 'true';
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>('dark');
 
