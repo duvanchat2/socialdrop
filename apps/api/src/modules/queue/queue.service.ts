@@ -17,18 +17,18 @@ export class QueueService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(userId: string, platform?: Platform) {
-    if (!userId) throw new BadRequestException('userId is required');
+  async list(workspaceId: string, platform?: Platform) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
     return this.prisma.queueSlot.findMany({
-      where: { userId, ...(platform ? { platform } : {}) },
+      where: { workspaceId, ...(platform ? { platform } : {}) },
       orderBy: [{ dayOfWeek: 'asc' }, { hour: 'asc' }, { minute: 'asc' }],
     });
   }
 
-  async create(userId: string, dto: CreateQueueSlotDto) {
+  async create(workspaceId: string, dto: CreateQueueSlotDto) {
     return this.prisma.queueSlot.create({
       data: {
-        userId,
+        workspaceId,
         platform: dto.platform,
         dayOfWeek: dto.dayOfWeek,
         hour: dto.hour,
@@ -38,24 +38,24 @@ export class QueueService {
     });
   }
 
-  async remove(id: string, userId: string) {
-    const slot = await this.prisma.queueSlot.findFirst({ where: { id, userId } });
+  async remove(id: string, workspaceId: string) {
+    const slot = await this.prisma.queueSlot.findFirst({ where: { id, workspaceId } });
     if (!slot) throw new NotFoundException(`QueueSlot ${id} not found`);
     await this.prisma.queueSlot.delete({ where: { id } });
   }
 
   /**
-   * Find the next free queue slot for (userId, platform), starting from `from`.
+   * Find the next free queue slot for (workspaceId, platform), starting from `from`.
    * A slot is considered free if there is no SCHEDULED post for the same
    * platform within ±COLLISION_MINUTES of the slot's datetime.
    */
   async findNextFreeSlot(
-    userId: string,
+    workspaceId: string,
     platform: Platform,
     from: Date = new Date(),
   ) {
     const slots = await this.prisma.queueSlot.findMany({
-      where: { userId, platform, isActive: true },
+      where: { workspaceId, platform, isActive: true },
       orderBy: [{ dayOfWeek: 'asc' }, { hour: 'asc' }, { minute: 'asc' }],
     });
 
@@ -70,7 +70,7 @@ export class QueueService {
 
     const scheduledPosts = await this.prisma.post.findMany({
       where: {
-        userId,
+        workspaceId,
         scheduledAt: { gte: from, lte: horizonEnd },
         integrations: { some: { integration: { platform } } },
       },
@@ -124,7 +124,7 @@ export class QueueService {
     }
 
     const platform = firstIntegration.platform as Platform;
-    const { slot, date } = await this.findNextFreeSlot(post.userId, platform);
+    const { slot, date } = await this.findNextFreeSlot(post.workspaceId, platform);
 
     const updated = await this.prisma.post.update({
       where: { id: postId },

@@ -17,14 +17,12 @@ vi.mock('@nestjs/common', async (importOriginal) => {
 import { PostsService } from './posts.service.js';
 
 const mockPrisma = {
-  resolveWorkspaceIdForUser: vi.fn().mockResolvedValue('ws-1'),
   integration: {
     findMany: vi.fn(),
   },
   post: {
     create: vi.fn(),
     findMany: vi.fn(),
-    findUnique: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -52,14 +50,14 @@ describe('PostsService', () => {
   // ── create ──────────────────────────────────────────────────────────────────
 
   describe('create', () => {
-    it('throws BadRequestException when userId is empty', async () => {
+    it('throws BadRequestException when workspaceId is empty', async () => {
       await expect(
         service.create('', { content: 'test', scheduledAt: new Date().toISOString(), platforms: ['TWITTER'] }),
-      ).rejects.toThrow('userId is required');
+      ).rejects.toThrow('workspaceId is required');
     });
 
     it('creates a post and enqueues the scan job', async () => {
-      mockPrisma.integration.findMany.mockResolvedValue([{ id: 'int-1', platform: 'TWITTER', userId: 'demo-user' }]);
+      mockPrisma.integration.findMany.mockResolvedValue([{ id: 'int-1', platform: 'TWITTER', workspaceId: 'ws-1' }]);
       const mockPost = {
         id: 'post-1',
         content: 'hello world',
@@ -70,7 +68,7 @@ describe('PostsService', () => {
       };
       mockPrisma.post.create.mockResolvedValue(mockPost);
 
-      const result = await service.create('demo-user', {
+      const result = await service.create('ws-1', {
         content: 'hello world',
         scheduledAt: new Date().toISOString(),
         platforms: ['TWITTER'],
@@ -85,7 +83,7 @@ describe('PostsService', () => {
       mockPrisma.integration.findMany.mockResolvedValue([]);
       mockPrisma.post.create.mockResolvedValue({ id: 'p2', integrations: [], media: [{ url: 'https://cdn.example.com/img.jpg' }] });
 
-      await service.create('demo-user', {
+      await service.create('ws-1', {
         content: 'with image',
         scheduledAt: new Date().toISOString(),
         platforms: ['INSTAGRAM'],
@@ -101,14 +99,14 @@ describe('PostsService', () => {
   // ── findAll ─────────────────────────────────────────────────────────────────
 
   describe('findAll', () => {
-    it('throws when userId is empty', async () => {
-      await expect(service.findAll('')).rejects.toThrow('userId is required');
+    it('throws when workspaceId is empty', async () => {
+      await expect(service.findAll('')).rejects.toThrow('workspaceId is required');
     });
 
     it('returns posts list with pagination metadata', async () => {
       const posts = [{ id: 'p1' }, { id: 'p2' }];
       mockPrisma.post.findMany.mockResolvedValue(posts);
-      const result = await service.findAll('demo-user');
+      const result = await service.findAll('ws-1');
       expect(result).toEqual({ posts, nextCursor: null });
     });
   });
@@ -120,33 +118,33 @@ describe('PostsService', () => {
       mockPrisma.post.findFirst.mockResolvedValue({
         id: 'p1',
         status: 'PUBLISHED',
-        userId: 'demo-user',
+        workspaceId: 'ws-1',
         integrations: [],
         media: [],
       });
-      await expect(service.update('p1', 'demo-user', { content: 'new content' })).rejects.toThrow(
+      await expect(service.update('p1', 'ws-1', { content: 'new content' })).rejects.toThrow(
         'Cannot edit an already published post',
       );
     });
 
     it('updates content and scheduledAt for SCHEDULED posts', async () => {
-      const existingPost = { id: 'p1', status: 'SCHEDULED', userId: 'demo-user', integrations: [], media: [] };
+      const existingPost = { id: 'p1', status: 'SCHEDULED', workspaceId: 'ws-1', integrations: [], media: [] };
       mockPrisma.post.findFirst.mockResolvedValue(existingPost);
       const updated = { ...existingPost, content: 'updated caption' };
       mockPrisma.post.update.mockResolvedValue(updated);
 
-      const result = await service.update('p1', 'demo-user', { content: 'updated caption' });
+      const result = await service.update('p1', 'ws-1', { content: 'updated caption' });
       expect(result.content).toBe('updated caption');
       expect(mockPrisma.post.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'p1' }, data: expect.objectContaining({ content: 'updated caption' }) }),
       );
     });
 
-    it('throws NotFoundException when the post belongs to a different user', async () => {
+    it('throws NotFoundException when the post belongs to a different workspace', async () => {
       mockPrisma.post.findFirst.mockResolvedValue(null);
-      await expect(service.update('p1', 'other-user', { content: 'x' })).rejects.toThrow('Post p1 not found');
+      await expect(service.update('p1', 'other-ws', { content: 'x' })).rejects.toThrow('Post p1 not found');
       expect(mockPrisma.post.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'p1', userId: 'other-user' } }),
+        expect.objectContaining({ where: { id: 'p1', workspaceId: 'other-ws' } }),
       );
     });
   });
@@ -156,7 +154,7 @@ describe('PostsService', () => {
   describe('retry', () => {
     it('throws when post is not in ERROR status', async () => {
       mockPrisma.post.findFirst.mockResolvedValue({ id: 'p1', status: 'SCHEDULED', integrations: [], media: [] });
-      await expect(service.retry('p1', 'demo-user')).rejects.toThrow('Only failed posts can be retried');
+      await expect(service.retry('p1', 'ws-1')).rejects.toThrow('Only failed posts can be retried');
     });
 
     it('resets an ERROR post to SCHEDULED', async () => {
@@ -164,16 +162,16 @@ describe('PostsService', () => {
       mockPrisma.post.update.mockResolvedValue({ id: 'p1', status: 'SCHEDULED' });
       mockPrisma.postIntegration.updateMany.mockResolvedValue({});
 
-      const result = await service.retry('p1', 'demo-user');
+      const result = await service.retry('p1', 'ws-1');
       expect(result.message).toBe('Post queued for retry');
       expect(mockPrisma.post.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: 'SCHEDULED', retryCount: 0, errorMessage: null }) }),
       );
     });
 
-    it('throws NotFoundException when retrying another user\'s post', async () => {
+    it('throws NotFoundException when retrying another workspace\'s post', async () => {
       mockPrisma.post.findFirst.mockResolvedValue(null);
-      await expect(service.retry('p1', 'other-user')).rejects.toThrow('Post p1 not found');
+      await expect(service.retry('p1', 'other-ws')).rejects.toThrow('Post p1 not found');
     });
   });
 
@@ -185,20 +183,20 @@ describe('PostsService', () => {
       mockPrisma.post.findFirst.mockResolvedValue(post);
       mockPrisma.post.delete.mockResolvedValue(post);
 
-      await service.remove('p1', 'demo-user');
+      await service.remove('p1', 'ws-1');
       expect(mockPrisma.post.delete).toHaveBeenCalledWith({ where: { id: 'p1' } });
     });
 
     it('throws NotFoundException for non-existent post', async () => {
       mockPrisma.post.findFirst.mockResolvedValue(null);
-      await expect(service.remove('not-found', 'demo-user')).rejects.toThrow('Post not-found not found');
+      await expect(service.remove('not-found', 'ws-1')).rejects.toThrow('Post not-found not found');
     });
 
-    it('throws NotFoundException when removing another user\'s post (cross-user isolation)', async () => {
+    it('throws NotFoundException when removing another workspace\'s post (cross-workspace isolation)', async () => {
       mockPrisma.post.findFirst.mockResolvedValue(null);
-      await expect(service.remove('p1', 'attacker')).rejects.toThrow('Post p1 not found');
+      await expect(service.remove('p1', 'attacker-ws')).rejects.toThrow('Post p1 not found');
       expect(mockPrisma.post.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'p1', userId: 'attacker' } }),
+        expect.objectContaining({ where: { id: 'p1', workspaceId: 'attacker-ws' } }),
       );
       expect(mockPrisma.post.delete).not.toHaveBeenCalled();
     });

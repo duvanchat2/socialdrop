@@ -20,22 +20,22 @@ export class StatsService {
     });
   }
 
-  async getOverview(userId: string) {
+  async getOverview(workspaceId: string) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
     const [published, pending, failed, total, today] = await Promise.all([
-      this.prisma.post.count({ where: { userId, status: 'PUBLISHED' } }),
+      this.prisma.post.count({ where: { workspaceId, status: 'PUBLISHED' } }),
       this.prisma.post.count({
-        where: { userId, status: { in: ['PENDING', 'SCHEDULED'] } },
+        where: { workspaceId, status: { in: ['PENDING', 'SCHEDULED'] } },
       }),
-      this.prisma.post.count({ where: { userId, status: 'ERROR' } }),
-      this.prisma.post.count({ where: { userId } }),
+      this.prisma.post.count({ where: { workspaceId, status: 'ERROR' } }),
+      this.prisma.post.count({ where: { workspaceId } }),
       this.prisma.post.count({
         where: {
-          userId,
+          workspaceId,
           status: 'PUBLISHED',
           publishedAt: { gte: todayStart, lte: todayEnd },
         },
@@ -45,10 +45,9 @@ export class StatsService {
     return { published, pending, failed, total, today };
   }
 
-  async getByPlatform(userId: string) {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+  async getByPlatform(workspaceId: string) {
     const integrations = await this.prisma.integration.findMany({
-      where: { workspaceId: workspaceId ?? undefined },
+      where: { workspaceId },
       select: { id: true, platform: true },
     });
     if (integrations.length === 0) return [];
@@ -61,7 +60,7 @@ export class StatsService {
       }),
       this.prisma.postAnalytics.groupBy({
         by: ['platform'],
-        where: { userId },
+        where: { workspaceId },
         _avg: { engagementRate: true },
       }),
     ]);
@@ -94,8 +93,8 @@ export class StatsService {
     return [...byPlatform.values()];
   }
 
-  async getDashboard(userId: string, period = '7d') {
-    const cacheKey = `stats:dashboard:${userId}:${period}`;
+  async getDashboard(workspaceId: string, period = '7d') {
+    const cacheKey = `stats:dashboard:${workspaceId}:${period}`;
     try {
       const cached = await this.redis.get(cacheKey);
       if (cached) return JSON.parse(cached);
@@ -130,28 +129,28 @@ export class StatsService {
       erroredInPeriod,
     ] = await Promise.all([
       this.prisma.platformMetrics.findMany({
-        where: { userId },
+        where: { workspaceId },
         distinct: ['platform'],
         orderBy: { recordedAt: 'desc' },
       }),
       this.prisma.platformMetrics.findMany({
-        where: { userId, recordedAt: { lte: periodStart } },
+        where: { workspaceId, recordedAt: { lte: periodStart } },
         distinct: ['platform'],
         orderBy: { recordedAt: 'desc' },
       }),
       this.prisma.postAnalytics.aggregate({
-        where: { userId, publishedAt: { gte: periodStart, lte: now } },
+        where: { workspaceId, publishedAt: { gte: periodStart, lte: now } },
         _sum: { reach: true, impressions: true },
         _avg: { engagementRate: true },
       }),
       this.prisma.postAnalytics.aggregate({
-        where: { userId, publishedAt: { gte: prevPeriodStart, lt: periodStart } },
+        where: { workspaceId, publishedAt: { gte: prevPeriodStart, lt: periodStart } },
         _avg: { engagementRate: true },
       }),
-      this.prisma.post.count({ where: { userId, ...publishedOrErroredIn(periodStart, now) } }),
-      this.prisma.post.count({ where: { userId, ...publishedOrErroredIn(prevPeriodStart, periodStart) } }),
-      this.prisma.post.count({ where: { userId, status: 'PUBLISHED', ...publishedOrErroredIn(periodStart, now) } }),
-      this.prisma.post.count({ where: { userId, status: 'ERROR', ...publishedOrErroredIn(periodStart, now) } }),
+      this.prisma.post.count({ where: { workspaceId, ...publishedOrErroredIn(periodStart, now) } }),
+      this.prisma.post.count({ where: { workspaceId, ...publishedOrErroredIn(prevPeriodStart, periodStart) } }),
+      this.prisma.post.count({ where: { workspaceId, status: 'PUBLISHED', ...publishedOrErroredIn(periodStart, now) } }),
+      this.prisma.post.count({ where: { workspaceId, status: 'ERROR', ...publishedOrErroredIn(periodStart, now) } }),
     ]);
 
     const followers = latestFollowers.reduce((s, m) => s + m.followersCount, 0);
@@ -185,12 +184,12 @@ export class StatsService {
     return result;
   }
 
-  async getBestTimes(userId: string, platform?: string) {
+  async getBestTimes(workspaceId: string, platform?: string) {
     const MIN_POSTS_PER_CELL = 5;
     const TIMEZONE = 'America/Bogota';
 
     const rows = await this.prisma.postAnalytics.findMany({
-      where: { userId, ...(platform ? { platform } : {}), publishedAt: { not: null } },
+      where: { workspaceId, ...(platform ? { platform } : {}), publishedAt: { not: null } },
       select: { publishedAt: true, engagementRate: true },
     });
 

@@ -93,7 +93,7 @@ export class FlowEngine {
           await this.prisma.contact.upsert({
             where: { platform_accountId: { platform: flow.platform, accountId: event.senderId } },
             create: {
-              userId: flow.userId,
+              workspaceId: flow.workspaceId,
               platform: flow.platform,
               accountId: event.senderId,
               tags: [tag],

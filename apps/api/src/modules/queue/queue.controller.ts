@@ -8,40 +8,42 @@ import {
   Param,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { Platform } from '@socialdrop/shared';
 import { AssignSlotDto, CreateQueueSlotDto } from './dto/queue-slot.dto.js';
 import { QueueService } from './queue.service.js';
 
 @ApiTags('queue')
 @Controller('queue')
+@UseGuards(WorkspaceGuard)
 export class QueueController {
   constructor(private readonly queue: QueueService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List queue slots for a user' })
-  @ApiQuery({ name: 'userId', required: true })
+  @ApiOperation({ summary: 'List queue slots for the active workspace' })
   @ApiQuery({ name: 'platform', required: false })
   list(
-    @CurrentUser() userId: string,
+    @ActiveWorkspace() workspaceId: string,
     @Query('platform') platform?: Platform,
   ) {
-    return this.queue.list(userId, platform);
+    return this.queue.list(workspaceId, platform);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a queue slot' })
-  create(@CurrentUser() userId: string, @Body() dto: CreateQueueSlotDto) {
-    return this.queue.create(userId, dto);
+  create(@ActiveWorkspace() workspaceId: string, @Body() dto: CreateQueueSlotDto) {
+    return this.queue.create(workspaceId, dto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a queue slot' })
-  remove(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.queue.remove(id, userId);
+  remove(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
+    return this.queue.remove(id, workspaceId);
   }
 
   @Post('assign')

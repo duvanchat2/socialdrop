@@ -11,10 +11,10 @@ export class ContentService {
     private readonly config: ConfigService,
   ) {}
 
-  async findAll(userId: string, type?: string, status?: string) {
+  async findAll(workspaceId: string, type?: string, status?: string) {
     return this.prisma.contentItem.findMany({
       where: {
-        userId,
+        workspaceId,
         ...(type && { type: type as any }),
         ...(status && { status: status as any }),
       },
@@ -22,11 +22,11 @@ export class ContentService {
     });
   }
 
-  async create(userId: string, dto: any) {
+  async create(workspaceId: string, dto: any) {
     return this.prisma.contentItem.create({
       data: {
         ...dto,
-        userId,
+        workspaceId,
         hashtags: dto.hashtags ?? [],
         tags: dto.tags ?? [],
         platforms: dto.platforms ?? [],
@@ -111,22 +111,22 @@ export class ContentService {
     });
   }
 
-  async scheduleAll(userId: string) {
+  async scheduleAll(workspaceId: string) {
     const drafts = await this.prisma.contentItem.findMany({
-      where: { userId, status: 'DRAFT', scheduledAt: { not: null } },
+      where: { workspaceId, status: 'DRAFT', scheduledAt: { not: null } },
     });
 
     await this.prisma.contentItem.updateMany({
-      where: { userId, status: 'DRAFT', scheduledAt: { not: null } },
+      where: { workspaceId, status: 'DRAFT', scheduledAt: { not: null } },
       data: { status: 'SCHEDULED' },
     });
 
     return { scheduled: drafts.length };
   }
 
-  async getDriveFiles(userId: string) {
+  async getDriveFiles(workspaceId: string) {
     const driveConfigs = await this.prisma.driveConfig.findMany({
-      where: { userId, syncEnabled: true },
+      where: { workspaceId, syncEnabled: true },
     });
 
     if (!driveConfigs.length) {

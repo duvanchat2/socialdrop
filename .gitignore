@@ -76,3 +76,4 @@ pending.patch
 .env.backup
 ecosystem.config.js
 pnpm-lock.yaml
+*.tsbuildinfo

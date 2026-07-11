@@ -37,8 +37,8 @@ export class PostsService {
    * per video (so each platform receives a single video as required by their
    * APIs).  Images are bundled together in a separate post (carousel).
    */
-  async create(userId: string, dto: CreatePostDto): Promise<object | object[]> {
-    if (!userId) throw new BadRequestException('userId is required');
+  async create(workspaceId: string, dto: CreatePostDto): Promise<object | object[]> {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
 
     const needsSplit = dto.platforms?.some(p => SINGLE_VIDEO_PLATFORMS.has(p as string));
     const allUrls = dto.mediaUrls ?? [];
@@ -52,7 +52,7 @@ export class PostsService {
       for (let i = 0; i < allUrls.length; i++) {
         const url = allUrls[i];
         const meta = dto.filesMeta?.[i];
-        posts.push(await this.createSingle(userId, {
+        posts.push(await this.createSingle(workspaceId, {
           ...dto,
           // Per-file caption overrides top-level content
           content: meta?.caption || dto.content,
@@ -67,13 +67,12 @@ export class PostsService {
       return posts;
     }
 
-    return this.createSingle(userId, dto);
+    return this.createSingle(workspaceId, dto);
   }
 
-  private async createSingle(userId: string, dto: CreatePostDto) {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+  private async createSingle(workspaceId: string, dto: CreatePostDto) {
     const integrations = await this.prisma.integration.findMany({
-      where: { workspaceId: workspaceId ?? undefined, platform: { in: dto.platforms as any[] } },
+      where: { workspaceId, platform: { in: dto.platforms as any[] } },
     });
 
     // Build metadata blob (YouTube fields + Instagram type)
@@ -97,7 +96,7 @@ export class PostsService {
 
     const post = await this.prisma.post.create({
       data: {
-        userId,
+        workspaceId,
         content:     dto.content,
         scheduledAt: new Date(dto.scheduledAt),
         status:      (dto.status ?? 'SCHEDULED') as PostStatus,
@@ -130,12 +129,12 @@ export class PostsService {
     return post;
   }
 
-  async findAll(userId: string, opts: FindAllOptions = {}) {
-    if (!userId) throw new BadRequestException('userId is required');
+  async findAll(workspaceId: string, opts: FindAllOptions = {}) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
     const limit = opts.limit ?? 100;
     const posts = await this.prisma.post.findMany({
       where: {
-        userId,
+        workspaceId,
         ...(opts.status && { status: opts.status }),
         ...(opts.from || opts.to
           ? { scheduledAt: { ...(opts.from && { gte: opts.from }), ...(opts.to && { lte: opts.to }) } }
@@ -157,9 +156,9 @@ export class PostsService {
     };
   }
 
-  async getCalendar(userId: string, from: Date, to: Date) {
+  async getCalendar(workspaceId: string, from: Date, to: Date) {
     return this.prisma.post.findMany({
-      where: { userId, scheduledAt: { gte: from, lte: to } },
+      where: { workspaceId, scheduledAt: { gte: from, lte: to } },
       select: {
         id: true,
         content: true,
@@ -171,17 +170,17 @@ export class PostsService {
     });
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, workspaceId: string) {
     const post = await this.prisma.post.findFirst({
-      where: { id, userId },
+      where: { id, workspaceId },
       include: { integrations: { include: { integration: true } }, media: true },
     });
     if (!post) throw new NotFoundException(`Post ${id} not found`);
     return post;
   }
 
-  async update(id: string, userId: string, dto: UpdatePostDto) {
-    const post = await this.findOne(id, userId);
+  async update(id: string, workspaceId: string, dto: UpdatePostDto) {
+    const post = await this.findOne(id, workspaceId);
     if (post.status === 'PUBLISHED') {
       throw new BadRequestException('Cannot edit an already published post');
     }
@@ -195,10 +194,9 @@ export class PostsService {
       include: { integrations: { include: { integration: true } }, media: true },
     });
 
-    if (dto.platforms && post.userId) {
-      const workspaceId = await this.prisma.resolveWorkspaceIdForUser(post.userId);
+    if (dto.platforms) {
       const integrations = await this.prisma.integration.findMany({
-        where: { workspaceId: workspaceId ?? undefined, platform: { in: dto.platforms as any[] } },
+        where: { workspaceId, platform: { in: dto.platforms as any[] } },
       });
       await this.prisma.postIntegration.deleteMany({ where: { postId: id } });
       await this.prisma.postIntegration.createMany({
@@ -213,13 +211,13 @@ export class PostsService {
     return updated;
   }
 
-  async remove(id: string, userId: string) {
-    await this.findOne(id, userId);
+  async remove(id: string, workspaceId: string) {
+    await this.findOne(id, workspaceId);
     return this.prisma.post.delete({ where: { id } });
   }
 
-  async retry(id: string, userId: string) {
-    const post = await this.findOne(id, userId);
+  async retry(id: string, workspaceId: string) {
+    const post = await this.findOne(id, workspaceId);
     if (post.status !== 'ERROR') {
       throw new BadRequestException('Only failed posts can be retried');
     }

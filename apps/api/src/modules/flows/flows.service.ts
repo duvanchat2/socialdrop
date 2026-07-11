@@ -59,22 +59,22 @@ export class UpdateFlowDto {
 export class FlowsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(userId: string) {
+  findAll(workspaceId: string) {
     return this.prisma.flow.findMany({
-      where: { userId },
+      where: { workspaceId },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { executions: true } } },
     });
   }
 
-  findOne(id: string, userId: string) {
-    return this.prisma.flow.findFirst({ where: { id, userId } });
+  findOne(id: string, workspaceId: string) {
+    return this.prisma.flow.findFirst({ where: { id, workspaceId } });
   }
 
-  create(userId: string, dto: CreateFlowDto) {
+  create(workspaceId: string, dto: CreateFlowDto) {
     return this.prisma.flow.create({
       data: {
-        userId,
+        workspaceId,
         name: dto.name,
         platform: dto.platform,
         trigger: dto.trigger,
@@ -85,26 +85,26 @@ export class FlowsService {
     });
   }
 
-  async update(id: string, userId: string, dto: UpdateFlowDto) {
-    await this.ensureExists(id, userId);
+  async update(id: string, workspaceId: string, dto: UpdateFlowDto) {
+    await this.ensureExists(id, workspaceId);
     return this.prisma.flow.update({ where: { id }, data: dto as any });
   }
 
-  async remove(id: string, userId: string) {
-    await this.ensureExists(id, userId);
+  async remove(id: string, workspaceId: string) {
+    await this.ensureExists(id, workspaceId);
     return this.prisma.flow.delete({ where: { id } });
   }
 
-  async toggle(id: string, userId: string) {
-    const flow = await this.ensureExists(id, userId);
+  async toggle(id: string, workspaceId: string) {
+    const flow = await this.ensureExists(id, workspaceId);
     return this.prisma.flow.update({
       where: { id },
       data: { isActive: !flow.isActive },
     });
   }
 
-  private async ensureExists(id: string, userId: string) {
-    const flow = await this.prisma.flow.findFirst({ where: { id, userId } });
+  private async ensureExists(id: string, workspaceId: string) {
+    const flow = await this.prisma.flow.findFirst({ where: { id, workspaceId } });
     if (!flow) throw new NotFoundException(`Flow ${id} not found`);
     return flow;
   }

@@ -6,11 +6,14 @@ import {
   Body,
   Query,
   Param,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { Queue } from 'bullmq';
 import { BrainService } from './brain.service.js';
 import { TranscriptionService } from './transcription.service.js';
@@ -19,6 +22,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('brain')
 @Controller('content-brain')
+@UseGuards(WorkspaceGuard)
 export class BrainController {
   constructor(
     private readonly brainService: BrainService,
@@ -28,29 +32,29 @@ export class BrainController {
     @InjectQueue('brain-updater') private readonly brainQueue: Queue,
   ) {}
 
-  /** GET /api/content-brain?userId=xxx */
+  /** GET /api/content-brain */
   @Get()
-  @ApiOperation({ summary: 'Get ContentBrain for a user' })
-  getBrain(@CurrentUser() userId: string) {
-    return this.brainService.getBrain(userId);
+  @ApiOperation({ summary: 'Get ContentBrain for the active workspace' })
+  getBrain(@ActiveWorkspace() workspaceId: string) {
+    return this.brainService.getBrain(workspaceId);
   }
 
-  /** GET /api/content-brain/performance?userId=xxx */
+  /** GET /api/content-brain/performance */
   @Get('performance')
   @ApiOperation({ summary: 'Get performance stats + recent viral scripts' })
-  getPerformance(@CurrentUser() userId: string) {
-    return this.brainService.getPerformance(userId);
+  getPerformance(@ActiveWorkspace() workspaceId: string) {
+    return this.brainService.getPerformance(workspaceId);
   }
 
-  /** GET /api/content-brain/scripts?userId=xxx&isViral=true */
+  /** GET /api/content-brain/scripts?isViral=true */
   @Get('scripts')
   @ApiOperation({ summary: 'List generated scripts' })
   listScripts(
-    @CurrentUser() userId: string,
+    @ActiveWorkspace() workspaceId: string,
     @Query('isViral') isViral?: string,
     @Query('platform') platform?: string,
   ) {
-    return this.brainService.listScripts(userId, {
+    return this.brainService.listScripts(workspaceId, {
       isViral: isViral === 'true' ? true : isViral === 'false' ? false : undefined,
       platform,
     });
@@ -59,17 +63,21 @@ export class BrainController {
   /** POST /api/content-brain/scripts */
   @Post('scripts')
   @ApiOperation({ summary: 'Save a generated script' })
-  async createScript(@CurrentUser() userId: string, @Body() body: any) {
+  async createScript(
+    @CurrentUser() userId: string,
+    @ActiveWorkspace() workspaceId: string,
+    @Body() body: any,
+  ) {
     await this.usageService.consume(userId, 'script_generation');
-    const { userId: _ignored, ...dto } = body;
-    return this.brainService.createScript(userId, dto);
+    const { workspaceId: _ignored, ...dto } = body;
+    return this.brainService.createScript(workspaceId, dto);
   }
 
   /** PATCH /api/content-brain/scripts/:id/publish */
   @Patch('scripts/:id/publish')
   @ApiOperation({ summary: 'Mark a script as published (link postId)' })
-  markPublished(@Param('id') id: string, @CurrentUser() userId: string, @Body() body: { postId: string }) {
-    return this.brainService.markPublished(id, userId, body.postId);
+  markPublished(@Param('id') id: string, @ActiveWorkspace() workspaceId: string, @Body() body: { postId: string }) {
+    return this.brainService.markPublished(id, workspaceId, body.postId);
   }
 
   /** POST /api/content-brain/collect-metrics — trigger manual metrics collection */
@@ -81,14 +89,13 @@ export class BrainController {
     return { message: 'Metrics collection job queued' };
   }
 
-  /** POST /api/content-brain/update-brain — trigger brain update for a user */
+  /** POST /api/content-brain/update-brain — trigger brain update for the active workspace */
   @Post('update-brain')
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Trigger brain learning update for a user' })
-  async triggerBrainUpdate(@Body() body: { userId?: string }) {
-    const userId = body.userId ?? 'demo-user';
-    await this.brainQueue.add('update-user', { userId }, { attempts: 2, backoff: { type: 'fixed', delay: 60_000 } });
-    return { message: 'Brain update job queued', userId };
+  @ApiOperation({ summary: 'Trigger brain learning update for the active workspace' })
+  async triggerBrainUpdate(@ActiveWorkspace() workspaceId: string) {
+    await this.brainQueue.add('update-user', { workspaceId }, { attempts: 2, backoff: { type: 'fixed', delay: 60_000 } });
+    return { message: 'Brain update job queued', workspaceId };
   }
 
   /** POST /api/content-brain/test-transcription

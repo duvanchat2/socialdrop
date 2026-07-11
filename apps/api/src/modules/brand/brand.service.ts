@@ -15,12 +15,12 @@ export interface BrandProfileDto {
 export class BrandService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async get(userId: string) {
-    const profile = await this.prisma.brandProfile.findUnique({ where: { userId } });
+  async get(workspaceId: string) {
+    const profile = await this.prisma.brandProfile.findUnique({ where: { workspaceId } });
     if (!profile) {
       // Return empty defaults — no DB write until user saves
       return {
-        userId,
+        workspaceId,
         brandName: '',
         niche: '',
         tone: 'CASUAL' as const,
@@ -39,9 +39,9 @@ export class BrandService {
     return profile;
   }
 
-  async save(userId: string, dto: BrandProfileDto) {
+  async save(workspaceId: string, dto: BrandProfileDto) {
     return this.prisma.brandProfile.upsert({
-      where: { userId },
+      where: { workspaceId },
       update: {
         brandName: dto.brandName,
         niche: dto.niche,
@@ -52,7 +52,7 @@ export class BrandService {
         optimalTimes: dto.optimalTimes,
       },
       create: {
-        userId,
+        workspaceId,
         brandName: dto.brandName,
         niche: dto.niche,
         tone: dto.tone,

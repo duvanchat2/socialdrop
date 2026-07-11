@@ -6,12 +6,17 @@ import {
   Param,
   Query,
   Res,
+  UseGuards,
   HttpException,
   HttpStatus,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
+import { PrismaService } from '@socialdrop/prisma';
 import { DriveService } from './drive.service.js';
 import { ConfigureDriveDto } from '@socialdrop/shared';
 
@@ -19,26 +24,25 @@ import { ConfigureDriveDto } from '@socialdrop/shared';
 export class DriveController {
   private readonly logger = new Logger(DriveController.name);
 
-  constructor(private readonly driveService: DriveService) {}
+  constructor(
+    private readonly driveService: DriveService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /** Returns the Google OAuth URL as JSON (for frontend use) */
   @Get('auth-url')
-  authUrl(@CurrentUser() userId: string) {
-    if (!userId) {
-      throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    }
-    const url = this.driveService.generateAuthUrl(userId);
+  @UseGuards(WorkspaceGuard)
+  authUrl(@ActiveWorkspace() workspaceId: string) {
+    const url = this.driveService.generateAuthUrl(workspaceId);
     return { url };
   }
 
   /** Redirects browser to Google OAuth */
   @Get('auth')
-  auth(@CurrentUser() userId: string, @Res() res: Response): void {
-    if (!userId) {
-      throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    }
+  @UseGuards(WorkspaceGuard)
+  auth(@ActiveWorkspace() workspaceId: string, @Res() res: Response): void {
     try {
-      const url = this.driveService.generateAuthUrl(userId);
+      const url = this.driveService.generateAuthUrl(workspaceId);
       res.redirect(url);
     } catch (err: any) {
       this.logger.error('Error generating Drive auth URL', err);
@@ -50,15 +54,16 @@ export class DriveController {
   @Get('callback')
   async callback(
     @Query('code') code: string,
-    @Query('state') userId: string,
+    @Query('state') workspaceId: string,
     @Query('error') oauthError: string,
+    @CurrentUser() userId: string,
     @Res() res: Response,
   ): Promise<void> {
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
     // Google returns ?error=access_denied when user cancels or app is unverified
     if (oauthError) {
-      this.logger.warn(`Drive OAuth error for user ${userId}: ${oauthError}`);
+      this.logger.warn(`Drive OAuth error for workspace ${workspaceId}: ${oauthError}`);
       const msg = oauthError === 'access_denied'
         ? 'Acceso denegado. Si la app no está verificada, agrega tu email como usuario de prueba en Google Cloud Console → APIs & Services → OAuth consent screen → Test users.'
         : `Error de Google: ${oauthError}`;
@@ -66,39 +71,42 @@ export class DriveController {
       return;
     }
 
-    if (!code || !userId) {
+    if (!code || !workspaceId) {
       res.redirect(`${frontendUrl}/drive?error=missing_params&message=${encodeURIComponent('Faltan parámetros de OAuth')}`);
       return;
     }
 
+    // Manual membership check — this is an external redirect from Google, so
+    // it carries no X-Workspace-Id header for WorkspaceGuard.
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    });
+    if (!membership) throw new ForbiddenException('Not a member of this workspace');
+
     try {
-      await this.driveService.handleOAuthCallback(code, userId);
-      this.logger.log(`[Drive] OAuth callback OK — token saved to DB for userId=${userId}`);
+      await this.driveService.handleOAuthCallback(code, workspaceId);
+      this.logger.log(`[Drive] OAuth callback OK — token saved to DB for workspaceId=${workspaceId}`);
       res.redirect(`${frontendUrl}/drive?connected=true`);
     } catch (err: any) {
-      this.logger.error(`Drive OAuth callback error for user ${userId}`, err);
+      this.logger.error(`Drive OAuth callback error for workspace ${workspaceId}`, err);
       const msg = err?.message ?? 'Error desconocido al conectar Google Drive';
       res.redirect(`${frontendUrl}/drive?error=callback_failed&message=${encodeURIComponent(msg)}`);
     }
   }
 
   @Post('configure')
+  @UseGuards(WorkspaceGuard)
   async configure(
-    @CurrentUser() userId: string,
+    @ActiveWorkspace() workspaceId: string,
     @Body() dto: ConfigureDriveDto,
   ) {
-    if (!userId) {
-      throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    }
-    return this.driveService.configureDriveFolder(userId, dto);
+    return this.driveService.configureDriveFolder(workspaceId, dto);
   }
 
   @Get('status')
-  async status(@CurrentUser() userId: string) {
-    if (!userId) {
-      throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    }
-    return this.driveService.getSyncStatus(userId);
+  @UseGuards(WorkspaceGuard)
+  async status(@ActiveWorkspace() workspaceId: string) {
+    return this.driveService.getSyncStatus(workspaceId);
   }
 
   @Post('sync/:configId')

@@ -11,9 +11,9 @@ export class InboxService {
     private readonly config: ConfigService,
   ) {}
 
-  async getConversations(userId: string) {
+  async getConversations(workspaceId: string) {
     const contacts = await this.prisma.contact.findMany({
-      where: { userId },
+      where: { workspaceId },
       orderBy: { createdAt: 'desc' },
     });
     return contacts;

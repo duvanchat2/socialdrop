@@ -23,10 +23,10 @@ const DEFAULT_CONFIGS: DayConfig[] = DAYS.map((day) => ({
 export class StrategyService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async get(userId: string) {
-    const strategy = await this.prisma.contentStrategy.findUnique({ where: { userId } });
+  async get(workspaceId: string) {
+    const strategy = await this.prisma.contentStrategy.findUnique({ where: { workspaceId } });
     if (!strategy) {
-      return { userId, dayConfigs: DEFAULT_CONFIGS };
+      return { workspaceId, dayConfigs: DEFAULT_CONFIGS };
     }
     return {
       ...strategy,
@@ -34,13 +34,13 @@ export class StrategyService {
     };
   }
 
-  async save(userId: string, dayConfigs: DayConfig[]) {
+  async save(workspaceId: string, dayConfigs: DayConfig[]) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = dayConfigs as any;
     return this.prisma.contentStrategy.upsert({
-      where: { userId },
+      where: { workspaceId },
       update: { dayConfigs: json },
-      create: { userId, dayConfigs: json },
+      create: { workspaceId, dayConfigs: json },
     });
   }
 }

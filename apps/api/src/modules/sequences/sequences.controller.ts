@@ -1,23 +1,25 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query, HttpCode, HttpStatus,
+  Controller, Get, Post, Delete, Body, Param, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { SequencesService, CreateSequenceDto } from './sequences.service.js';
 
 @ApiTags('sequences')
 @Controller('sequences')
+@UseGuards(WorkspaceGuard)
 export class SequencesController {
   constructor(private readonly sequencesService: SequencesService) {}
 
   @Get()
-  findAll(@CurrentUser() userId: string) {
-    return this.sequencesService.findAll(userId);
+  findAll(@ActiveWorkspace() workspaceId: string) {
+    return this.sequencesService.findAll(workspaceId);
   }
 
   @Post()
-  create(@CurrentUser() userId: string, @Body() dto: CreateSequenceDto) {
-    return this.sequencesService.create(userId, dto);
+  create(@ActiveWorkspace() workspaceId: string, @Body() dto: CreateSequenceDto) {
+    return this.sequencesService.create(workspaceId, dto);
   }
 
   @Post(':id/enroll/:contactId')
@@ -28,7 +30,7 @@ export class SequencesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.sequencesService.remove(id, userId);
+  remove(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
+    return this.sequencesService.remove(id, workspaceId);
   }
 }

@@ -7,44 +7,47 @@ import {
   Body,
   Param,
   Query,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { ContentService } from './content.service.js';
 
 @ApiTags('content')
 @Controller('content')
+@UseGuards(WorkspaceGuard)
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
   @Get()
   @ApiOperation({ summary: 'List content items' })
   findAll(
-    @CurrentUser() userId: string,
+    @ActiveWorkspace() workspaceId: string,
     @Query('type') type?: string,
     @Query('status') status?: string,
   ) {
-    return this.contentService.findAll(userId ?? 'demo-user', type, status);
+    return this.contentService.findAll(workspaceId, type, status);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create content item' })
-  create(@CurrentUser() userId: string, @Body() dto: any) {
-    return this.contentService.create(userId ?? 'demo-user', dto);
+  create(@ActiveWorkspace() workspaceId: string, @Body() dto: any) {
+    return this.contentService.create(workspaceId, dto);
   }
 
   @Get('drive-files')
   @ApiOperation({ summary: 'List files from configured Drive folder' })
-  getDriveFiles(@CurrentUser() userId: string) {
-    return this.contentService.getDriveFiles(userId ?? 'demo-user');
+  getDriveFiles(@ActiveWorkspace() workspaceId: string) {
+    return this.contentService.getDriveFiles(workspaceId);
   }
 
   @Post('schedule-all')
   @ApiOperation({ summary: 'Schedule all drafts with scheduledAt set' })
-  scheduleAll(@CurrentUser() userId: string) {
-    return this.contentService.scheduleAll(userId ?? 'demo-user');
+  scheduleAll(@ActiveWorkspace() workspaceId: string) {
+    return this.contentService.scheduleAll(workspaceId);
   }
 
   @Get(':id')
