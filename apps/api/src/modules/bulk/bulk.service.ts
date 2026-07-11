@@ -86,11 +86,11 @@ export class BulkService {
   }
 
   async distributeStrategy(params: DistributeStrategyParams): Promise<PostDraft[]> {
-    const { media, startDate, userId } = params;
+    const { media, startDate, workspaceId } = params;
 
     if (!media.length) throw new BadRequestException('No media provided');
 
-    const strategy = await this.strategyService.get(userId);
+    const strategy = await this.strategyService.get(workspaceId);
     const dayConfigs = strategy.dayConfigs as DayConfig[];
 
     // End date: 6 days after start (one full week)
@@ -132,18 +132,10 @@ export class BulkService {
   }
 
   async scheduleAll(params: ScheduleParams) {
-    const { drafts, userId } = params;
+    const { drafts, workspaceId } = params;
     if (!drafts.length) throw new BadRequestException('No drafts provided');
 
-    // Ensure user exists
-    await this.prisma.user.upsert({
-      where: { id: userId },
-      update: {},
-      create: { id: userId, email: `${userId}@socialdrop.local`, name: userId },
-    });
-
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
-    const integrations = await this.prisma.integration.findMany({ where: { workspaceId: workspaceId ?? undefined } });
+    const integrations = await this.prisma.integration.findMany({ where: { workspaceId } });
     const intMap = new Map(integrations.map((i) => [i.platform, i]));
 
     const created = await Promise.all(
@@ -152,7 +144,7 @@ export class BulkService {
 
         const post = await this.prisma.post.create({
           data: {
-            userId,
+            workspaceId,
             content: draft.caption,
             scheduledAt: new Date(draft.scheduledAt),
             status: 'SCHEDULED',
@@ -179,7 +171,7 @@ export class BulkService {
     // Ensure scan job is running
     await this.schedulerQueue.add('scan', { type: 'scan' }, { repeat: { every: 60_000 } });
 
-    this.logger.log(`[Bulk] Scheduled ${created.length} posts for user ${userId}`);
+    this.logger.log(`[Bulk] Scheduled ${created.length} posts for workspace ${workspaceId}`);
     return { created: created.length, posts: created };
   }
 }

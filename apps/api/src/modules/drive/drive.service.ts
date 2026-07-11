@@ -21,23 +21,23 @@ export class DriveService {
     @InjectQueue('post-scheduler') private readonly schedulerQueue: Queue,
   ) {}
 
-  generateAuthUrl(userId: string): string {
+  generateAuthUrl(workspaceId: string): string {
     const oauth2Client = this.createOAuth2Client();
     return oauth2Client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
       scope: this.config.get<string[]>('google.scopes'),
-      state: userId,
+      state: workspaceId,
     });
   }
 
-  async handleOAuthCallback(code: string, userId: string): Promise<void> {
+  async handleOAuthCallback(code: string, workspaceId: string): Promise<void> {
     const oauth2Client = this.createOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
 
     await this.prisma.driveConfig.upsert({
       where: {
-        userId_folderId: { userId, folderId: '__pending__' },
+        workspaceId_folderId: { workspaceId, folderId: '__pending__' },
       },
       update: {
         accessToken: tokens.access_token!,
@@ -47,7 +47,7 @@ export class DriveService {
           : null,
       },
       create: {
-        userId,
+        workspaceId,
         folderId: '__pending__',
         accessToken: tokens.access_token!,
         refreshToken: tokens.refresh_token ?? '',
@@ -58,12 +58,12 @@ export class DriveService {
       },
     });
 
-    this.logger.log(`OAuth tokens stored for user ${userId}`);
+    this.logger.log(`OAuth tokens stored for workspace ${workspaceId}`);
   }
 
-  async configureDriveFolder(userId: string, dto: ConfigureDriveDto) {
+  async configureDriveFolder(workspaceId: string, dto: ConfigureDriveDto) {
     const pending = await this.prisma.driveConfig.findFirst({
-      where: { userId },
+      where: { workspaceId },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -73,7 +73,7 @@ export class DriveService {
 
     const config = await this.prisma.driveConfig.upsert({
       where: {
-        userId_folderId: { userId, folderId: dto.folderId },
+        workspaceId_folderId: { workspaceId, folderId: dto.folderId },
       },
       update: {
         folderName: dto.folderName,
@@ -84,7 +84,7 @@ export class DriveService {
         tokenExpiry: pending.tokenExpiry,
       },
       create: {
-        userId,
+        workspaceId,
         folderId: dto.folderId,
         folderName: dto.folderName,
         accessToken: pending.accessToken,
@@ -114,16 +114,16 @@ export class DriveService {
     );
 
     this.logger.log(
-      `Drive folder ${dto.folderId} configured for user ${userId}, polling every ${config.pollingInterval}s`,
+      `Drive folder ${dto.folderId} configured for workspace ${workspaceId}, polling every ${config.pollingInterval}s`,
     );
 
     return config;
   }
 
-  async getSyncStatus(userId: string) {
+  async getSyncStatus(workspaceId: string) {
     const [configs, anyConfig] = await Promise.all([
       this.prisma.driveConfig.findMany({
-        where: { userId, syncEnabled: true },
+        where: { workspaceId, syncEnabled: true },
         select: {
           id: true,
           folderId: true,
@@ -133,7 +133,7 @@ export class DriveService {
           pollingInterval: true,
         },
       }),
-      this.prisma.driveConfig.findFirst({ where: { userId } }),
+      this.prisma.driveConfig.findFirst({ where: { workspaceId } }),
     ]);
     return { isConnected: !!anyConfig, configs };
   }
@@ -246,7 +246,7 @@ export class DriveService {
     drive: drive_v3.Drive,
     auth: OAuth2Client,
     file: drive_v3.Schema$File,
-    driveConfig: { id: string; userId: string; folderId: string },
+    driveConfig: { id: string; workspaceId: string; folderId: string },
   ): Promise<number> {
     const response = await drive.files.get(
       { fileId: file.id!, alt: 'media' },
@@ -261,7 +261,7 @@ export class DriveService {
       // Check if post already exists (by driveSourceId)
       const driveSourceId = `${file.id}:${row.caption.slice(0, 50)}`;
       const existing = await this.prisma.post.findFirst({
-        where: { driveSourceId, userId: driveConfig.userId },
+        where: { driveSourceId, workspaceId: driveConfig.workspaceId },
       });
       if (existing) continue;
 
@@ -289,18 +289,17 @@ export class DriveService {
         }
       }
 
-      // Find matching integrations for the user
-      const workspaceId = await this.prisma.resolveWorkspaceIdForUser(driveConfig.userId);
+      // Find matching integrations for the workspace
       const integrations = await this.prisma.integration.findMany({
         where: {
-          workspaceId: workspaceId ?? undefined,
+          workspaceId: driveConfig.workspaceId,
           platform: { in: row.platforms },
         },
       });
 
       await this.prisma.post.create({
         data: {
-          userId: driveConfig.userId,
+          workspaceId: driveConfig.workspaceId,
           content: row.caption,
           scheduledAt: row.scheduledDate,
           status: 'SCHEDULED',

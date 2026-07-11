@@ -187,10 +187,10 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     });
 
     const platform = pi.integration.platform;
-    const userId = pi.post.userId;
+    const workspaceId = pi.post.workspaceId;
     const mediaUrls = pi.post.media.map((m) => m.url);
 
-    await this.debugLog.push(userId, 'log', platform,
+    await this.debugLog.push(workspaceId, 'log', platform,
       `[${platform}] Starting publish for postId=${pi.postId} | media=${mediaUrls.join(', ') || 'none'}`);
 
     const provider = this.integrationManager.getProvider(platform);
@@ -203,10 +203,10 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
 
     if (tokenExpiry) {
       const msLeft = tokenExpiry.getTime() - Date.now();
-      await this.debugLog.push(userId, 'log', platform,
+      await this.debugLog.push(workspaceId, 'log', platform,
         `[${platform}] Token expiry: ${tokenExpiry.toISOString()} (${Math.round(msLeft / 1000 / 60)} min left)`);
     } else {
-      await this.debugLog.push(userId, 'warn', platform, `[${platform}] No token expiry date stored`);
+      await this.debugLog.push(workspaceId, 'warn', platform, `[${platform}] No token expiry date stored`);
     }
 
     if (refreshToken && tokenExpiry && tokenExpiry.getTime() - Date.now() < fiveMinutes) {
@@ -214,7 +214,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
         `[Scheduler] Token for ${platform} integration=${pi.integration.id} ` +
         `is expired or expiring soon (expiry=${tokenExpiry.toISOString()}). Refreshing...`,
       );
-      await this.debugLog.push(userId, 'warn', platform,
+      await this.debugLog.push(workspaceId, 'warn', platform,
         `[${platform}] Token expired/expiring — refreshing (integration=${pi.integration.id})`);
       try {
         const refreshed = await provider.refreshToken(refreshToken);
@@ -228,16 +228,16 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
           },
         });
         this.logger.log(`[Scheduler] Token refreshed for integration=${pi.integration.id}`);
-        await this.debugLog.push(userId, 'log', platform, `[${platform}] Token refreshed successfully`);
+        await this.debugLog.push(workspaceId, 'log', platform, `[${platform}] Token refreshed successfully`);
       } catch (err) {
         const msg = (err as Error).message;
         this.logger.error(`[Scheduler] Pre-emptive token refresh failed for integration=${pi.integration.id}: ${msg}`);
-        await this.debugLog.push(userId, 'error', platform, `[${platform}] Token refresh failed: ${msg}`, String(err));
+        await this.debugLog.push(workspaceId, 'error', platform, `[${platform}] Token refresh failed: ${msg}`, String(err));
         // Continue with existing token — let the actual request fail and handle below
       }
     }
 
-    await this.debugLog.push(userId, 'log', platform,
+    await this.debugLog.push(workspaceId, 'log', platform,
       `[${platform}] Calling provider.post() | content="${pi.post.content.slice(0, 80)}..." | mediaUrls=${JSON.stringify(mediaUrls)}`);
 
     // Pull metadata from the post's JSON blob (YouTube fields + instagramType)
@@ -269,17 +269,17 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
       await this.updatePostStatus(pi.postId, mediaUrls);
 
       this.logger.log(`Published to ${platform}: ${result.platformPostId}`);
-      await this.debugLog.push(userId, 'log', platform,
+      await this.debugLog.push(workspaceId, 'log', platform,
         `[${platform}] ✓ Published successfully — platformPostId=${result.platformPostId}`);
     } catch (error) {
       let finalError = error as Error;
-      await this.debugLog.push(userId, 'error', platform,
+      await this.debugLog.push(workspaceId, 'error', platform,
         `[${platform}] ✗ publish failed: ${finalError.message}`, finalError.stack);
 
       // On 401: try to refresh token once and retry the post
       if (error instanceof RefreshTokenError && refreshToken) {
         this.logger.warn(`[Scheduler] 401 received for integration=${pi.integration.id}, attempting token refresh...`);
-        await this.debugLog.push(userId, 'warn', platform,
+        await this.debugLog.push(workspaceId, 'warn', platform,
           `[${platform}] 401 Unauthorized — attempting token refresh for integration=${pi.integration.id}`);
         try {
           const refreshed = await provider.refreshToken(refreshToken);
@@ -292,7 +292,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
             },
           });
           this.logger.log(`[Scheduler] Token refreshed, retrying post for integration=${pi.integration.id}`);
-          await this.debugLog.push(userId, 'log', platform,
+          await this.debugLog.push(workspaceId, 'log', platform,
             `[${platform}] Token refreshed, retrying publish...`);
 
           const result = await provider.post(refreshed.accessToken, postContent);
@@ -308,13 +308,13 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
 
           await this.updatePostStatus(pi.postId, mediaUrls);
           this.logger.log(`Published to ${platform} after token refresh: ${result.platformPostId}`);
-          await this.debugLog.push(userId, 'log', platform,
+          await this.debugLog.push(workspaceId, 'log', platform,
             `[${platform}] ✓ Published after token refresh — platformPostId=${result.platformPostId}`);
           return;
         } catch (refreshErr) {
           const msg = (refreshErr as Error).message;
           this.logger.error(`[Scheduler] Token refresh and retry failed for integration=${pi.integration.id}: ${msg}`);
-          await this.debugLog.push(userId, 'error', platform,
+          await this.debugLog.push(workspaceId, 'error', platform,
             `[${platform}] Token refresh + retry failed: ${msg}`, String(refreshErr));
           finalError = refreshErr as Error;
         }
@@ -337,7 +337,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
       });
 
       this.logger.error(`Failed to publish to ${platform}: ${finalError.message}`);
-      await this.debugLog.push(userId, 'error', platform,
+      await this.debugLog.push(workspaceId, 'error', platform,
         `[${platform}] Final failure (retry ${retryCount}/${maxRetries}): ${finalError.message}`,
         finalError.stack);
 

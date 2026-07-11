@@ -28,17 +28,17 @@ export class SequencesService {
     @InjectQueue('post-scheduler') private readonly queue: Queue,
   ) {}
 
-  findAll(userId: string) {
+  findAll(workspaceId: string) {
     return this.prisma.flow.findMany({
-      where: { userId, trigger: 'SEQUENCE' },
+      where: { workspaceId, trigger: 'SEQUENCE' },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  create(userId: string, dto: CreateSequenceDto) {
+  create(workspaceId: string, dto: CreateSequenceDto) {
     return this.prisma.flow.create({
       data: {
-        userId,
+        workspaceId,
         name: dto.name,
         platform: 'ALL',
         trigger: 'SEQUENCE',
@@ -72,7 +72,7 @@ export class SequencesService {
     }
   }
 
-  async remove(id: string, userId: string) {
-    return this.prisma.flow.deleteMany({ where: { id, userId, trigger: 'SEQUENCE' } });
+  async remove(id: string, workspaceId: string) {
+    return this.prisma.flow.deleteMany({ where: { id, workspaceId, trigger: 'SEQUENCE' } });
   }
 }

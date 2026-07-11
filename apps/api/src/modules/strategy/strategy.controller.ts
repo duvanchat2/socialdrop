@@ -1,24 +1,24 @@
-import { Controller, Get, Post, Body, Query, HttpException, HttpStatus } from '@nestjs/common';
-import { CurrentUser } from '../auth/current-user.decorator.js';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StrategyService, DayConfig } from './strategy.service.js';
 
 @ApiTags('strategy')
 @Controller('strategy')
+@UseGuards(WorkspaceGuard)
 export class StrategyController {
   constructor(private readonly strategyService: StrategyService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get content strategy for user' })
-  get(@CurrentUser() userId: string) {
-    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    return this.strategyService.get(userId);
+  @ApiOperation({ summary: 'Get content strategy for the active workspace' })
+  get(@ActiveWorkspace() workspaceId: string) {
+    return this.strategyService.get(workspaceId);
   }
 
   @Post()
   @ApiOperation({ summary: 'Save content strategy' })
-  save(@CurrentUser() userId: string, @Body() body: { dayConfigs: DayConfig[] }) {
-    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    return this.strategyService.save(userId, body.dayConfigs);
+  save(@ActiveWorkspace() workspaceId: string, @Body() body: { dayConfigs: DayConfig[] }) {
+    return this.strategyService.save(workspaceId, body.dayConfigs);
   }
 }

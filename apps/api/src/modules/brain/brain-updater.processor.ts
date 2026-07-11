@@ -14,27 +14,27 @@ export class BrainUpdaterProcessor extends WorkerHost {
   async process(job: Job): Promise<unknown> {
     if (job.name === 'update-all') {
       this.logger.log('[BrainUpdater] Sunday brain update starting');
-      const userIds = await this.brainService.getActiveUserIds();
-      this.logger.log(`[BrainUpdater] Processing ${userIds.length} users`);
+      const workspaceIds = await this.brainService.getActiveWorkspaceIds();
+      this.logger.log(`[BrainUpdater] Processing ${workspaceIds.length} workspaces`);
 
-      const results: Array<{ userId: string; status: string }> = [];
-      for (const userId of userIds) {
+      const results: Array<{ workspaceId: string; status: string }> = [];
+      for (const workspaceId of workspaceIds) {
         try {
-          await this.brainService.learnFromViralScripts(userId);
-          results.push({ userId, status: 'updated' });
+          await this.brainService.learnFromViralScripts(workspaceId);
+          results.push({ workspaceId, status: 'updated' });
         } catch (err: any) {
-          results.push({ userId, status: `error: ${err.message}` });
+          results.push({ workspaceId, status: `error: ${err.message}` });
         }
       }
 
-      return { processed: userIds.length, results };
+      return { processed: workspaceIds.length, results };
     }
 
     if (job.name === 'update-user') {
-      const userId = job.data?.userId as string;
-      if (!userId) return null;
-      await this.brainService.learnFromViralScripts(userId);
-      return { userId };
+      const workspaceId = job.data?.workspaceId as string;
+      if (!workspaceId) return null;
+      await this.brainService.learnFromViralScripts(workspaceId);
+      return { workspaceId };
     }
 
     return null;

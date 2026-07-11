@@ -1,17 +1,19 @@
-import { Controller, Get, Post, Param, Body, Query } from '@nestjs/common';
-import { CurrentUser } from '../auth/current-user.decorator.js';
+import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { InboxService } from './inbox.service.js';
 
 @ApiTags('inbox')
 @Controller('inbox')
+@UseGuards(WorkspaceGuard)
 export class InboxController {
   constructor(private readonly inboxService: InboxService) {}
 
   @Get()
   @ApiOperation({ summary: 'List conversations/contacts' })
-  getConversations(@CurrentUser() userId: string) {
-    return this.inboxService.getConversations(userId);
+  getConversations(@ActiveWorkspace() workspaceId: string) {
+    return this.inboxService.getConversations(workspaceId);
   }
 
   @Post(':threadId/reply')

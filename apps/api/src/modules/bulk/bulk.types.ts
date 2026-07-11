@@ -32,10 +32,10 @@ export interface DistributeAutoParams {
 export interface DistributeStrategyParams {
   media: UploadedMedia[];
   startDate: string;
-  userId: string;
+  workspaceId: string;
 }
 
 export interface ScheduleParams {
   drafts: PostDraft[];
-  userId: string;
+  workspaceId: string;
 }

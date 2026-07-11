@@ -16,22 +16,22 @@ export class CompetitorsService {
     @InjectQueue(COMPETITOR_ANALYSIS_QUEUE) private readonly analysisQueue: Queue,
   ) {}
 
-  async list(userId: string) {
+  async list(workspaceId: string) {
     return this.prisma.competitor.findMany({
-      where: { userId },
+      where: { workspaceId },
       include: { analyses: { orderBy: { createdAt: 'desc' }, take: 1 } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async add(userId: string, username: string, platform: string) {
+  async add(workspaceId: string, username: string, platform: string) {
     return this.prisma.competitor.create({
-      data: { userId, username, platform },
+      data: { workspaceId, username, platform },
     });
   }
 
   async ingest(
-    userId: string,
+    workspaceId: string,
     platform: string,
     profile: {
       username: string;
@@ -52,9 +52,9 @@ export class CompetitorsService {
       caption?: string;
     }>,
   ) {
-    // Upsert competitor (find by userId+username+platform)
+    // Upsert competitor (find by workspaceId+username+platform)
     const existing = await this.prisma.competitor.findFirst({
-      where: { userId, username: profile.username, platform },
+      where: { workspaceId, username: profile.username, platform },
     });
 
     const data = {
@@ -69,7 +69,7 @@ export class CompetitorsService {
           data,
         })
       : await this.prisma.competitor.create({
-          data: { userId, username: profile.username, platform, ...data },
+          data: { workspaceId, username: profile.username, platform, ...data },
         });
 
     // Upsert posts (best-effort, errors per-post don't fail the whole call)
@@ -173,13 +173,13 @@ export class CompetitorsService {
     return this.prisma.competitor.delete({ where: { id } });
   }
 
-  async analyze(id: string, userId: string) {
+  async analyze(id: string, workspaceId: string) {
     const competitor = await this.prisma.competitor.findUnique({ where: { id } });
     if (!competitor) throw new Error('Competitor not found');
 
     // Fetch user's own metrics for comparison
     const userMetrics = await this.prisma.platformMetrics.findFirst({
-      where: { userId, platform: competitor.platform },
+      where: { workspaceId, platform: competitor.platform },
       orderBy: { recordedAt: 'desc' },
     });
 
@@ -257,15 +257,15 @@ Return ONLY a valid JSON object with this structure (no markdown, no extra text)
     }
   }
 
-  async benchmark(userId: string) {
-    const competitors = await this.prisma.competitor.findMany({ where: { userId } });
+  async benchmark(workspaceId: string) {
+    const competitors = await this.prisma.competitor.findMany({ where: { workspaceId } });
 
     const userMetricsByPlatform = new Map<string, { followersCount: number; platform: string }>();
     const platforms = [...new Set(competitors.map((c) => c.platform))];
     await Promise.all(
       platforms.map(async (p) => {
         const m = await this.prisma.platformMetrics.findFirst({
-          where: { userId, platform: p },
+          where: { workspaceId, platform: p },
           orderBy: { recordedAt: 'desc' },
         });
         if (m) userMetricsByPlatform.set(p, m);
@@ -273,7 +273,7 @@ Return ONLY a valid JSON object with this structure (no markdown, no extra text)
     );
 
     return {
-      userId,
+      workspaceId,
       myMetrics: Object.fromEntries(userMetricsByPlatform),
       competitors: competitors.map((c) => ({
         id: c.id,

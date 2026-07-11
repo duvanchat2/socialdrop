@@ -37,10 +37,9 @@ export class YoutubeService {
     );
   }
 
-  private async getAuthedClient(userId: string): Promise<{ client: OAuth2Client; integrationId: string } | null> {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+  private async getAuthedClient(workspaceId: string): Promise<{ client: OAuth2Client; integrationId: string } | null> {
     const integration = await this.prisma.integration.findFirst({
-      where: { workspaceId: workspaceId ?? undefined, platform: 'YOUTUBE' },
+      where: { workspaceId, platform: 'YOUTUBE' },
     });
     if (!integration) return null;
 
@@ -69,10 +68,10 @@ export class YoutubeService {
 
   // ─── Polling ──────────────────────────────────────────────────────────────
 
-  async pollComments(userId: string): Promise<{ polled: number; newComments: number; autoReplied: number }> {
-    const ctx = await this.getAuthedClient(userId);
+  async pollComments(workspaceId: string): Promise<{ polled: number; newComments: number; autoReplied: number }> {
+    const ctx = await this.getAuthedClient(workspaceId);
     if (!ctx) {
-      this.logger.log(`[YouTube] No YOUTUBE integration for user ${userId}`);
+      this.logger.log(`[YouTube] No YOUTUBE integration for user ${workspaceId}`);
       return { polled: 0, newComments: 0, autoReplied: 0 };
     }
     const { client } = ctx;
@@ -86,7 +85,7 @@ export class YoutubeService {
     const uploadsPlaylistId =
       channelRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
     if (!uploadsPlaylistId) {
-      this.logger.warn(`[YouTube] No uploads playlist for user ${userId}`);
+      this.logger.warn(`[YouTube] No uploads playlist for user ${workspaceId}`);
       return { polled: 0, newComments: 0, autoReplied: 0 };
     }
 
@@ -111,7 +110,7 @@ export class YoutubeService {
     const videos = videosRes.data.items ?? [];
 
     const autoReplies = await this.prisma.youtubeAutoReply.findMany({
-      where: { userId, isEnabled: true },
+      where: { workspaceId, isEnabled: true },
     });
 
     let polled = 0;
@@ -159,7 +158,7 @@ export class YoutubeService {
           // Store new comment
           const saved = await this.prisma.youtubeComment.create({
             data: {
-              userId,
+              workspaceId,
               videoId,
               videoTitle: title,
               commentId,
@@ -217,19 +216,19 @@ export class YoutubeService {
     }
 
     this.logger.log(
-      `[YouTube] Poll complete for ${userId}: polled=${polled} newComments=${newComments} autoReplied=${autoReplied}`,
+      `[YouTube] Poll complete for ${workspaceId}: polled=${polled} newComments=${newComments} autoReplied=${autoReplied}`,
     );
     return { polled, newComments, autoReplied };
   }
 
   // ─── Manual reply ─────────────────────────────────────────────────────────
 
-  async replyToComment(userId: string, commentId: string, text: string): Promise<void> {
+  async replyToComment(workspaceId: string, commentId: string, text: string): Promise<void> {
     const comment = await this.prisma.youtubeComment.findUnique({ where: { commentId } });
     if (!comment) throw new Error(`Comment ${commentId} not found`);
 
-    const ctx = await this.getAuthedClient(userId);
-    if (!ctx) throw new Error(`No YouTube integration for user ${userId}`);
+    const ctx = await this.getAuthedClient(workspaceId);
+    if (!ctx) throw new Error(`No YouTube integration for user ${workspaceId}`);
     const { client } = ctx;
     const youtube = google.youtube({ version: 'v3', auth: client });
 
@@ -252,10 +251,10 @@ export class YoutubeService {
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
-  async getComments(userId: string, videoId?: string, onlyUnreplied = false, onlyShorts = false, limit = 50) {
+  async getComments(workspaceId: string, videoId?: string, onlyUnreplied = false, onlyShorts = false, limit = 50) {
     return this.prisma.youtubeComment.findMany({
       where: {
-        userId,
+        workspaceId,
         ...(videoId ? { videoId } : {}),
         ...(onlyUnreplied ? { replied: false } : {}),
         ...(onlyShorts ? { isShort: true } : {}),
@@ -267,21 +266,21 @@ export class YoutubeService {
 
   // ─── Auto-reply rules CRUD ────────────────────────────────────────────────
 
-  async getAutoReplies(userId: string) {
+  async getAutoReplies(workspaceId: string) {
     return this.prisma.youtubeAutoReply.findMany({
-      where: { userId },
+      where: { workspaceId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async createAutoReply(userId: string, keyword: string, replyTemplate: string) {
+  async createAutoReply(workspaceId: string, keyword: string, replyTemplate: string) {
     return this.prisma.youtubeAutoReply.create({
-      data: { userId, keyword, replyTemplate },
+      data: { workspaceId, keyword, replyTemplate },
     });
   }
 
-  async toggleAutoReply(id: string, userId: string) {
-    const rule = await this.prisma.youtubeAutoReply.findFirst({ where: { id, userId } });
+  async toggleAutoReply(id: string, workspaceId: string) {
+    const rule = await this.prisma.youtubeAutoReply.findFirst({ where: { id, workspaceId } });
     if (!rule) throw new Error(`AutoReply rule ${id} not found`);
     return this.prisma.youtubeAutoReply.update({
       where: { id },
@@ -289,18 +288,18 @@ export class YoutubeService {
     });
   }
 
-  async deleteAutoReply(id: string, userId: string) {
-    return this.prisma.youtubeAutoReply.deleteMany({ where: { id, userId } });
+  async deleteAutoReply(id: string, workspaceId: string) {
+    return this.prisma.youtubeAutoReply.deleteMany({ where: { id, workspaceId } });
   }
 
   // ─── Stats ────────────────────────────────────────────────────────────────
 
-  async getStats(userId: string) {
+  async getStats(workspaceId: string) {
     const [total, unreplied, shorts, autoReplied] = await Promise.all([
-      this.prisma.youtubeComment.count({ where: { userId } }),
-      this.prisma.youtubeComment.count({ where: { userId, replied: false } }),
-      this.prisma.youtubeComment.count({ where: { userId, isShort: true } }),
-      this.prisma.youtubeComment.count({ where: { userId, replied: true } }),
+      this.prisma.youtubeComment.count({ where: { workspaceId } }),
+      this.prisma.youtubeComment.count({ where: { workspaceId, replied: false } }),
+      this.prisma.youtubeComment.count({ where: { workspaceId, isShort: true } }),
+      this.prisma.youtubeComment.count({ where: { workspaceId, replied: true } }),
     ]);
     return { total, unreplied, shorts, autoReplied };
   }

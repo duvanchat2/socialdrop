@@ -1,14 +1,17 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query, HttpException, HttpStatus,
+  Controller, Get, Post, Delete, Body, Param, UseGuards, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator.js';
+import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
+import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import { CompetitorsService } from './competitors.service.js';
 import { TranscriptionService } from '../brain/transcription.service.js';
 import { UsageService } from '../usage/usage.service.js';
 
 @ApiTags('competitors')
 @Controller('competitors')
+@UseGuards(WorkspaceGuard)
 export class CompetitorsController {
   constructor(
     private readonly competitorsService: CompetitorsService,
@@ -17,29 +20,30 @@ export class CompetitorsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'List tracked competitors for a user' })
-  @ApiQuery({ name: 'userId', required: true })
-  async list(@CurrentUser() userId: string) {
-    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    return this.competitorsService.list(userId);
+  @ApiOperation({ summary: 'List tracked competitors for the active workspace' })
+  async list(@ActiveWorkspace() workspaceId: string) {
+    return this.competitorsService.list(workspaceId);
   }
 
   @Post()
   @ApiOperation({ summary: 'Add a competitor to track' })
-  async add(@Body() body: { userId: string; username: string; platform: string }) {
-    const { userId, username, platform } = body;
-    if (!userId || !username || !platform) {
-      throw new HttpException('userId, username and platform are required', HttpStatus.BAD_REQUEST);
+  async add(
+    @ActiveWorkspace() workspaceId: string,
+    @Body() body: { username: string; platform: string },
+  ) {
+    const { username, platform } = body;
+    if (!username || !platform) {
+      throw new HttpException('username and platform are required', HttpStatus.BAD_REQUEST);
     }
-    return this.competitorsService.add(userId, username, platform);
+    return this.competitorsService.add(workspaceId, username, platform);
   }
 
   @Post('ingest')
   @ApiOperation({ summary: 'Ingest a scraped competitor profile + posts (Chrome extension)' })
   async ingest(
+    @ActiveWorkspace() workspaceId: string,
     @Body()
     body: {
-      userId: string;
       platform: string;
       profile: {
         username: string;
@@ -61,14 +65,14 @@ export class CompetitorsController {
       }>;
     },
   ) {
-    const { userId, platform, profile, posts } = body;
-    if (!userId || !platform || !profile?.username) {
+    const { platform, profile, posts } = body;
+    if (!platform || !profile?.username) {
       throw new HttpException(
-        'userId, platform and profile.username are required',
+        'platform and profile.username are required',
         HttpStatus.BAD_REQUEST,
       );
     }
-    return this.competitorsService.ingest(userId, platform, profile, posts ?? []);
+    return this.competitorsService.ingest(workspaceId, platform, profile, posts ?? []);
   }
 
   @Delete(':id')
@@ -79,10 +83,8 @@ export class CompetitorsController {
 
   @Post(':id/summary')
   @ApiOperation({ summary: 'Run profile-level AI summary (legacy ZAI-based) for a competitor' })
-  @ApiQuery({ name: 'userId', required: true })
-  async summary(@Param('id') id: string, @CurrentUser() userId: string) {
-    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    return this.competitorsService.analyze(id, userId);
+  async summary(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
+    return this.competitorsService.analyze(id, workspaceId);
   }
 
   @Post(':id/analyze')
@@ -122,10 +124,8 @@ export class CompetitorsController {
   }
 
   @Get('benchmark')
-  @ApiOperation({ summary: 'Compare user metrics vs all tracked competitors' })
-  @ApiQuery({ name: 'userId', required: true })
-  async benchmark(@CurrentUser() userId: string) {
-    if (!userId) throw new HttpException('userId is required', HttpStatus.BAD_REQUEST);
-    return this.competitorsService.benchmark(userId);
+  @ApiOperation({ summary: 'Compare workspace metrics vs all tracked competitors' })
+  async benchmark(@ActiveWorkspace() workspaceId: string) {
+    return this.competitorsService.benchmark(workspaceId);
   }
 }

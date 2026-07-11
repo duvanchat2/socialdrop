@@ -17,19 +17,8 @@ model User {
   lastActiveWorkspaceId String?
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
-  posts                 Post[]
-  driveConfigs          DriveConfig[]
   authTokens            AuthToken[]
   workspaceMemberships  WorkspaceMember[]
-  contentItems          ContentItem[]
-  competitors           Competitor[]
-  flows                 Flow[]
-  contacts              Contact[]
-  youtubeComments       YoutubeComment[]
-  youtubeAutoReplies    YoutubeAutoReply[]
-  generatedScripts      GeneratedScript[]
-  platformMetrics       PlatformMetrics[]
-  postAnalytics         PostAnalytics[]
   usageCounters         UsageCounter[]
 }
 
@@ -39,12 +28,28 @@ enum WorkspaceRole {
 }
 
 model Workspace {
-  id           String            @id @default(uuid())
-  name         String
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  members      WorkspaceMember[]
-  integrations Integration[]
+  id               String            @id @default(uuid())
+  name             String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  members          WorkspaceMember[]
+  integrations     Integration[]
+  posts            Post[]
+  driveConfigs     DriveConfig[]
+  brandProfile     BrandProfile?
+  contentStrategy  ContentStrategy?
+  contentItems     ContentItem[]
+  growthGoals      GrowthGoal[]
+  competitors      Competitor[]
+  queueSlots       QueueSlot[]
+  flows            Flow[]
+  contacts         Contact[]
+  youtubeComments  YoutubeComment[]
+  youtubeAutoReplies YoutubeAutoReply[]
+  generatedScripts GeneratedScript[]
+  contentBrain     ContentBrain?
+  platformMetrics  PlatformMetrics[]
+  postAnalytics    PostAnalytics[]
 }
 
 model WorkspaceMember {
@@ -112,8 +117,8 @@ model Integration {
 
 model Post {
   id            String            @id @default(uuid())
-  userId        String
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId   String
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   content       String
   scheduledAt   DateTime
   publishedAt   DateTime?
@@ -127,7 +132,7 @@ model Post {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  @@index([userId, status])
+  @@index([workspaceId, status])
   @@index([scheduledAt, status])
 }
 
@@ -162,8 +167,8 @@ model Media {
 
 model DriveConfig {
   id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folderId        String
   folderName      String?
   accessToken     String
@@ -176,8 +181,8 @@ model DriveConfig {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  @@unique([userId, folderId])
-  @@index([userId])
+  @@unique([workspaceId, folderId])
+  @@index([workspaceId])
 }
 
 enum Platform {
@@ -218,8 +223,9 @@ enum Tone {
 }
 
 model BrandProfile {
-  id             String   @id @default(uuid())
-  userId         String   @unique
+  id             String    @id @default(uuid())
+  workspaceId    String    @unique
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brandName      String   @default("")
   niche          String   @default("")
   tone           Tone     @default(CASUAL)
@@ -230,23 +236,24 @@ model BrandProfile {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@index([userId])
+  @@index([workspaceId])
 }
 
 model ContentStrategy {
-  id         String   @id @default(uuid())
-  userId     String   @unique
-  dayConfigs Json     @default("[]")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String    @id @default(uuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  dayConfigs  Json      @default("[]")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  @@index([userId])
+  @@index([workspaceId])
 }
 
 model PlatformMetrics {
-  id               String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   platform         String
   followersCount   Int
   followingCount   Int?
@@ -256,15 +263,15 @@ model PlatformMetrics {
   engagementRate   Float?
   recordedAt       DateTime @default(now())
 
-  @@index([userId, platform])
+  @@index([workspaceId, platform])
   @@index([recordedAt])
 }
 
 model PostAnalytics {
   id             String    @id @default(cuid())
   postId         String?
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   platform       String
   platformPostId String
   caption        String?
@@ -280,8 +287,8 @@ model PostAnalytics {
   publishedAt    DateTime?
   recordedAt     DateTime  @default(now())
 
-  @@unique([userId, platform, platformPostId])
-  @@index([userId, platform])
+  @@unique([workspaceId, platform, platformPostId])
+  @@index([workspaceId, platform])
   @@index([recordedAt])
 }
 
@@ -301,31 +308,32 @@ model ContentItem {
   status        PostStatus  @default(DRAFT)
   copyGenerated Boolean     @default(false)
   n8nJobId      String?
-  userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId   String
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  @@index([userId])
+  @@index([workspaceId])
 }
 
 model GrowthGoal {
-  id        String   @id @default(cuid())
-  userId    String
-  platform  String
-  metric    String
-  target    Int
-  deadline  DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform    String
+  metric      String
+  target      Int
+  deadline    DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  @@index([userId])
+  @@index([workspaceId])
 }
 
 model Competitor {
   id          String               @id @default(cuid())
-  userId      String
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   username    String
   platform    String
   displayName String?
@@ -340,8 +348,8 @@ model Competitor {
   analyses    CompetitorAnalysis[]
   posts       CompetitorPost[]
 
-  @@unique([userId, username, platform])
-  @@index([userId])
+  @@unique([workspaceId, username, platform])
+  @@index([workspaceId])
 }
 
 model CompetitorAnalysis {
@@ -387,23 +395,24 @@ model CompetitorPost {
 }
 
 model QueueSlot {
-  id        String   @id @default(cuid())
-  userId    String
-  platform  Platform
-  dayOfWeek Int      // 0=Sunday … 6=Saturday
-  hour      Int      // 0-23 local time
-  minute    Int      // 0-59
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform    Platform
+  dayOfWeek   Int       // 0=Sunday … 6=Saturday
+  hour        Int       // 0-23 local time
+  minute      Int       // 0-59
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
 
-  @@index([userId, platform])
-  @@index([userId, dayOfWeek, hour, minute])
+  @@index([workspaceId, platform])
+  @@index([workspaceId, dayOfWeek, hour, minute])
 }
 
 model Flow {
   id         String          @id @default(cuid())
-  userId     String
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name       String
   platform   String
   trigger    String
@@ -415,8 +424,8 @@ model Flow {
   updatedAt  DateTime        @updatedAt
   executions FlowExecution[]
 
-  @@index([userId])
-  @@index([userId, isActive])
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
 }
 
 model FlowExecution {
@@ -433,24 +442,24 @@ model FlowExecution {
 }
 
 model Contact {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform  String
-  accountId String
-  username  String?
-  name      String?
-  tags      String[]
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform    String
+  accountId   String
+  username    String?
+  name        String?
+  tags        String[]
+  createdAt   DateTime  @default(now())
 
   @@unique([platform, accountId])
-  @@index([userId])
+  @@index([workspaceId])
 }
 
 model YoutubeComment {
   id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   videoId         String
   videoTitle      String?
   commentId       String    @unique
@@ -466,28 +475,28 @@ model YoutubeComment {
   replyText       String?
   createdAt       DateTime  @default(now())
 
-  @@index([userId])
-  @@index([userId, replied])
+  @@index([workspaceId])
+  @@index([workspaceId, replied])
   @@index([videoId])
 }
 
 model YoutubeAutoReply {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   keyword       String
   replyTemplate String
   isEnabled     Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@index([userId])
+  @@index([workspaceId])
 }
 
 model GeneratedScript {
   id             String    @id @default(cuid())
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   platform       String
   topic          String
   hook           String
@@ -509,14 +518,15 @@ model GeneratedScript {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@index([userId])
-  @@index([userId, isViral])
+  @@index([workspaceId])
+  @@index([workspaceId, isViral])
   @@index([publishedAt])
 }
 
 model ContentBrain {
-  id              String   @id @default(cuid())
-  userId          String   @unique
+  id              String    @id @default(cuid())
+  workspaceId     String    @unique
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   // Learned patterns stored as JSON arrays
   viralHooks      Json     @default("[]")  // top performing hooks
   viralTopics     Json     @default("[]")  // recurring themes in viral posts
@@ -535,5 +545,5 @@ model ContentBrain {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([userId])
+  @@index([workspaceId])
 }

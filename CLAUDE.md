@@ -36,6 +36,11 @@ VPS: root@62.84.186.32 — /opt/socialdrop (pm2 via /root/.nvm/versions/node/v22
 - Una rama por feature: feat/nombre
 - Build: npx nx build api --skip-nx-cache + npx nx build web --skip-nx-cache
 - Cero errores TypeScript antes de push
+- **`npx nx build api` NO tipa-chequea completo** (usa webpack/swc en modo transpile-only,
+  ignora errores de tipos). Antes de dar cualquier cambio de API por terminado, correr
+  también `npx tsc -p apps/api/tsconfig.app.json --noEmit` — si solo corres `nx build` puedes
+  pushear código con errores de tipo reales (ej.: un rename de campo Prisma que rompe 10
+  call sites en otros servicios) sin que el build lo detecte.
 - PAUL: /paul:plan → /paul:apply → /paul:unify
 - Tras migrar Prisma: `npx prisma generate --schema=libs/prisma/prisma/schema.prisma` ANTES de `nx build api`
 

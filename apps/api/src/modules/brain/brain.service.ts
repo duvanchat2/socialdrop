@@ -21,11 +21,11 @@ export class BrainService {
 
   // ─── ContentBrain CRUD ────────────────────────────────────────────────
 
-  async getBrain(userId: string) {
-    const brain = await this.prisma.contentBrain.findUnique({ where: { userId } });
+  async getBrain(workspaceId: string) {
+    const brain = await this.prisma.contentBrain.findUnique({ where: { workspaceId } });
     if (!brain) {
       return {
-        userId,
+        workspaceId,
         viralHooks: [],
         viralTopics: [],
         viralFormats: [],
@@ -45,22 +45,22 @@ export class BrainService {
 
   // ─── Performance stats ────────────────────────────────────────────────
 
-  async getPerformance(userId: string) {
-    const brain = await this.getBrain(userId);
+  async getPerformance(workspaceId: string) {
+    const brain = await this.getBrain(workspaceId);
 
-    const totalScripts = await this.prisma.generatedScript.count({ where: { userId } });
+    const totalScripts = await this.prisma.generatedScript.count({ where: { workspaceId } });
     const viralScripts = await this.prisma.generatedScript.count({
-      where: { userId, isViral: true },
+      where: { workspaceId, isViral: true },
     });
     const publishedScripts = await this.prisma.generatedScript.count({
-      where: { userId, publishedAt: { not: null } },
+      where: { workspaceId, publishedAt: { not: null } },
     });
     const withMetrics = await this.prisma.generatedScript.count({
-      where: { userId, metricsAt: { not: null } },
+      where: { workspaceId, metricsAt: { not: null } },
     });
 
     const avgEngagementResult = await this.prisma.generatedScript.aggregate({
-      where: { userId, engagementRate: { not: null } },
+      where: { workspaceId, engagementRate: { not: null } },
       _avg: { engagementRate: true },
     });
 
@@ -68,7 +68,7 @@ export class BrainService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const recentViral = await this.prisma.generatedScript.findMany({
-      where: { userId, isViral: true, publishedAt: { gte: thirtyDaysAgo } },
+      where: { workspaceId, isViral: true, publishedAt: { gte: thirtyDaysAgo } },
       orderBy: { engagementRate: 'desc' },
       take: 5,
       select: {
@@ -112,7 +112,7 @@ export class BrainService {
 
   // ─── Script management ────────────────────────────────────────────────
 
-  async createScript(userId: string, dto: {
+  async createScript(workspaceId: string, dto: {
     platform: string;
     topic: string;
     hook: string;
@@ -124,7 +124,7 @@ export class BrainService {
   }) {
     return this.prisma.generatedScript.create({
       data: {
-        userId,
+        workspaceId,
         platform: dto.platform,
         topic: dto.topic,
         hook: dto.hook,
@@ -137,10 +137,10 @@ export class BrainService {
     });
   }
 
-  async listScripts(userId: string, filters?: { isViral?: boolean; platform?: string }) {
+  async listScripts(workspaceId: string, filters?: { isViral?: boolean; platform?: string }) {
     return this.prisma.generatedScript.findMany({
       where: {
-        userId,
+        workspaceId,
         ...(filters?.isViral !== undefined && { isViral: filters.isViral }),
         ...(filters?.platform && { platform: filters.platform }),
       },
@@ -149,8 +149,8 @@ export class BrainService {
     });
   }
 
-  async markPublished(scriptId: string, userId: string, postId: string) {
-    const script = await this.prisma.generatedScript.findFirst({ where: { id: scriptId, userId } });
+  async markPublished(scriptId: string, workspaceId: string, postId: string) {
+    const script = await this.prisma.generatedScript.findFirst({ where: { id: scriptId, workspaceId } });
     if (!script) throw new NotFoundException(`GeneratedScript ${scriptId} not found`);
     return this.prisma.generatedScript.update({
       where: { id: scriptId },
@@ -165,13 +165,12 @@ export class BrainService {
     if (!script || !script.postId) return;
 
     // Find integration for this user + platform
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(script.userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { workspaceId: workspaceId ?? undefined, platform: script.platform.toUpperCase() as any },
+      where: { workspaceId: script.workspaceId, platform: script.platform.toUpperCase() as any },
     });
 
     if (!integration?.accessToken) {
-      this.logger.warn(`No integration found for ${script.userId}/${script.platform}`);
+      this.logger.warn(`No integration found for ${script.workspaceId}/${script.platform}`);
       return;
     }
 
@@ -202,7 +201,7 @@ export class BrainService {
         }
         engagementRate = reach > 0 ? ((likes + saves + follows) / reach) * 100 : null;
       } else if (platform === 'FACEBOOK') {
-        const fbMetrics = await this.metricsService.getFacebookPostMetrics(script.userId, script.postId);
+        const fbMetrics = await this.metricsService.getFacebookPostMetrics(script.workspaceId, script.postId);
         if (fbMetrics) {
           likes = fbMetrics.likes;
           // Reuse `saves` field to store comments and `follows` for shares — FB has no per-post saves/follows.
@@ -211,7 +210,7 @@ export class BrainService {
           // No per-post reach via this endpoint; use the page's latest follower count as the engagement denominator,
           // matching the same "% of audience that engaged" scale used for Instagram.
           const latestFbFollowers = await this.prisma.platformMetrics.findFirst({
-            where: { userId: script.userId, platform: 'FACEBOOK' },
+            where: { workspaceId: script.workspaceId, platform: 'FACEBOOK' },
             orderBy: { recordedAt: 'desc' },
           });
           reach = latestFbFollowers?.followersCount ?? 0;
@@ -219,7 +218,7 @@ export class BrainService {
           engagementRate = reach > 0 ? (totalInteractions / reach) * 100 : null;
         }
       } else if (platform === 'YOUTUBE') {
-        const ytMetrics = await this.metricsService.getYouTubeVideoMetrics(script.userId, script.postId);
+        const ytMetrics = await this.metricsService.getYouTubeVideoMetrics(script.workspaceId, script.postId);
         if (ytMetrics) {
           likes = ytMetrics.likes;
           reach = ytMetrics.views;
@@ -267,22 +266,22 @@ export class BrainService {
 
   // ─── Brain learning (called by BullMQ brain-updater) ─────────────────
 
-  async learnFromViralScripts(userId: string): Promise<void> {
+  async learnFromViralScripts(workspaceId: string): Promise<void> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const viralScripts = await this.prisma.generatedScript.findMany({
-      where: { userId, isViral: true, publishedAt: { gte: thirtyDaysAgo } },
+      where: { workspaceId, isViral: true, publishedAt: { gte: thirtyDaysAgo } },
       orderBy: { engagementRate: 'desc' },
       take: 20,
     });
 
     if (viralScripts.length === 0) {
-      this.logger.log(`No viral scripts for ${userId} in the last 30 days`);
+      this.logger.log(`No viral scripts for ${workspaceId} in the last 30 days`);
       return;
     }
 
-    const allScripts = await this.prisma.generatedScript.count({ where: { userId } });
+    const allScripts = await this.prisma.generatedScript.count({ where: { workspaceId } });
     const viralCount = viralScripts.length;
 
     const maxEngagement = Math.max(...viralScripts.map((s) => s.engagementRate ?? 0), 1);
@@ -331,26 +330,26 @@ Responde con un JSON con esta estructura exacta:
       };
 
       const avgEngResult = await this.prisma.generatedScript.aggregate({
-        where: { userId, engagementRate: { not: null } },
+        where: { workspaceId, engagementRate: { not: null } },
         _avg: { engagementRate: true },
       });
 
       // Empirical accuracy: of the scripts generated since the *previous* learning pass,
       // what % ended up beating the historical avgEngagement baseline that was in effect at the time?
-      const previousBrain = await this.prisma.contentBrain.findUnique({ where: { userId } });
+      const previousBrain = await this.prisma.contentBrain.findUnique({ where: { workspaceId } });
       let accuracyScore: number | null = null;
       if (previousBrain?.lastLearnedAt && previousBrain.avgEngagement !== null) {
         const [beatBaseline, totalMeasured] = await Promise.all([
           this.prisma.generatedScript.count({
             where: {
-              userId,
+              workspaceId,
               createdAt: { gte: previousBrain.lastLearnedAt },
               engagementRate: { gt: previousBrain.avgEngagement },
             },
           }),
           this.prisma.generatedScript.count({
             where: {
-              userId,
+              workspaceId,
               createdAt: { gte: previousBrain.lastLearnedAt },
               engagementRate: { not: null },
             },
@@ -363,7 +362,7 @@ Responde con un JSON con esta estructura exacta:
       nextLearnAt.setDate(nextLearnAt.getDate() + 7); // next Sunday
 
       await this.prisma.contentBrain.upsert({
-        where: { userId },
+        where: { workspaceId },
         update: {
           viralHooks: patterns.viralHooks,
           viralTopics: patterns.viralTopics,
@@ -378,7 +377,7 @@ Responde con un JSON con esta estructura exacta:
           nextLearnAt,
         },
         create: {
-          userId,
+          workspaceId,
           viralHooks: patterns.viralHooks,
           viralTopics: patterns.viralTopics,
           viralFormats: patterns.viralFormats,
@@ -393,18 +392,18 @@ Responde con un JSON con esta estructura exacta:
         },
       });
 
-      this.logger.log(`Brain updated for ${userId}: ${viralCount} viral scripts analysed, accuracy=${accuracyScore ?? 'n/a'}%`);
+      this.logger.log(`Brain updated for ${workspaceId}: ${viralCount} viral scripts analysed, accuracy=${accuracyScore ?? 'n/a'}%`);
     } catch (err: any) {
-      this.logger.error(`Failed to update brain for ${userId}: ${err.message}`);
+      this.logger.error(`Failed to update brain for ${workspaceId}: ${err.message}`);
     }
   }
 
-  // Get all user IDs that have published scripts (for cron)
-  async getActiveUserIds(): Promise<string[]> {
+  // Get all workspace IDs that have published scripts (for cron)
+  async getActiveWorkspaceIds(): Promise<string[]> {
     const results = await this.prisma.generatedScript.groupBy({
-      by: ['userId'],
+      by: ['workspaceId'],
       where: { publishedAt: { not: null } },
     });
-    return results.map((r) => r.userId);
+    return results.map((r) => r.workspaceId);
   }
 }

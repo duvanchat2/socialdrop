@@ -62,13 +62,12 @@ export class MetricsService {
   ) {}
 
   // ── Instagram ─────────────────────────────────────────────────────────────
-  async syncInstagram(userId: string): Promise<void> {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+  async syncInstagram(workspaceId: string): Promise<void> {
     const integration = await this.prisma.integration.findFirst({
-      where: { workspaceId: workspaceId ?? undefined, platform: 'INSTAGRAM' },
+      where: { workspaceId, platform: 'INSTAGRAM' },
     });
     if (!integration) {
-      this.logger.log(`[Metrics] No INSTAGRAM integration for user ${userId}`);
+      this.logger.log(`[Metrics] No INSTAGRAM integration for user ${workspaceId}`);
       return;
     }
 
@@ -88,7 +87,7 @@ export class MetricsService {
         const account = (await accountRes.json()) as IgAccountFields;
         await this.prisma.platformMetrics.create({
           data: {
-            userId,
+            workspaceId,
             platform: 'INSTAGRAM',
             followersCount: account.followers_count ?? 0,
             followingCount: account.follows_count ?? null,
@@ -113,14 +112,14 @@ export class MetricsService {
           const posts = mediaData.data ?? [];
           for (const p of posts) {
             await this.prisma.postAnalytics.upsert({
-              where: { userId_platform_platformPostId: { userId, platform: 'INSTAGRAM', platformPostId: p.id } },
+              where: { workspaceId_platform_platformPostId: { workspaceId, platform: 'INSTAGRAM', platformPostId: p.id } },
               update: {
                 likes: p.like_count ?? 0,
                 comments: p.comments_count ?? 0,
                 recordedAt: new Date(),
               },
               create: {
-                userId,
+                workspaceId,
                 platform: 'INSTAGRAM',
                 platformPostId: p.id,
                 caption: p.caption ?? null,
@@ -131,22 +130,21 @@ export class MetricsService {
               },
             });
           }
-          this.logger.log(`[Metrics] Instagram: synced ${posts.length} posts for user ${userId}`);
+          this.logger.log(`[Metrics] Instagram: synced ${posts.length} posts for user ${workspaceId}`);
         }
       }
     } catch (err) {
-      this.logger.error(`[Metrics] Instagram sync failed for ${userId}: ${(err as Error).message}`);
+      this.logger.error(`[Metrics] Instagram sync failed for ${workspaceId}: ${(err as Error).message}`);
     }
   }
 
   // ── Facebook ──────────────────────────────────────────────────────────────
-  async syncFacebook(userId: string): Promise<void> {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+  async syncFacebook(workspaceId: string): Promise<void> {
     const integration = await this.prisma.integration.findFirst({
-      where: { workspaceId: workspaceId ?? undefined, platform: 'FACEBOOK' },
+      where: { workspaceId, platform: 'FACEBOOK' },
     });
     if (!integration) {
-      this.logger.log(`[Metrics] No FACEBOOK integration for user ${userId}`);
+      this.logger.log(`[Metrics] No FACEBOOK integration for user ${workspaceId}`);
       return;
     }
 
@@ -166,7 +164,7 @@ export class MetricsService {
         const page = (await pageRes.json()) as FbPage;
         await this.prisma.platformMetrics.create({
           data: {
-            userId,
+            workspaceId,
             platform: 'FACEBOOK',
             followersCount: page.fan_count ?? page.followers_count ?? 0,
           },
@@ -182,7 +180,7 @@ export class MetricsService {
         const posts = postsData.data ?? [];
         for (const p of posts) {
           await this.prisma.postAnalytics.upsert({
-            where: { userId_platform_platformPostId: { userId, platform: 'FACEBOOK', platformPostId: p.id } },
+            where: { workspaceId_platform_platformPostId: { workspaceId, platform: 'FACEBOOK', platformPostId: p.id } },
             update: {
               likes: p.likes?.summary?.total_count ?? 0,
               comments: p.comments?.summary?.total_count ?? 0,
@@ -190,7 +188,7 @@ export class MetricsService {
               recordedAt: new Date(),
             },
             create: {
-              userId,
+              workspaceId,
               platform: 'FACEBOOK',
               platformPostId: p.id,
               caption: p.message ?? null,
@@ -202,21 +200,20 @@ export class MetricsService {
             },
           });
         }
-        this.logger.log(`[Metrics] Facebook: synced ${posts.length} posts for user ${userId}`);
+        this.logger.log(`[Metrics] Facebook: synced ${posts.length} posts for user ${workspaceId}`);
       }
     } catch (err) {
-      this.logger.error(`[Metrics] Facebook sync failed for ${userId}: ${(err as Error).message}`);
+      this.logger.error(`[Metrics] Facebook sync failed for ${workspaceId}: ${(err as Error).message}`);
     }
   }
 
   /** Fetch likes/comments/shares for a single Facebook post by ID (for per-script feedback loops). */
   async getFacebookPostMetrics(
-    userId: string,
+    workspaceId: string,
     postId: string,
   ): Promise<{ likes: number; comments: number; shares: number } | null> {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const integration = await this.prisma.integration.findFirst({
-      where: { workspaceId: workspaceId ?? undefined, platform: 'FACEBOOK' },
+      where: { workspaceId, platform: 'FACEBOOK' },
     });
     if (!integration?.accessToken) return null;
 
@@ -239,10 +236,10 @@ export class MetricsService {
 
   /** Fetch views/likes for a single YouTube video by ID (for per-script feedback loops). */
   async getYouTubeVideoMetrics(
-    userId: string,
+    workspaceId: string,
     videoId: string,
   ): Promise<{ views: number; likes: number } | null> {
-    const ctx = await this.getYoutubeClient(userId);
+    const ctx = await this.getYoutubeClient(workspaceId);
     if (!ctx) return null;
 
     try {
@@ -263,10 +260,9 @@ export class MetricsService {
   // ── YouTube helpers ───────────────────────────────────────────────────────
 
   /** Build an OAuth2Client from stored integration credentials and auto-persist refreshed tokens. */
-  private async getYoutubeClient(userId: string) {
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
+  private async getYoutubeClient(workspaceId: string) {
     const integration = await this.prisma.integration.findFirst({
-      where: { workspaceId: workspaceId ?? undefined, platform: 'YOUTUBE' },
+      where: { workspaceId, platform: 'YOUTUBE' },
     });
     if (!integration) return null;
 
@@ -299,10 +295,10 @@ export class MetricsService {
   }
 
   // ── YouTube ───────────────────────────────────────────────────────────────
-  async syncYouTube(userId: string): Promise<void> {
-    const ctx = await this.getYoutubeClient(userId);
+  async syncYouTube(workspaceId: string): Promise<void> {
+    const ctx = await this.getYoutubeClient(workspaceId);
     if (!ctx) {
-      this.logger.log(`[Metrics] No YOUTUBE integration for user ${userId}`);
+      this.logger.log(`[Metrics] No YOUTUBE integration for user ${workspaceId}`);
       return;
     }
     const { oauth2Client, integration } = ctx;
@@ -323,7 +319,7 @@ export class MetricsService {
         }
         await this.prisma.platformMetrics.create({
           data: {
-            userId,
+            workspaceId,
             platform: 'YOUTUBE',
             // When subscribers are hidden the API returns hiddenSubscriberCount=true and no subscriberCount
             followersCount: stats.hiddenSubscriberCount ? 0 : parseInt(stats.subscriberCount ?? '0', 10),
@@ -336,7 +332,7 @@ export class MetricsService {
           `videos=${stats.videoCount} views=${stats.viewCount}`,
         );
       } else {
-        this.logger.warn(`[Metrics] YouTube channels.list returned no items for user ${userId}`);
+        this.logger.warn(`[Metrics] YouTube channels.list returned no items for user ${workspaceId}`);
       }
 
       // ── Uploads playlist → recent videos ──────────────────────────────
@@ -349,7 +345,7 @@ export class MetricsService {
         channelDetailRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
 
       if (!uploadsPlaylistId) {
-        this.logger.warn(`[Metrics] YouTube: no uploads playlist found for user ${userId}`);
+        this.logger.warn(`[Metrics] YouTube: no uploads playlist found for user ${workspaceId}`);
         return;
       }
 
@@ -364,7 +360,7 @@ export class MetricsService {
         .filter((id): id is string => !!id);
 
       if (videoIds.length === 0) {
-        this.logger.log(`[Metrics] YouTube: no videos found for user ${userId}`);
+        this.logger.log(`[Metrics] YouTube: no videos found for user ${workspaceId}`);
         return;
       }
 
@@ -380,7 +376,7 @@ export class MetricsService {
         const vStats = v.statistics as YtVideo['statistics'];
         const videoId = v.id ?? '';
         await this.prisma.postAnalytics.upsert({
-          where: { userId_platform_platformPostId: { userId, platform: 'YOUTUBE', platformPostId: videoId } },
+          where: { workspaceId_platform_platformPostId: { workspaceId, platform: 'YOUTUBE', platformPostId: videoId } },
           update: {
             views: parseInt(vStats?.viewCount ?? '0', 10),
             likes: parseInt(vStats?.likeCount ?? '0', 10),
@@ -388,7 +384,7 @@ export class MetricsService {
             recordedAt: new Date(),
           },
           create: {
-            userId,
+            workspaceId,
             platform: 'YOUTUBE',
             platformPostId: videoId,
             caption: v.snippet?.title ?? null,
@@ -400,23 +396,23 @@ export class MetricsService {
           },
         });
       }
-      this.logger.log(`[Metrics] YouTube: synced ${videos.length} videos for user ${userId}`);
+      this.logger.log(`[Metrics] YouTube: synced ${videos.length} videos for user ${workspaceId}`);
     } catch (err) {
-      this.logger.error(`[Metrics] YouTube sync failed for ${userId}: ${(err as Error).message}`, (err as Error).stack);
+      this.logger.error(`[Metrics] YouTube sync failed for ${workspaceId}: ${(err as Error).message}`, (err as Error).stack);
     }
   }
 
   // ── Sync all platforms ────────────────────────────────────────────────────
-  async syncAll(userId: string): Promise<{ instagram: string; facebook: string; youtube: string }> {
+  async syncAll(workspaceId: string): Promise<{ instagram: string; facebook: string; youtube: string }> {
     const results = { instagram: 'skipped', facebook: 'skipped', youtube: 'skipped' };
 
     await Promise.allSettled([
-      this.syncInstagram(userId).then(() => { results.instagram = 'ok'; }).catch((e) => { results.instagram = `error: ${(e as Error).message}`; }),
-      this.syncFacebook(userId).then(() => { results.facebook = 'ok'; }).catch((e) => { results.facebook = `error: ${(e as Error).message}`; }),
-      this.syncYouTube(userId).then(() => { results.youtube = 'ok'; }).catch((e) => { results.youtube = `error: ${(e as Error).message}`; }),
+      this.syncInstagram(workspaceId).then(() => { results.instagram = 'ok'; }).catch((e) => { results.instagram = `error: ${(e as Error).message}`; }),
+      this.syncFacebook(workspaceId).then(() => { results.facebook = 'ok'; }).catch((e) => { results.facebook = `error: ${(e as Error).message}`; }),
+      this.syncYouTube(workspaceId).then(() => { results.youtube = 'ok'; }).catch((e) => { results.youtube = `error: ${(e as Error).message}`; }),
     ]);
 
-    this.logger.log(`[Metrics] syncAll for ${userId}: ${JSON.stringify(results)}`);
+    this.logger.log(`[Metrics] syncAll for ${workspaceId}: ${JSON.stringify(results)}`);
     return results;
   }
 
@@ -424,7 +420,10 @@ export class MetricsService {
   @Cron('0 */6 * * *')
   async scheduledSync(): Promise<void> {
     this.logger.log('[Metrics] Scheduled sync triggered');
-    await this.syncAll('demo-user');
+    const workspaces = await this.prisma.workspace.findMany({ select: { id: true } });
+    for (const { id } of workspaces) {
+      await this.syncAll(id);
+    }
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────
@@ -436,14 +435,14 @@ export class MetricsService {
     return since;
   }
 
-  async getLatestFollowers(userId: string, platform?: string, period?: string) {
+  async getLatestFollowers(workspaceId: string, platform?: string, period?: string) {
     const platforms = platform ? [platform] : ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'TIKTOK', 'TWITTER'];
     const since = this.periodToSince(period);
     const results = await Promise.all(
       platforms.map((p) =>
         this.prisma.platformMetrics.findFirst({
           where: {
-            userId,
+            workspaceId,
             platform: p,
             ...(since ? { recordedAt: { gte: since } } : {}),
           },
@@ -466,7 +465,7 @@ export class MetricsService {
     };
   }
 
-  async getPostAnalytics(userId: string, platform?: string, limit = 25, period?: string, sortBy?: string) {
+  async getPostAnalytics(workspaceId: string, platform?: string, limit = 25, period?: string, sortBy?: string) {
     const since = this.periodToSince(period);
     const orderByField = sortBy === 'views' ? 'views'
       : sortBy === 'likes' ? 'likes'
@@ -476,7 +475,7 @@ export class MetricsService {
       : 'recordedAt';
     return this.prisma.postAnalytics.findMany({
       where: {
-        userId,
+        workspaceId,
         ...(platform ? { platform } : {}),
         ...this.postDateFilter(since),
       },
@@ -486,22 +485,21 @@ export class MetricsService {
   }
 
   // ── Sync status diagnostic ────────────────────────────────────────────────
-  async getSyncStatus(userId: string) {
+  async getSyncStatus(workspaceId: string) {
     const platforms = ['INSTAGRAM', 'FACEBOOK', 'YOUTUBE', 'TIKTOK', 'TWITTER'];
-    const workspaceId = await this.prisma.resolveWorkspaceIdForUser(userId);
     const results = await Promise.all(
       platforms.map(async (platform) => {
         const integration = await this.prisma.integration.findFirst({
-          where: { workspaceId: workspaceId ?? undefined, platform: platform as Platform },
+          where: { workspaceId, platform: platform as Platform },
           select: { id: true, accountName: true, profileId: true, tokenExpiry: true, createdAt: true },
         });
         const lastMetric = await this.prisma.platformMetrics.findFirst({
-          where: { userId, platform: platform as Platform },
+          where: { workspaceId, platform: platform as Platform },
           orderBy: { recordedAt: 'desc' },
           select: { recordedAt: true, followersCount: true },
         });
         const postCount = await this.prisma.postAnalytics.count({
-          where: { userId, platform: platform as Platform },
+          where: { workspaceId, platform: platform as Platform },
         });
         return {
           platform,
@@ -522,25 +520,25 @@ export class MetricsService {
   }
 
   // ── Goals ─────────────────────────────────────────────────────────────────
-  async getGoals(userId: string) {
-    return this.prisma.growthGoal.findMany({ where: { userId }, orderBy: { deadline: 'asc' } });
+  async getGoals(workspaceId: string) {
+    return this.prisma.growthGoal.findMany({ where: { workspaceId }, orderBy: { deadline: 'asc' } });
   }
 
-  async createGoal(userId: string, platform: string, metric: string, target: number, deadline: Date) {
-    return this.prisma.growthGoal.create({ data: { userId, platform, metric, target, deadline } });
+  async createGoal(workspaceId: string, platform: string, metric: string, target: number, deadline: Date) {
+    return this.prisma.growthGoal.create({ data: { workspaceId, platform, metric, target, deadline } });
   }
 
-  async deleteGoal(id: string, userId: string) {
-    const goal = await this.prisma.growthGoal.findFirst({ where: { id, userId } });
+  async deleteGoal(id: string, workspaceId: string) {
+    const goal = await this.prisma.growthGoal.findFirst({ where: { id, workspaceId } });
     if (!goal) throw new NotFoundException(`GrowthGoal ${id} not found`);
     return this.prisma.growthGoal.delete({ where: { id } });
   }
 
-  async getOverview(userId: string, period: string, platform?: string) {
+  async getOverview(workspaceId: string, period: string, platform?: string) {
     const days = period === '7d' ? 7 : period === '14d' ? 14 : period === '90d' ? 90 : 30;
     const since = new Date();
     since.setDate(since.getDate() - days);
-    this.logger.log(`[Metrics] getOverview userId=${userId} period=${period} days=${days} since=${since.toISOString()}`);
+    this.logger.log(`[Metrics] getOverview workspaceId=${workspaceId} period=${period} days=${days} since=${since.toISOString()}`);
 
     const platformFilter = platform ? { platform } : {};
     const platforms = platform
@@ -551,13 +549,13 @@ export class MetricsService {
     const [postRows, currentMetrics, startMetrics] = await Promise.all([
       // Posts within the period — publishedAt preferred, falls back to recordedAt for null
       this.prisma.postAnalytics.findMany({
-        where: { userId, ...platformFilter, ...this.postDateFilter(since) },
+        where: { workspaceId, ...platformFilter, ...this.postDateFilter(since) },
       }),
       // Current (latest-ever) follower count per platform — not date-filtered
       Promise.all(
         platforms.map((p) =>
           this.prisma.platformMetrics.findFirst({
-            where: { userId, platform: p },
+            where: { workspaceId, platform: p },
             orderBy: { recordedAt: 'desc' },
           }),
         ),
@@ -566,7 +564,7 @@ export class MetricsService {
       Promise.all(
         platforms.map((p) =>
           this.prisma.platformMetrics.findFirst({
-            where: { userId, platform: p, recordedAt: { gte: since } },
+            where: { workspaceId, platform: p, recordedAt: { gte: since } },
             orderBy: { recordedAt: 'asc' }, // oldest in period = baseline
           }),
         ),

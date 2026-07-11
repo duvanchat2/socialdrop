@@ -4,7 +4,7 @@ import { Job } from 'bullmq';
 import { MetricsService } from './metrics.service.js';
 
 interface SyncJobData {
-  userId: string;
+  workspaceId: string;
 }
 
 @Processor('metrics-sync')
@@ -16,10 +16,10 @@ export class MetricsProcessor extends WorkerHost {
   }
 
   async process(job: Job<SyncJobData>): Promise<unknown> {
-    if (job.name === 'sync-all') {
-      const userId = job.data?.userId ?? 'demo-user';
-      this.logger.log(`[MetricsProcessor] sync-all for userId=${userId}`);
-      return this.metricsService.syncAll(userId);
+    if (job.name === 'sync-all' && job.data?.workspaceId) {
+      const { workspaceId } = job.data;
+      this.logger.log(`[MetricsProcessor] sync-all for workspaceId=${workspaceId}`);
+      return this.metricsService.syncAll(workspaceId);
     }
     return null;
   }
