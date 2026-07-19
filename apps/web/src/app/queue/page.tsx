@@ -89,50 +89,50 @@ export default function QueuePage() {
     <div className="space-y-4 max-w-6xl mx-auto">
       <header>
         <div className="flex items-center gap-2">
-          <ListOrdered size={20} className="text-indigo-400" />
-          <h1 className="text-2xl font-bold">Cola de publicación</h1>
+          <ListOrdered size={20} className="text-accent" />
+          <h1 className="text-2xl font-display font-bold text-ink">Cola de publicación</h1>
         </div>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-ink-muted">
           Define horarios recurrentes por plataforma. Los posts añadidos desde <em>Nuevo Post</em>
           se programan automáticamente en el próximo hueco libre.
         </p>
       </header>
 
       {/* Platform tabs */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-wrap items-center gap-2">
+      <div className="bg-surface rounded-card p-3 flex flex-wrap items-center gap-2">
         {PLATFORMS.map((p) => (
           <button
             key={p.id}
             onClick={() => setActivePlatform(p.id)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors border ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-pill text-sm transition-colors ${
               activePlatform === p.id
-                ? 'border-indigo-500 bg-indigo-950/40 text-white'
-                : 'border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700'
+                ? 'bg-accent/15 text-ink'
+                : 'bg-base text-ink-muted hover:bg-surface-2'
             }`}
           >
-            <PlatformChip platform={p.id} size="sm" />
+            <PlatformChip platform={p.id} size="md" />
             {p.label}
           </button>
         ))}
-        <span className="ml-auto text-xs text-gray-500">
+        <span className="ml-auto text-xs text-ink-muted font-mono-nums">
           {totalActive} horario(s) activos en <strong>{activeMeta.label}</strong>
         </span>
       </div>
 
       {/* Grid */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 overflow-auto">
-        <p className="text-xs text-gray-500 mb-2">
-          Haz clic en una celda para <span className="text-indigo-400">añadir</span> o{' '}
-          <span className="text-red-400">quitar</span> un horario.
+      <div className="bg-surface rounded-card p-3 overflow-auto">
+        <p className="text-xs text-ink-muted mb-2">
+          Haz clic en una celda para <span className="text-accent">añadir</span> o{' '}
+          <span className="text-warning">quitar</span> un horario.
         </p>
 
         {isLoading ? (
-          <div className="py-10 text-center text-gray-500 text-sm">Cargando…</div>
+          <div className="py-10 text-center text-ink-muted text-sm">Cargando…</div>
         ) : (
           <div className="inline-block min-w-full">
             {/* Header row — hours 0..23 */}
             <div
-              className="grid text-[10px] text-gray-500 mb-1"
+              className="grid text-[10px] text-ink-muted font-mono-nums mb-1"
               style={{ gridTemplateColumns: `48px repeat(24, minmax(28px, 1fr))` }}
             >
               <div />
@@ -149,7 +149,7 @@ export default function QueuePage() {
                 className="grid gap-px mb-px"
                 style={{ gridTemplateColumns: `48px repeat(24, minmax(28px, 1fr))` }}
               >
-                <div className="flex items-center justify-center text-xs text-gray-400">
+                <div className="flex items-center justify-center text-xs text-ink-muted font-mono-nums">
                   {dayLabel}
                 </div>
                 {HOURS.map((h) => {
@@ -161,13 +161,13 @@ export default function QueuePage() {
                       disabled={createSlot.isPending || deleteSlot.isPending}
                       className={`h-8 rounded-sm transition-colors ${
                         active
-                          ? 'bg-indigo-600 hover:bg-indigo-500'
-                          : 'bg-gray-800 hover:bg-gray-700'
+                          ? 'bg-accent/24'
+                          : 'bg-surface hover:bg-surface-2'
                       } disabled:opacity-50`}
                       title={`${dayLabel} ${String(h).padStart(2, '0')}:00`}
                     >
                       {active && (
-                        <span className="block mx-auto w-1.5 h-1.5 rounded-full bg-white" />
+                        <span className="block mx-auto w-1.5 h-1.5 rounded-full bg-accent" />
                       )}
                     </button>
                   );
@@ -180,8 +180,8 @@ export default function QueuePage() {
 
       {/* Summary of active slots */}
       {slots.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-semibold mb-2">
+        <div className="bg-surface rounded-card p-4">
+          <h3 className="text-sm font-display font-semibold text-ink mb-2">
             Horarios de {activeMeta.label}
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -197,7 +197,7 @@ export default function QueuePage() {
               .map((s) => (
                 <span
                   key={s.id}
-                  className="text-xs px-2.5 py-1 rounded-full border border-gray-800 bg-gray-950 text-gray-300"
+                  className="text-xs px-2.5 py-1 rounded-pill bg-surface-2 text-ink-muted font-mono-nums"
                 >
                   {DAY_LABELS[s.dayOfWeek]} · {String(s.hour).padStart(2, '0')}:
                   {String(s.minute).padStart(2, '0')}
