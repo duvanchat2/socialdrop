@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { PlatformChip, Platform } from '@/components/PlatformChip';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
+import { Stagger, FadeUp } from '@/components/motion';
 import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
 import { BestTimesHeatmap, BestTimes } from '@/components/BestTimesHeatmap';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
@@ -101,79 +102,79 @@ export default function DashboardPage() {
     ? +(((kpis.data.postsThisWeek - kpis.data.postsLastWeek) / kpis.data.postsLastWeek) * 100).toFixed(1)
     : null;
 
-  const STAT_CARDS: { label: string; value: number | string; color: string; clickable: boolean; delta?: number | null }[] = [
-    { label: 'Publicados hoy', value: stats.data?.today ?? 0, color: 'text-green-400', clickable: false },
-    { label: 'Programados', value: stats.data?.pending ?? 0, color: 'text-blue-400', clickable: false },
-    { label: 'Fallidos', value: stats.data?.failed ?? 0, color: 'text-red-400', clickable: true },
-    { label: 'Total', value: stats.data?.total ?? 0, color: 'text-gray-300', clickable: false },
-    { label: 'Seguidores', value: kpis.data?.followers ?? 0, color: 'text-indigo-400', clickable: false, delta: kpis.data?.followersDeltaWoW },
-    { label: 'Engagement', value: `${(kpis.data?.avgEngagementRate ?? 0).toFixed(2)}%`, color: 'text-pink-400', clickable: false },
-    { label: 'Alcance', value: kpis.data?.totalReach ?? 0, color: 'text-yellow-400', clickable: false },
-    { label: 'Tasa de éxito', value: `${(kpis.data?.publishSuccessRate ?? 0).toFixed(1)}%`, color: 'text-teal-400', clickable: false, delta: postsDeltaWoW },
+  const STAT_CARDS: { label: string; value: number | string; warn?: boolean; clickable: boolean; delta?: number | null }[] = [
+    { label: 'Publicados hoy', value: stats.data?.today ?? 0, clickable: false },
+    { label: 'Programados', value: stats.data?.pending ?? 0, clickable: false },
+    { label: 'Fallidos', value: stats.data?.failed ?? 0, warn: (stats.data?.failed ?? 0) > 0, clickable: true },
+    { label: 'Total', value: stats.data?.total ?? 0, clickable: false },
+    { label: 'Seguidores', value: kpis.data?.followers ?? 0, clickable: false, delta: kpis.data?.followersDeltaWoW },
+    { label: 'Engagement', value: `${(kpis.data?.avgEngagementRate ?? 0).toFixed(2)}%`, clickable: false },
+    { label: 'Alcance', value: kpis.data?.totalReach ?? 0, clickable: false },
+    { label: 'Tasa de éxito', value: `${(kpis.data?.publishSuccessRate ?? 0).toFixed(1)}%`, clickable: false, delta: postsDeltaWoW },
   ];
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <h1 className="text-2xl font-display font-bold text-ink">Dashboard</h1>
 
       <OnboardingChecklist userId={userId} hasPosts={(posts.data ?? []).length > 0} />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {STAT_CARDS.map(({ label, value, color, clickable, delta }) => (
-          <div
+      <Stagger className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {STAT_CARDS.map(({ label, value, warn, clickable, delta }) => (
+          <FadeUp
             key={label}
             data-testid={`stat-card-${label.toLowerCase().replace(/\s+/g, '-')}`}
             onClick={() => clickable && setShowFailedDrawer(true)}
-            className={`bg-gray-900 border border-gray-800 rounded-xl p-4 transition-all ${
-              clickable ? 'cursor-pointer hover:border-red-800 hover:bg-gray-800/80' : ''
+            className={`bg-surface rounded-card p-4 transition-colors ${
+              clickable ? 'cursor-pointer hover:bg-surface-2' : ''
             }`}
           >
-            <p className="text-sm text-gray-400">{label}</p>
-            <p className={`text-3xl font-bold mt-1 ${color}`}>
+            <p className="text-xs text-ink-muted">{label}</p>
+            <p className={`font-mono-nums text-[32px] tabular-nums mt-1 ${warn ? 'text-warning' : 'text-ink'}`}>
               {(stats.isLoading || kpis.isLoading) ? <Loader2 className="animate-spin" size={24} /> : value}
             </p>
             {delta !== undefined && delta !== null && (
-              <p className={`text-xs mt-1 ${delta >= 0 ? 'text-green-400/80' : 'text-red-400/80'}`}>
-                {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}% vs semana anterior
+              <p className={`text-xs mt-1 font-mono-nums ${delta >= 0 ? 'text-positive' : 'text-warning'}`}>
+                {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}% vs semana anterior
               </p>
             )}
             {clickable && typeof value === 'number' && value > 0 && (
-              <p className="text-xs text-red-400/70 mt-1">Click para ver detalles →</p>
+              <p className="text-xs text-warning mt-1">Click para ver detalles →</p>
             )}
-          </div>
+          </FadeUp>
         ))}
-      </div>
+      </Stagger>
 
       {!byPlatform.isLoading && <PlatformBreakdownChart data={byPlatform.data ?? []} />}
 
       <BestTimesHeatmap data={bestTimes.data} />
 
       {/* Recent posts table */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800">
-          <h2 className="font-semibold">Posts Recientes</h2>
+      <div className="bg-surface rounded-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-white/[0.04]">
+          <h2 className="font-display font-semibold text-ink">Posts Recientes</h2>
         </div>
         {posts.isLoading ? (
-          <div className="flex justify-center p-8"><Loader2 className="animate-spin text-gray-400" size={24} /></div>
+          <div className="flex justify-center p-8"><Loader2 className="animate-spin text-ink-muted" size={24} /></div>
         ) : (posts.data ?? []).length === 0 ? (
-          <div className="text-center p-8 text-gray-500 text-sm">No hay posts todavía</div>
+          <div className="text-center p-8 text-ink-muted text-sm">No hay posts todavía</div>
         ) : (
           <div className="overflow-x-auto -mx-4 px-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-gray-400 text-left">
-                <th className="px-4 py-3 font-medium">Caption</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell">Plataformas</th>
-                <th className="px-4 py-3 font-medium hidden lg:table-cell">Fecha (Bogotá)</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
+              <tr className="text-left border-b border-white/[0.04]">
+                <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wide text-ink-muted">Caption</th>
+                <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wide text-ink-muted hidden md:table-cell">Plataformas</th>
+                <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wide text-ink-muted hidden lg:table-cell text-right">Fecha (Bogotá)</th>
+                <th className="px-4 py-3 font-medium text-[11px] uppercase tracking-wide text-ink-muted">Estado</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-white/[0.04]">
               {(posts.data ?? []).map(post => (
-                <tr key={post.id} className="border-t border-gray-800 hover:bg-gray-800/50">
-                  <td className="px-4 py-3 max-w-xs truncate">{post.content}</td>
+                <tr key={post.id} className="hover:bg-surface-2 transition-colors">
+                  <td className="px-4 py-3 max-w-xs truncate text-ink">{post.content}</td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <div className="flex gap-1 flex-wrap">
                       {post.integrations.map((pi, i) => (
@@ -181,7 +182,7 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 hidden lg:table-cell text-gray-400">
+                  <td className="px-4 py-3 hidden lg:table-cell text-ink-muted font-mono-nums text-xs text-right tabular-nums">
                     {fmtBogota(post.scheduledAt)}
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={post.status} /></td>
@@ -190,7 +191,7 @@ export default function DashboardPage() {
                       <button
                         data-testid={`edit-post-btn-${post.id}`}
                         onClick={() => setEditPost(post as EditablePost)}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                        className="p-1.5 text-ink-muted hover:text-ink hover:bg-surface-2 rounded-lg transition-colors"
                         title="Editar"
                       >
                         <Pencil size={14} />
@@ -222,28 +223,28 @@ export default function DashboardPage() {
             />
             {/* Drawer */}
             <motion.div
-              className="fixed right-0 top-0 h-full w-full max-w-lg bg-gray-900 border-l border-gray-700 z-50 flex flex-col shadow-2xl"
+              className="fixed right-0 top-0 h-full w-full max-w-lg bg-surface z-50 flex flex-col shadow-2xl"
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 flex-shrink-0">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.04] flex-shrink-0">
               <div className="flex items-center gap-2">
-                <AlertCircle size={18} className="text-red-400" />
-                <h2 className="font-semibold text-lg">Posts Fallidos</h2>
+                <AlertCircle size={18} className="text-warning" />
+                <h2 className="font-display font-semibold text-lg text-ink">Posts Fallidos</h2>
                 {failedPosts.data && (
-                  <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-warning/15 text-warning px-2 py-0.5 rounded-pill font-mono-nums">
                     {failedPosts.data.length}
                   </span>
                 )}
               </div>
               <button
                 onClick={() => setShowFailedDrawer(false)}
-                className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-surface-2 rounded-lg transition-colors"
               >
-                <X size={20} className="text-gray-400" />
+                <X size={20} className="text-ink-muted" />
               </button>
             </div>
 
@@ -251,52 +252,44 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {failedPosts.isLoading ? (
                 <div className="flex justify-center p-8">
-                  <Loader2 className="animate-spin text-gray-400" size={24} />
+                  <Loader2 className="animate-spin text-ink-muted" size={24} />
                 </div>
               ) : (failedPosts.data ?? []).length === 0 ? (
-                <div className="text-center p-12 text-gray-500">
+                <div className="text-center p-12 text-ink-muted">
                   <p>No hay posts fallidos 🎉</p>
                 </div>
               ) : (
                 (failedPosts.data ?? []).map(post => (
-                  <div key={post.id} className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+                  <div key={post.id} className="bg-surface-2 rounded-card p-4 space-y-3">
                     {/* Caption */}
                     <div>
-                      <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide font-medium">Caption</p>
-                      <p className="text-sm text-gray-200 line-clamp-2">{post.content}</p>
+                      <p className="text-[11px] text-ink-muted mb-1 uppercase tracking-wide font-medium">Caption</p>
+                      <p className="text-sm text-ink line-clamp-2">{post.content}</p>
                     </div>
 
                     {/* Post-level error */}
                     {post.errorMessage && (
-                      <div className="bg-red-950/50 border border-red-900/50 rounded-lg p-3">
-                        <p className="text-xs text-red-300 font-medium mb-0.5">Error general</p>
-                        <p className="text-xs text-red-400 font-mono">{post.errorMessage}</p>
+                      <div className="bg-warning/10 rounded-lg p-3">
+                        <p className="text-xs text-warning font-medium mb-0.5">Error general</p>
+                        <p className="text-xs text-warning font-mono-nums">{post.errorMessage}</p>
                       </div>
                     )}
 
                     {/* Per-platform errors */}
                     <div className="space-y-2">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Plataformas</p>
+                      <p className="text-[11px] text-ink-muted uppercase tracking-wide font-medium">Plataformas</p>
                       {post.integrations.map((pi, i) => (
                         <div key={i} className="flex items-start gap-3">
                           <PlatformChip platform={pi.integration.platform} size="sm" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-300 font-medium capitalize">
+                              <span className="text-xs text-ink font-medium capitalize">
                                 {pi.integration.platform}
                               </span>
-                              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                                pi.status === 'ERROR'
-                                  ? 'bg-red-900 text-red-300'
-                                  : pi.status === 'PUBLISHED'
-                                  ? 'bg-green-900 text-green-300'
-                                  : 'bg-gray-700 text-gray-400'
-                              }`}>
-                                {pi.status}
-                              </span>
+                              <StatusBadge status={pi.status as PostStatus} />
                             </div>
                             {pi.errorMessage && (
-                              <p className="text-xs text-red-400 font-mono mt-1 break-all">{pi.errorMessage}</p>
+                              <p className="text-xs text-warning font-mono-nums mt-1 break-all">{pi.errorMessage}</p>
                             )}
                           </div>
                         </div>
@@ -305,13 +298,13 @@ export default function DashboardPage() {
 
                     {/* Date & Retry */}
                     <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-ink-muted font-mono-nums">
                         {fmtBogota(post.scheduledAt)}
                       </span>
                       <button
                         onClick={() => retryMutation.mutate(post.id)}
                         disabled={retryMutation.isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 rounded-lg text-xs font-medium transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:opacity-90 disabled:opacity-50 rounded-pill text-xs font-medium text-ink transition-colors"
                       >
                         <RefreshCw size={12} className={retryMutation.isPending ? 'animate-spin' : ''} />
                         Reintentar
