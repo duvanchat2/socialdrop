@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'motion/react';
 import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
@@ -204,27 +205,29 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Sidebar
-        mobileOpen={sidebarOpen}
-        onCloseMobile={() => setSidebarOpen(false)}
-        collapsed={collapsed}
-        onToggleCollapsed={toggleCollapsed}
-      />
-      <div className={`${collapsed ? 'lg:ml-16' : 'lg:ml-56'} min-h-screen flex flex-col transition-[margin] duration-200`}>
-        <header className="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 bg-white dark:bg-gray-900">
-          <button
-            className="lg:hidden text-gray-500 dark:text-gray-400"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
-          <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-1">SocialDrop</span>
-          <ThemeToggle />
-        </header>
-        <main className="flex-1 p-6">{children}</main>
-      </div>
-      <Toaster theme={theme} position="bottom-right" />
-    </QueryClientProvider>
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <Sidebar
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
+          collapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
+        />
+        <div className={`${collapsed ? 'lg:ml-16' : 'lg:ml-56'} min-h-screen flex flex-col transition-[margin] duration-200`}>
+          <header className="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 bg-white dark:bg-gray-900">
+            <button
+              className="lg:hidden text-gray-500 dark:text-gray-400"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-1">SocialDrop</span>
+            <ThemeToggle />
+          </header>
+          <main className="flex-1 p-6">{children}</main>
+        </div>
+        <Toaster theme={theme} position="bottom-right" />
+      </QueryClientProvider>
+    </MotionConfig>
   );
 }

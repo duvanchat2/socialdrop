@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
@@ -72,11 +73,9 @@ export function EditPostModal({ post, onClose }: Props) {
     onError: (e: Error) => toast.error(`Error: ${e.message}`),
   });
 
-  if (!post) return null;
-
   // DRAFTs are fully editable too
-  const canEdit = post.status === 'SCHEDULED' || post.status === 'ERROR'
-    || post.status === 'PENDING' || post.status === 'DRAFT';
+  const canEdit = post != null && (post.status === 'SCHEDULED' || post.status === 'ERROR'
+    || post.status === 'PENDING' || post.status === 'DRAFT');
 
   const youtubeSelected = platforms.includes('YOUTUBE');
 
@@ -110,8 +109,23 @@ export function EditPostModal({ post, onClose }: Props) {
   };
 
   return (
-    <div data-testid="edit-post-modal" className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+    <AnimatePresence>
+      {post && (
+        <motion.div
+          data-testid="edit-post-modal"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
         <div className="flex justify-between items-center">
           <h3 className="font-semibold text-lg">Editar Post</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
@@ -228,8 +242,10 @@ export function EditPostModal({ post, onClose }: Props) {
               {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
             </button>
           )}
-        </div>
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

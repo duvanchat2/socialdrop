@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'motion/react';
 import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { PlatformIcon, Platform } from '@/components/PlatformIcon';
@@ -207,15 +208,26 @@ export default function DashboardPage() {
       <EditPostModal post={editPost} onClose={() => setEditPost(null)} />
 
       {/* ── Failed Posts Drawer ── */}
-      {showFailedDrawer && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/60 z-40"
-            onClick={() => setShowFailedDrawer(false)}
-          />
-          {/* Drawer */}
-          <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-gray-900 border-l border-gray-700 z-50 flex flex-col shadow-2xl">
+      <AnimatePresence>
+        {showFailedDrawer && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              className="fixed inset-0 bg-black/60 z-40"
+              onClick={() => setShowFailedDrawer(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            />
+            {/* Drawer */}
+            <motion.div
+              className="fixed right-0 top-0 h-full w-full max-w-lg bg-gray-900 border-l border-gray-700 z-50 flex flex-col shadow-2xl"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -309,9 +321,10 @@ export default function DashboardPage() {
                 ))
               )}
             </div>
-          </div>
-        </>
-      )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

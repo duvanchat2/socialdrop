@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'motion/react';
 import { apiFetch } from '@/lib/api';
 import { uploadFileXHR } from '@/lib/uploadMedia';
 import { getVideoMeta } from '@/lib/videoThumbnail';
@@ -114,15 +115,13 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
   // Auto-upload when opened via drag (initialFiles)
   useInitialUpload(initialFiles, handleFiles);
 
-  if (!date) return null;
-
   const pendingCount = entries.filter((e) => e.status === 'compressing' || e.status === 'uploading').length;
   const readyUrls    = entries.filter((e) => e.status === 'done').map((e) => e.uploadedUrl!);
 
   const handleSave = () => {
     const first = entries[0];
     const text  = first?.caption || '(Borrador sin contenido)';
-    const scheduledAt = new Date(date);
+    const scheduledAt = new Date(date!);
     scheduledAt.setHours(9, 0, 0, 0);
     createPost.mutate({
       content: text,
@@ -140,8 +139,22 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+    <AnimatePresence>
+      {date && (
+        <motion.div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -253,8 +266,10 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
             {createPost.isPending ? 'Guardando…' : 'Guardar borrador'}
           </button>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
