@@ -47,12 +47,6 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
-    // Dev-mode token issued when APP_PASSWORD isn't configured — no per-user record to check.
-    if (payload.sub === 'user') {
-      req.user = payload;
-      return true;
-    }
-
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: { tokenVersion: true },
