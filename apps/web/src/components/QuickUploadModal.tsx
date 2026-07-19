@@ -8,13 +8,14 @@ import { getVideoMeta } from '@/lib/videoThumbnail';
 import { compressImage } from '@/lib/compressMedia';
 import { toast } from 'sonner';
 import { X, Upload, Loader2, Film, Image as ImageIcon, CheckCircle2, AlertCircle } from 'lucide-react';
+import { PlatformChip, Platform } from './PlatformChip';
 
-const PLATFORM_OPTIONS = [
-  { id: 'INSTAGRAM', label: 'IG',       color: '#E1306C' },
-  { id: 'TIKTOK',    label: 'TikTok',   color: '#000000' },
-  { id: 'FACEBOOK',  label: 'FB',       color: '#1877F2' },
-  { id: 'TWITTER',   label: 'X',        color: '#1DA1F2' },
-  { id: 'YOUTUBE',   label: 'YouTube',  color: '#FF0000' },
+const PLATFORM_OPTIONS: { id: Platform; label: string }[] = [
+  { id: 'INSTAGRAM', label: 'IG' },
+  { id: 'TIKTOK',    label: 'TikTok' },
+  { id: 'FACEBOOK',  label: 'FB' },
+  { id: 'TWITTER',   label: 'X' },
+  { id: 'YOUTUBE',   label: 'YouTube' },
 ];
 
 interface Props {
@@ -149,7 +150,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
           <motion.div
-            className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-surface rounded-card w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
@@ -158,30 +159,30 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-lg">Nuevo borrador</h3>
-            <p className="text-xs text-gray-500">
+            <h3 className="font-display font-semibold text-lg text-ink">Nuevo borrador</h3>
+            <p className="text-xs text-ink-muted">
               {date.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
+          <button onClick={onClose} className="text-ink-muted hover:text-ink"><X size={18} /></button>
         </div>
 
         {/* Platform selector */}
         <div>
-          <p className="text-xs text-gray-500 mb-2">Plataformas</p>
+          <p className="text-xs text-ink-muted mb-2">Plataformas</p>
           <div className="flex flex-wrap gap-1.5">
             {PLATFORM_OPTIONS.map(p => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => togglePlatform(p.id)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-pill text-xs font-medium transition-all ${
                   selectedPlatforms.includes(p.id)
-                    ? 'border-indigo-500 bg-indigo-950 text-white'
-                    : 'border-gray-700 bg-gray-800 text-gray-400'
+                    ? 'bg-accent/15 text-ink'
+                    : 'bg-surface-2 text-ink-muted'
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
+                <PlatformChip platform={p.id} size="sm" />
                 {p.label}
               </button>
             ))}
@@ -190,18 +191,18 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
 
         {/* Instagram type selector */}
         {hasInstagram && (
-          <div className="p-3 bg-gray-950 border border-pink-900/40 rounded-xl">
-            <p className="text-xs text-pink-400 font-semibold mb-2">Tipo Instagram</p>
+          <div className="p-3 bg-surface-2 rounded-card">
+            <p className="text-xs text-accent font-semibold mb-2">Tipo Instagram</p>
             <div className="flex gap-2">
               {(['POST', 'REEL', 'STORY'] as const).map((type) => (
                 <button
                   key={type}
                   type="button"
                   onClick={() => setInstagramType(type)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  className={`flex-1 py-1.5 rounded-pill text-xs font-semibold transition-all ${
                     instagramType === type
-                      ? 'bg-pink-600 border-pink-500 text-white'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                      ? 'bg-accent text-ink'
+                      : 'bg-base text-ink-muted hover:bg-surface'
                   }`}
                 >
                   {type === 'POST' ? '📷 Post' : type === 'REEL' ? '🎬 Reel' : '⏱ Historia'}
@@ -214,7 +215,7 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
         {/* Upload zone */}
         <div
           onClick={() => inputRef.current?.click()}
-          className="border-2 border-dashed border-gray-800 rounded-lg p-4 text-center cursor-pointer hover:border-gray-600 bg-gray-950"
+          className="rounded-lg p-4 text-center cursor-pointer bg-surface-2 hover:bg-base transition-colors"
         >
           <input
             ref={inputRef}
@@ -224,10 +225,10 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
             className="hidden"
             onChange={(e) => e.target.files && handleFiles(e.target.files)}
           />
-          <div className="flex flex-col items-center gap-1 text-gray-400">
+          <div className="flex flex-col items-center gap-1 text-ink-muted">
             <Upload size={20} />
             <p className="text-sm">Haz clic o arrastra archivos</p>
-            <p className="text-xs text-gray-600">Imágenes y videos · Calidad original</p>
+            <p className="text-xs text-ink-muted">Imágenes y videos · Calidad original</p>
           </div>
         </div>
 
@@ -255,13 +256,13 @@ export function QuickUploadModal({ date, initialFiles = [], onClose }: Props) {
 
         {/* Actions */}
         <div className="flex gap-2 justify-end pt-1">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm rounded-pill bg-surface-2 hover:bg-base text-ink">
             Cancelar
           </button>
           <button
             onClick={handleSave}
             disabled={createPost.isPending || pendingCount > 0}
-            className="px-3 py-1.5 text-sm rounded-lg bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white font-medium"
+            className="px-3 py-1.5 text-sm rounded-pill bg-accent hover:opacity-90 disabled:opacity-50 text-ink font-medium"
           >
             {createPost.isPending ? 'Guardando…' : 'Guardar borrador'}
           </button>
@@ -287,59 +288,59 @@ function FileRow({ entry: e, hasSocial, hasYoutube, onUpdate, onRemove }: FileRo
   const showFields = hasSocial || hasYoutube;
 
   return (
-    <div className="bg-gray-800 rounded-xl p-3 space-y-2">
+    <div className="bg-surface-2 rounded-card p-3 space-y-2">
       {/* File info */}
       <div className="flex gap-2 items-center">
-        <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-gray-700 relative">
+        <div className="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-surface relative">
           {e.thumbnail ? (
             <img src={e.thumbnail} alt={e.originalFile.name} className="w-full h-full object-cover" />
           ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
+            <div className="flex items-center justify-center h-full text-ink-muted">
               {isVideo ? <Film size={16} /> : <ImageIcon size={16} />}
             </div>
           )}
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-200 truncate">{e.originalFile.name}</p>
-          <p className="text-[10px] text-gray-500">
+          <p className="text-xs text-ink truncate">{e.originalFile.name}</p>
+          <p className="text-[10px] text-ink-muted">
             {fmtSize(e.originalSize)}
             {e.compressedSize != null && e.compressedSize < e.originalSize && (
-              <span className="text-green-400 ml-1">→ {fmtSize(e.compressedSize)}</span>
+              <span className="text-positive ml-1">→ {fmtSize(e.compressedSize)}</span>
             )}
           </p>
           {e.status === 'compressing' && (
-            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+            <p className="text-[10px] text-ink-muted flex items-center gap-1">
               <Loader2 className="animate-spin" size={9} />Comprimiendo… {e.progress}%
             </p>
           )}
           {e.status === 'uploading' && (
-            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+            <p className="text-[10px] text-ink-muted flex items-center gap-1">
               <Loader2 className="animate-spin" size={9} />Subiendo… {e.progress}%
             </p>
           )}
           {e.status === 'done' && (
-            <p className="text-[10px] text-green-400 flex items-center gap-1">
+            <p className="text-[10px] text-positive flex items-center gap-1">
               <CheckCircle2 size={9} />Subido
             </p>
           )}
           {e.status === 'error' && (
-            <p className="text-[10px] text-red-400 flex items-center gap-1 truncate">
+            <p className="text-[10px] text-warning flex items-center gap-1 truncate">
               <AlertCircle size={9} />{e.error}
             </p>
           )}
         </div>
 
-        <button type="button" onClick={onRemove} className="text-gray-500 hover:text-red-400 shrink-0 p-1">
+        <button type="button" onClick={onRemove} className="text-ink-muted hover:text-warning shrink-0 p-1">
           <X size={12} />
         </button>
       </div>
 
       {/* Caption fields */}
       {showFields && (
-        <div className="space-y-2 pt-1 border-t border-gray-700">
+        <div className="space-y-2 pt-1">
           <div>
-            <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5 block">
+            <label className="text-[10px] text-ink-muted uppercase tracking-wide mb-0.5 block">
               {hasYoutube ? 'Caption / Título YouTube' : 'Caption'}
             </label>
             <textarea
@@ -347,15 +348,15 @@ function FileRow({ entry: e, hasSocial, hasYoutube, onUpdate, onRemove }: FileRo
               placeholder={hasYoutube ? 'Caption o título del video…' : 'Caption…'}
               value={e.caption}
               onChange={(ev) => onUpdate({ caption: ev.target.value })}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 resize-none"
+              className="w-full bg-base rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-accent resize-none"
             />
           </div>
 
           {hasYoutube && (
             <>
               <div>
-                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5 block">
-                  Descripción{hasSocial ? ' (YT + redes)' : ' YouTube'} <span className="normal-case text-gray-600">(opcional)</span>
+                <label className="text-[10px] text-ink-muted uppercase tracking-wide mb-0.5 block">
+                  Descripción{hasSocial ? ' (YT + redes)' : ' YouTube'} <span className="normal-case text-ink-muted">(opcional)</span>
                 </label>
                 <textarea
                   rows={2}
@@ -363,19 +364,19 @@ function FileRow({ entry: e, hasSocial, hasYoutube, onUpdate, onRemove }: FileRo
                   placeholder="Descripción del video…"
                   value={e.ytDescription}
                   onChange={(ev) => onUpdate({ ytDescription: ev.target.value })}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-red-500/60 resize-none"
+                  className="w-full bg-base rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-warning resize-none"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5 block">
-                  Tags YouTube <span className="normal-case text-gray-600">(separados por coma)</span>
+                <label className="text-[10px] text-ink-muted uppercase tracking-wide mb-0.5 block">
+                  Tags YouTube <span className="normal-case text-ink-muted">(separados por coma)</span>
                 </label>
                 <input
                   type="text"
                   placeholder="shorts, tutorial, vlog"
                   value={e.ytTags}
                   onChange={(ev) => onUpdate({ ytTags: ev.target.value })}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-100 placeholder-gray-600 focus:outline-none focus:border-red-500/60"
+                  className="w-full bg-base rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-warning"
                 />
               </div>
             </>
