@@ -11,15 +11,7 @@ import {
   Upload, X, Film, Image as ImageIcon, Loader2, Edit3, Users as UsersIcon,
   CalendarClock, Send, FileText, ListOrdered, CheckCircle2, AlertCircle, Info,
 } from 'lucide-react';
-
-const PLATFORM_COLORS: Record<string, string> = {
-  FACEBOOK: '#1877F2',
-  INSTAGRAM: '#E1306C',
-  TWITTER: '#1DA1F2',
-  TIKTOK: '#000000',
-  LINKEDIN: '#0A66C2',
-  YOUTUBE: '#FF0000',
-};
+import { PlatformChip, Platform } from '@/components/PlatformChip';
 
 interface Integration {
   id: string;
@@ -543,7 +535,7 @@ function NewPostPageInner() {
           {groupedByPlatform.map(({ platform, accounts }) => (
             <div key={platform}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: PLATFORM_COLORS[platform] }} />
+                <PlatformChip platform={platform as Platform} size="sm" />
                 <span className="text-sm font-medium capitalize">{platform.toLowerCase()}</span>
               </div>
               <div className="space-y-2">
@@ -558,12 +550,7 @@ function NewPostPageInner() {
                         selected ? 'border-indigo-500 bg-indigo-950/40' : 'border-gray-800 bg-gray-950 hover:border-gray-700'
                       }`}
                     >
-                      <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
-                        style={{ background: PLATFORM_COLORS[platform] }}
-                      >
-                        {(acc.accountName ?? acc.profileId ?? '?').slice(0, 1).toUpperCase()}
-                      </div>
+                      <PlatformChip platform={platform as Platform} size="lg" title={acc.accountName ?? acc.profileId ?? undefined} />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-gray-100 truncate">{acc.accountName ?? acc.profileId ?? 'Sin nombre'}</p>
                         <p className="text-xs text-gray-500 capitalize">{platform.toLowerCase()}</p>

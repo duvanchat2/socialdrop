@@ -2,22 +2,18 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import { Inbox, Send, Tag, Instagram, Facebook } from 'lucide-react';
+import { Inbox, Send, Tag } from 'lucide-react';
+import { PlatformChip, Platform } from '@/components/PlatformChip';
 
 interface Contact {
   id: string;
-  platform: string;
+  platform: Platform;
   accountId: string;
   username?: string;
   name?: string;
   tags: string[];
   createdAt: string;
 }
-
-const PLATFORM_ICONS: Record<string, React.ReactNode> = {
-  INSTAGRAM: <Instagram size={14} className="text-pink-500" />,
-  FACEBOOK: <Facebook size={14} className="text-blue-500" />,
-};
 
 function initials(contact: Contact): string {
   const n = contact.name ?? contact.username ?? contact.accountId;
@@ -80,7 +76,7 @@ export default function InboxPage() {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    {PLATFORM_ICONS[contact.platform]}
+                    <PlatformChip platform={contact.platform} size="sm" />
                     <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                       {contact.name ?? contact.username ?? contact.accountId}
                     </span>
@@ -112,7 +108,7 @@ export default function InboxPage() {
               </div>
               <div>
                 <div className="font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
-                  {PLATFORM_ICONS[selected.platform]}
+                  <PlatformChip platform={selected.platform} size="sm" />
                   {selected.name ?? selected.username ?? selected.accountId}
                 </div>
                 <div className="text-xs text-gray-400">ID: {selected.accountId}</div>

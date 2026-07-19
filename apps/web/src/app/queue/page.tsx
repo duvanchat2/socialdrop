@@ -4,14 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import { ListOrdered } from 'lucide-react';
+import { PlatformChip, Platform } from '@/components/PlatformChip';
 
-const PLATFORMS = [
-  { id: 'INSTAGRAM', label: 'Instagram', color: '#E1306C' },
-  { id: 'TIKTOK', label: 'TikTok', color: '#000000' },
-  { id: 'FACEBOOK', label: 'Facebook', color: '#4F46E5' },
-  { id: 'TWITTER', label: 'Twitter / X', color: '#1DA1F2' },
-  { id: 'LINKEDIN', label: 'LinkedIn', color: '#0EA5E9' },
-  { id: 'YOUTUBE', label: 'YouTube', color: '#FF0000' },
+const PLATFORMS: { id: Platform; label: string }[] = [
+  { id: 'INSTAGRAM', label: 'Instagram' },
+  { id: 'TIKTOK', label: 'TikTok' },
+  { id: 'FACEBOOK', label: 'Facebook' },
+  { id: 'TWITTER', label: 'Twitter / X' },
+  { id: 'LINKEDIN', label: 'LinkedIn' },
+  { id: 'YOUTUBE', label: 'YouTube' },
 ];
 
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -109,7 +110,7 @@ export default function QueuePage() {
                 : 'border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700'
             }`}
           >
-            <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+            <PlatformChip platform={p.id} size="sm" />
             {p.label}
           </button>
         ))}

@@ -6,19 +6,11 @@ import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
 import { QuickUploadModal } from '@/components/QuickUploadModal';
+import { PlatformChip, Platform } from '@/components/PlatformChip';
 import {
   Calendar as CalIcon, ChevronLeft, ChevronRight, Plus, List, LayoutGrid, X, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-const PLATFORM_COLORS: Record<string, string> = {
-  FACEBOOK: '#4F46E5',   // indigo-600
-  INSTAGRAM: '#E1306C',
-  TWITTER: '#1DA1F2',
-  LINKEDIN: '#0EA5E9',   // sky-500
-  TIKTOK: '#000000',
-  YOUTUBE: '#FF0000',
-};
 
 const PLATFORM_LABELS: Record<string, string> = {
   FACEBOOK: 'Facebook',
@@ -326,10 +318,17 @@ export default function CalendarPage() {
                             }}
                             onClick={(e) => { e.stopPropagation(); setSelected(p); }}
                             title={`${PLATFORM_LABELS[plat] ?? plat} — ${p.content.slice(0, 60)}`}
-                            className="truncate text-[11px] px-2 py-0.5 rounded text-white cursor-grab active:cursor-grabbing"
-                            style={{ background: PLATFORM_COLORS[plat] ?? '#6366f1' }}
+                            className="flex items-center gap-1 truncate text-[11px] px-1.5 py-0.5 rounded bg-gray-800 cursor-grab active:cursor-grabbing"
                           >
-                            {p.content.slice(0, 30) || '(sin contenido)'}
+                            <PlatformChip platform={plat as Platform} size="sm" />
+                            <span className="font-mono text-gray-400 shrink-0">
+                              {new Date(p.scheduledAt).toLocaleTimeString('es-CO', {
+                                timeZone: 'America/Bogota',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                            <span className="truncate">{p.content.slice(0, 30) || '(sin contenido)'}</span>
                           </div>
                         );
                       })}
@@ -432,10 +431,7 @@ function ListView({ posts, onSelect }: { posts: Post[]; onSelect: (p: Post) => v
             onClick={() => onSelect(p)}
             className="flex items-center gap-3 py-3 cursor-pointer hover:bg-gray-800/40 px-2 rounded-md"
           >
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ background: PLATFORM_COLORS[plat] ?? '#6366f1' }}
-            />
+            <PlatformChip platform={plat as Platform} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="text-sm truncate">{p.content || '(sin contenido)'}</p>
               <p className="text-xs text-gray-500">

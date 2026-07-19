@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
-import { PlatformIcon, Platform } from '@/components/PlatformIcon';
+import { PlatformChip, Platform } from '@/components/PlatformChip';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
 import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
 import { BestTimesHeatmap, BestTimes } from '@/components/BestTimesHeatmap';
@@ -177,7 +177,7 @@ export default function DashboardPage() {
                   <td className="px-4 py-3 hidden md:table-cell">
                     <div className="flex gap-1 flex-wrap">
                       {post.integrations.map((pi, i) => (
-                        <PlatformIcon key={i} platform={pi.integration.platform} size={20} />
+                        <PlatformChip key={i} platform={pi.integration.platform} size="sm" />
                       ))}
                     </div>
                   </td>
@@ -279,7 +279,7 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Plataformas</p>
                       {post.integrations.map((pi, i) => (
                         <div key={i} className="flex items-start gap-3">
-                          <PlatformIcon platform={pi.integration.platform} size={18} />
+                          <PlatformChip platform={pi.integration.platform} size="sm" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-300 font-medium capitalize">
