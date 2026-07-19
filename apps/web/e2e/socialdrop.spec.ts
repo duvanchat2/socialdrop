@@ -2,10 +2,13 @@ import { test, expect, Page } from '@playwright/test';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const PASSWORD = process.env.APP_PASSWORD ?? 'changeme';
+// Requires a seeded user in the target environment (email/password auth — see PR-31).
+const EMAIL = process.env.E2E_TEST_EMAIL ?? 'e2e@socialdrop.test';
+const PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'changeme123';
 
 async function login(page: Page) {
   await page.goto('/login');
+  await page.fill('input[type="email"]', EMAIL);
   await page.fill('input[type="password"]', PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForURL(/^\/((?!login).)*$/); // Wait until redirected away from /login
@@ -22,9 +25,10 @@ test.describe('Authentication', () => {
 
   test('wrong password shows error', async ({ page }) => {
     await page.goto('/login');
+    await page.fill('input[type="email"]', EMAIL);
     await page.fill('input[type="password"]', 'wrong-password-xyz');
     await page.click('button[type="submit"]');
-    await expect(page.locator('text=Contraseña incorrecta')).toBeVisible();
+    await expect(page.locator('text=Credenciales inválidas')).toBeVisible();
   });
 
   test('correct password redirects to dashboard', async ({ page }) => {

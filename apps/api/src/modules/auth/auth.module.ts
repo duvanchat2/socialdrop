@@ -13,13 +13,19 @@ import { ConsoleMailProvider } from './console-mail.provider.js';
     PrismaModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService): JwtModuleOptions => ({
-        secret: config.get<string>('JWT_SECRET') ?? 'default-jwt-secret-change-in-production',
-        signOptions: {
-          // cast needed: newer @nestjs/jwt types expiresIn as StringValue (ms package)
-          expiresIn: (config.get<string>('JWT_EXPIRY') ?? '7d') as never,
-        },
-      }),
+      useFactory: (config: ConfigService): JwtModuleOptions => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret) {
+          throw new Error('JWT_SECRET is required — set it in the environment before starting the API');
+        }
+        return {
+          secret,
+          signOptions: {
+            // cast needed: newer @nestjs/jwt types expiresIn as StringValue (ms package)
+            expiresIn: (config.get<string>('JWT_EXPIRY') ?? '7d') as never,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
