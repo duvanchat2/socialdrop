@@ -183,65 +183,65 @@ export default function CalendarPage() {
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
       <header>
-        <h1 className="text-2xl font-bold">Calendar</h1>
-        <p className="text-sm text-gray-400">View and manage your scheduled posts.</p>
+        <h1 className="text-2xl font-display font-bold text-ink">Calendar</h1>
+        <p className="text-sm text-ink-muted">View and manage your scheduled posts.</p>
       </header>
 
       {/* Toolbar card */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-wrap items-center gap-3">
+      <div className="bg-surface rounded-card p-3 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
           <button
             onClick={goPrev}
-            className="p-2 rounded-lg border border-gray-800 hover:bg-gray-800 text-gray-300"
+            className="p-2 rounded-pill hover:bg-surface-2 text-ink-muted"
             aria-label="Previous month"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="font-semibold mx-2">
+          <span className="font-display font-semibold mx-2 text-ink">
             {MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}
           </span>
           <button
             onClick={goNext}
-            className="p-2 rounded-lg border border-gray-800 hover:bg-gray-800 text-gray-300"
+            className="p-2 rounded-pill hover:bg-surface-2 text-ink-muted"
             aria-label="Next month"
           >
             <ChevronRight size={16} />
           </button>
           <button
             onClick={goToday}
-            className="ml-1 px-3 py-1.5 rounded-lg border border-gray-800 hover:bg-gray-800 text-sm text-gray-300"
+            className="ml-1 px-3 py-1.5 rounded-pill hover:bg-surface-2 text-sm text-ink-muted"
           >
             Today
           </button>
         </div>
 
-        <div className="flex items-center gap-1 bg-gray-950 border border-gray-800 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-base rounded-lg p-1">
           <button
             onClick={() => setView('list')}
-            className={`p-1.5 rounded-md ${view === 'list' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-1.5 rounded-md ${view === 'list' ? 'bg-accent text-ink' : 'text-ink-muted hover:text-ink'}`}
             aria-label="List view"
           >
             <List size={16} />
           </button>
           <button
             onClick={() => setView('grid')}
-            className={`p-1.5 rounded-md ${view === 'grid' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`p-1.5 rounded-md ${view === 'grid' ? 'bg-accent text-ink' : 'text-ink-muted hover:text-ink'}`}
             aria-label="Grid view"
           >
             <LayoutGrid size={16} />
           </button>
         </div>
 
-        <span className="px-3 py-1 rounded-full text-xs border border-indigo-500/40 text-indigo-400 bg-indigo-950/40">
+        <span className="px-3 py-1 rounded-pill text-xs bg-accent/15 text-accent font-mono-nums">
           {counts.scheduled} scheduled
         </span>
-        <span className="px-3 py-1 rounded-full text-xs border border-emerald-500/40 text-emerald-400 bg-emerald-950/40">
+        <span className="px-3 py-1 rounded-pill text-xs bg-positive/15 text-positive font-mono-nums">
           {counts.published} published
         </span>
 
         <Link
           href="/posts/new"
-          className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 text-white text-sm font-medium"
+          className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-pill bg-accent hover:opacity-90 text-ink text-sm font-medium"
         >
           <Plus size={16} />
           New Post
@@ -249,26 +249,26 @@ export default function CalendarPage() {
       </div>
 
       {/* Schedule card */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="bg-surface rounded-card p-5">
         <div className="flex items-center gap-2 mb-1">
-          <CalIcon size={16} className="text-indigo-400" />
-          <h2 className="font-semibold">{MONTH_NAMES[cursor.getMonth()]} Schedule</h2>
+          <CalIcon size={16} className="text-accent" />
+          <h2 className="font-display font-semibold text-ink">{MONTH_NAMES[cursor.getMonth()]} Schedule</h2>
         </div>
-        <p className="text-xs text-gray-500 mb-4">
+        <p className="text-xs text-ink-muted mb-4">
           Click on a post to view details or a day to create a new post.
         </p>
 
         {view === 'grid' ? (
           <>
             {/* Day-name row */}
-            <div className="grid grid-cols-7 text-xs text-gray-500 mb-1">
+            <div className="grid grid-cols-7 text-xs text-ink-muted mb-1">
               {DAY_NAMES.map((d) => (
                 <div key={d} className="px-2 py-1">{d}</div>
               ))}
             </div>
 
             {/* Month grid */}
-            <div className="grid grid-cols-7 border-l border-t border-gray-800 rounded-lg overflow-hidden">
+            <div className="grid grid-cols-7 border-l border-t border-white/[0.04] rounded-lg overflow-hidden">
               {grid.map((date) => {
                 const key = date.toDateString();
                 const inMonth = date.getMonth() === cursor.getMonth();
@@ -288,17 +288,17 @@ export default function CalendarPage() {
                     onDragOver={(e) => { e.preventDefault(); setDragOverKey(key); }}
                     onDragLeave={() => setDragOverKey((prev) => (prev === key ? null : prev))}
                     onDrop={(e) => handleDropOnDay(date, e)}
-                    className={`relative min-h-[92px] border-r border-b border-gray-800 p-2 cursor-pointer transition-colors ${
-                      isDragOver ? 'bg-indigo-950/40' : 'hover:bg-gray-800/40'
-                    } ${inMonth ? '' : 'bg-gray-950/40'}`}
+                    className={`relative min-h-[92px] border-r border-b border-white/[0.04] p-2 cursor-pointer transition-colors ${
+                      isDragOver ? 'bg-accent/15' : 'hover:bg-surface-2'
+                    } ${inMonth ? '' : 'bg-base/60'}`}
                   >
                     <div className="flex items-center justify-start">
                       {isToday ? (
-                        <span className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-xs font-semibold text-white">
+                        <span className="w-6 h-6 rounded-pill bg-accent flex items-center justify-center text-xs font-semibold text-ink">
                           {date.getDate()}
                         </span>
                       ) : (
-                        <span className={`text-xs ${inMonth ? 'text-gray-300' : 'text-gray-600'}`}>
+                        <span className={`text-xs ${inMonth ? 'text-ink' : 'text-ink-muted'}`}>
                           {date.getDate()}
                         </span>
                       )}
@@ -318,22 +318,22 @@ export default function CalendarPage() {
                             }}
                             onClick={(e) => { e.stopPropagation(); setSelected(p); }}
                             title={`${PLATFORM_LABELS[plat] ?? plat} — ${p.content.slice(0, 60)}`}
-                            className="flex items-center gap-1 truncate text-[11px] px-1.5 py-0.5 rounded bg-gray-800 cursor-grab active:cursor-grabbing"
+                            className="flex items-center gap-1 truncate text-[11px] px-1.5 py-0.5 rounded bg-surface-2 cursor-grab active:cursor-grabbing"
                           >
                             <PlatformChip platform={plat as Platform} size="sm" />
-                            <span className="font-mono text-gray-400 shrink-0">
+                            <span className="font-mono-nums text-ink-muted shrink-0">
                               {new Date(p.scheduledAt).toLocaleTimeString('es-CO', {
                                 timeZone: 'America/Bogota',
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
                             </span>
-                            <span className="truncate">{p.content.slice(0, 30) || '(sin contenido)'}</span>
+                            <span className="truncate text-ink">{p.content.slice(0, 30) || '(sin contenido)'}</span>
                           </div>
                         );
                       })}
                       {dayPosts.length > 3 && (
-                        <div className="text-[10px] text-gray-500">+{dayPosts.length - 3} más</div>
+                        <div className="text-[10px] text-ink-muted">+{dayPosts.length - 3} más</div>
                       )}
                     </div>
                   </div>
@@ -349,17 +349,17 @@ export default function CalendarPage() {
       {/* Post detail modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-surface rounded-card w-full max-w-md p-6 space-y-4">
             <div className="flex justify-between items-start">
-              <h3 className="font-semibold text-lg">Detalle del Post</h3>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-white">
+              <h3 className="font-display font-semibold text-lg text-ink">Detalle del Post</h3>
+              <button onClick={() => setSelected(null)} className="text-ink-muted hover:text-ink">
                 <X size={20} />
               </button>
             </div>
-            <p className="text-gray-300 text-sm">{selected.content}</p>
+            <p className="text-ink text-sm">{selected.content}</p>
             <div className="flex items-center gap-2">
               <StatusBadge status={selected.status} />
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-ink-muted font-mono-nums">
                 {new Date(selected.scheduledAt).toLocaleString('es-CO', {
                   timeZone: 'America/Bogota',
                   day: '2-digit',
@@ -374,7 +374,7 @@ export default function CalendarPage() {
               {(selected.status === 'SCHEDULED' || selected.status === 'ERROR' || selected.status === 'PENDING') && (
                 <button
                   onClick={() => { setEditPost(selected as EditablePost); setSelected(null); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 rounded-lg text-sm font-medium"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:opacity-90 rounded-pill text-sm font-medium text-ink"
                 >
                   <Pencil size={14} /> Editar
                 </button>
@@ -382,14 +382,14 @@ export default function CalendarPage() {
               {selected.status === 'ERROR' && (
                 <button
                   onClick={() => retryMutation.mutate(selected.id)}
-                  className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-medium"
+                  className="px-3 py-1.5 bg-accent hover:opacity-90 rounded-pill text-sm font-medium text-ink"
                 >
                   Reintentar
                 </button>
               )}
               <button
                 onClick={() => { if (confirm('¿Eliminar este post?')) deleteMutation.mutate(selected.id); }}
-                className="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-lg text-sm font-medium"
+                className="px-3 py-1.5 border border-warning text-warning hover:bg-warning/10 rounded-pill text-sm font-medium"
               >
                 Eliminar
               </button>
@@ -418,23 +418,23 @@ function ListView({ posts, onSelect }: { posts: Post[]; onSelect: (p: Post) => v
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 
   if (upcoming.length === 0) {
-    return <p className="text-sm text-gray-500 py-6 text-center">No hay posts.</p>;
+    return <p className="text-sm text-ink-muted py-6 text-center">No hay posts.</p>;
   }
 
   return (
-    <ul className="divide-y divide-gray-800">
+    <ul className="divide-y divide-white/[0.04]">
       {upcoming.map((p) => {
         const plat = p.integrations[0]?.integration?.platform ?? 'FACEBOOK';
         return (
           <li
             key={p.id}
             onClick={() => onSelect(p)}
-            className="flex items-center gap-3 py-3 cursor-pointer hover:bg-gray-800/40 px-2 rounded-md"
+            className="flex items-center gap-3 py-3 cursor-pointer hover:bg-surface-2 px-2 rounded-md"
           >
             <PlatformChip platform={plat as Platform} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm truncate">{p.content || '(sin contenido)'}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm truncate text-ink">{p.content || '(sin contenido)'}</p>
+              <p className="text-xs text-ink-muted font-mono-nums">
                 {PLATFORM_LABELS[plat] ?? plat} ·{' '}
                 {new Date(p.scheduledAt).toLocaleString('es-CO', {
                   timeZone: 'America/Bogota',
