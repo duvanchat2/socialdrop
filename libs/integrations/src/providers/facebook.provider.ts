@@ -3,13 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { Platform } from '@socialdrop/shared';
 import type { AuthResult, TokenResult, PostContent, PublishResult } from '@socialdrop/shared';
 import { SocialAbstract, RefreshTokenError } from '../social-abstract.js';
+import { GRAPH_API_BASE, GRAPH_API_VERSION, GRAPH_VIDEO_API_BASE } from '../graph-api.js';
 
 @Injectable()
 export class FacebookProvider extends SocialAbstract {
   private readonly logger = new Logger(FacebookProvider.name);
   platform = Platform.FACEBOOK;
   name = 'Facebook';
-  private readonly BASE_URL = 'https://graph.facebook.com/v18.0';
+  private readonly BASE_URL = GRAPH_API_BASE;
 
   constructor(private readonly config: ConfigService) { super(); }
 
@@ -30,7 +31,7 @@ export class FacebookProvider extends SocialAbstract {
       response_type: 'code',
       state: userId,
     });
-    return `https://www.facebook.com/v18.0/dialog/oauth?${params}`;
+    return `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?${params}`;
   }
 
   async authenticate(code: string, userId: string): Promise<AuthResult> {
@@ -164,7 +165,7 @@ export class FacebookProvider extends SocialAbstract {
 
   private async postVideo(token: string, pageId: string, content: PostContent): Promise<PublishResult> {
     const res = await this.throttledFetch(
-      `https://graph-video.facebook.com/v18.0/${pageId}/videos`,
+      `${GRAPH_VIDEO_API_BASE}/${pageId}/videos`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

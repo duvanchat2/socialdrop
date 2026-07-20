@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Platform } from '@socialdrop/shared';
 import type { AuthResult, TokenResult, PostContent, PublishResult } from '@socialdrop/shared';
 import { SocialAbstract, RefreshTokenError } from '../social-abstract.js';
+import { GRAPH_API_BASE, GRAPH_API_VERSION, graphFetch } from '../graph-api.js';
 
 interface IgApiResponse {
   id?: string;
@@ -23,7 +24,7 @@ export class InstagramProvider extends SocialAbstract {
   private readonly logger = new Logger(InstagramProvider.name);
   platform = Platform.INSTAGRAM;
   name = 'Instagram';
-  private readonly BASE_URL = 'https://graph.facebook.com/v18.0';
+  private readonly BASE_URL = GRAPH_API_BASE;
 
   constructor(private readonly config: ConfigService) { super(); }
 
@@ -41,10 +42,12 @@ export class InstagramProvider extends SocialAbstract {
       `[Instagram] ► ${step} | ${method} ${safeUrl} | body: ${safeBody}`,
     );
 
-    // Use raw fetch — we parse the Instagram error body ourselves.
-    // throttledFetch throws ApiError on 4xx before we can read the body,
-    // so we'd lose the detailed Instagram error code/message (e.g. code=190).
-    const res = await fetch(url, options);
+    // graphFetch retries on rate-limit (429/5xx and Meta's 4/17/32/613 body
+    // codes) but otherwise returns the raw Response — we still parse the
+    // Instagram error body ourselves. throttledFetch throws ApiError on 4xx
+    // before we can read the body, so we'd lose the detailed Instagram error
+    // code/message (e.g. code=190).
+    const res = await graphFetch(url, options);
     const responseText = await res.text();
 
     // ── Full response log on non-2xx ─────────────────────────────────────
@@ -127,7 +130,7 @@ export class InstagramProvider extends SocialAbstract {
       response_type: 'code',
       state: userId,
     });
-    return `https://www.facebook.com/v18.0/dialog/oauth?${params}`;
+    return `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?${params}`;
   }
 
   async authenticate(code: string, userId: string): Promise<AuthResult> {
