@@ -12,7 +12,10 @@ async function bootstrap() {
   const uploadDir = join(process.cwd(), process.env.UPLOAD_DIRECTORY ?? 'uploads');
   mkdirSync(uploadDir, { recursive: true });
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: true exposes req.rawBody (Buffer) on every request — needed to
+  // verify the Meta webhook's X-Hub-Signature-256 HMAC against the exact
+  // bytes Meta signed, not a re-serialized JSON body.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.useLogger(['log', 'error', 'warn', 'debug']);
 
   // Security headers

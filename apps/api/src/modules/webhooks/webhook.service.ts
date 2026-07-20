@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService, decryptToken } from '@socialdrop/prisma';
 import { FlowEngine } from '../flows/flow.engine.js';
 
@@ -19,6 +20,34 @@ export class WebhookService {
       return challenge;
     }
     return null;
+  }
+
+  /**
+   * Verifies the `X-Hub-Signature-256` header Meta sends on every webhook
+   * POST: HMAC-SHA256(FACEBOOK_APP_SECRET, rawBody), compared in constant
+   * time. Without this, anyone who knows the webhook URL could forge events
+   * and trigger flows/DMs. Must be checked against the exact raw bytes Meta
+   * signed — re-serializing the parsed JSON body would not match.
+   */
+  verifySignature(rawBody: Buffer | undefined, signatureHeader: string | undefined): boolean {
+    if (!rawBody || !signatureHeader) return false;
+
+    const [algo, receivedHex] = signatureHeader.split('=');
+    if (algo !== 'sha256' || !receivedHex) return false;
+
+    const appSecret = this.config.get<string>('FACEBOOK_APP_SECRET');
+    if (!appSecret) {
+      this.logger.error('[webhook] FACEBOOK_APP_SECRET not configured — cannot verify signature');
+      return false;
+    }
+
+    const expectedHex = createHmac('sha256', appSecret).update(rawBody).digest('hex');
+    const expected = Buffer.from(expectedHex, 'hex');
+    const received = Buffer.from(receivedHex, 'hex');
+    // timingSafeEqual throws on length mismatch — check first so a length
+    // difference (also a real signal of an invalid signature) doesn't throw.
+    if (expected.length !== received.length) return false;
+    return timingSafeEqual(expected, received);
   }
 
   async processEvent(payload: any): Promise<void> {
