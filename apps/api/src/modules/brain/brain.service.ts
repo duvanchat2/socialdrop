@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, decryptToken } from '@socialdrop/prisma';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
@@ -174,6 +174,7 @@ export class BrainService {
       this.logger.warn(`No integration found for ${script.workspaceId}/${script.platform}`);
       return;
     }
+    const token = decryptToken(integration.accessToken);
 
     try {
       let likes = 0, saves = 0, reach = 0, follows = 0;
@@ -181,7 +182,7 @@ export class BrainService {
       const platform = script.platform.toUpperCase();
 
       if (platform === 'INSTAGRAM') {
-        const url = `${GRAPH_API_BASE}/${script.postId}/insights?metric=saved,reach,impressions,follows&access_token=${integration.accessToken}`;
+        const url = `${GRAPH_API_BASE}/${script.postId}/insights?metric=saved,reach,impressions,follows&access_token=${token}`;
         const res = await graphFetch(url);
         if (res.ok) {
           const data = await res.json() as { data?: Array<{ name: string; values: Array<{ value: number }> }> };
@@ -193,7 +194,7 @@ export class BrainService {
           }
           // Get likes from media endpoint
           const likeRes = await graphFetch(
-            `${GRAPH_API_BASE}/${script.postId}?fields=like_count&access_token=${integration.accessToken}`,
+            `${GRAPH_API_BASE}/${script.postId}?fields=like_count&access_token=${token}`,
           );
           if (likeRes.ok) {
             const likeData = await likeRes.json() as { like_count?: number };

@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { ActiveWorkspace } from '../workspaces/active-workspace.decorator.js';
 import { WorkspaceGuard } from '../workspaces/workspace.guard.js';
 import type { Response } from 'express';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, encryptToken, decryptToken } from '@socialdrop/prisma';
 import { IntegrationManager } from '@socialdrop/integrations';
 import { Platform } from '@socialdrop/shared';
 
@@ -72,14 +72,14 @@ export class IntegrationsController {
           },
         },
         update: {
-          accessToken: staticCreds.accessToken,
+          accessToken: encryptToken(staticCreds.accessToken),
           accountName: staticCreds.accountName,
           needsReauth: false,
         },
         create: {
           workspaceId,
           platform: platformEnum,
-          accessToken: staticCreds.accessToken,
+          accessToken: encryptToken(staticCreds.accessToken),
           profileId: staticCreds.profileId,
           accountName: staticCreds.accountName,
         },
@@ -174,8 +174,8 @@ export class IntegrationsController {
         },
       },
       update: {
-        accessToken: authResult.accessToken,
-        refreshToken: authResult.refreshToken,
+        accessToken: encryptToken(authResult.accessToken),
+        refreshToken: authResult.refreshToken ? encryptToken(authResult.refreshToken) : authResult.refreshToken,
         tokenExpiry: authResult.tokenExpiry,
         accountName: authResult.accountName,
         needsReauth: false,
@@ -183,8 +183,8 @@ export class IntegrationsController {
       create: {
         workspaceId,
         platform: platformEnum,
-        accessToken: authResult.accessToken,
-        refreshToken: authResult.refreshToken,
+        accessToken: encryptToken(authResult.accessToken),
+        refreshToken: authResult.refreshToken ? encryptToken(authResult.refreshToken) : authResult.refreshToken,
         tokenExpiry: authResult.tokenExpiry,
         profileId: authResult.profileId,
         accountName: authResult.accountName,
@@ -234,7 +234,7 @@ export class IntegrationsController {
 
     try {
       const res = await fetch(
-        `https://graph.facebook.com/v18.0/me/permissions?access_token=${integration.accessToken}`,
+        `https://graph.facebook.com/v18.0/me/permissions?access_token=${decryptToken(integration.accessToken)}`,
       );
       const data = await res.json() as { data?: Array<{ permission: string; status: 'granted' | 'declined' }> };
       const perms = data.data ?? [];

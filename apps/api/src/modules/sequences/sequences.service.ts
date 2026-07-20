@@ -66,8 +66,19 @@ export class SequencesService {
       accumulatedDelayMs += step.delayHours * 60 * 60 * 1000;
       await this.queue.add(
         'sequence-step',
-        { sequenceId, contactAccountId: contact.accountId, platform: contact.platform, message: step.message, stepIndex: index },
-        { delay: accumulatedDelayMs },
+        {
+          sequenceId,
+          contactAccountId: contact.accountId,
+          platform: contact.platform,
+          message: step.message,
+          stepIndex: index,
+          workspaceId: sequence.workspaceId,
+        },
+        {
+          delay: accumulatedDelayMs,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5_000 },
+        },
       );
     }
   }

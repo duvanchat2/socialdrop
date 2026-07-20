@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, encryptToken, decryptToken } from '@socialdrop/prisma';
 import { Platform } from '@socialdrop/shared';
 import { GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 import { google } from 'googleapis';
@@ -78,7 +78,7 @@ export class MetricsService {
       return;
     }
 
-    const token = integration.accessToken;
+    const token = decryptToken(integration.accessToken);
     const igId = integration.profileId;
     if (!igId) {
       this.logger.warn(`[Metrics] INSTAGRAM integration ${integration.id} has no profileId`);
@@ -214,7 +214,7 @@ export class MetricsService {
       return;
     }
 
-    const token = integration.accessToken;
+    const token = decryptToken(integration.accessToken);
     const pageId = integration.profileId;
     if (!pageId) {
       this.logger.warn(`[Metrics] FACEBOOK integration ${integration.id} has no profileId`);
@@ -282,10 +282,11 @@ export class MetricsService {
       where: { workspaceId, platform: 'FACEBOOK' },
     });
     if (!integration?.accessToken) return null;
+    const token = decryptToken(integration.accessToken);
 
     try {
       const res = await graphFetch(
-        `${GRAPH_API_BASE}/${postId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${integration.accessToken}`,
+        `${GRAPH_API_BASE}/${postId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${token}`,
       );
       if (!res.ok) return null;
       const data = (await res.json()) as FbPost;
@@ -339,8 +340,8 @@ export class MetricsService {
     );
 
     oauth2Client.setCredentials({
-      access_token: integration.accessToken,
-      refresh_token: integration.refreshToken ?? undefined,
+      access_token: decryptToken(integration.accessToken),
+      refresh_token: integration.refreshToken ? decryptToken(integration.refreshToken) : undefined,
       expiry_date: integration.tokenExpiry?.getTime(),
     });
 
@@ -350,8 +351,8 @@ export class MetricsService {
       await this.prisma.integration.update({
         where: { id: integration.id },
         data: {
-          accessToken: tokens.access_token ?? integration.accessToken,
-          ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+          accessToken: tokens.access_token ? encryptToken(tokens.access_token) : integration.accessToken,
+          ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
           ...(tokens.expiry_date ? { tokenExpiry: new Date(tokens.expiry_date) } : {}),
         },
       });

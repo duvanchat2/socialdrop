@@ -8,6 +8,7 @@ import {
   HttpStatus,
   ForbiddenException,
   Header,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Public } from '../auth/auth.public.js';
@@ -17,6 +18,8 @@ import { WebhookService } from './webhook.service.js';
 @Controller('webhooks')
 @Public()
 export class WebhookController {
+  private readonly logger = new Logger(WebhookController.name);
+
   constructor(private readonly webhookService: WebhookService) {}
 
   @Get('meta')
@@ -36,7 +39,10 @@ export class WebhookController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive Meta webhook events' })
   receiveMeta(@Body() body: any): { status: string } {
-    this.webhookService.processEvent(body);
+    // Fire-and-forget — Meta expects a fast 200, not a response gated on flow execution.
+    this.webhookService.processEvent(body).catch((e) =>
+      this.logger.error(`processEvent failed: ${(e as Error).message}`),
+    );
     return { status: 'ok' };
   }
 }

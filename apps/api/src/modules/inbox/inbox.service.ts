@@ -1,15 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, decryptToken } from '@socialdrop/prisma';
+import { GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 
 @Injectable()
 export class InboxService {
   private readonly logger = new Logger(InboxService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getConversations(workspaceId: string) {
     const contacts = await this.prisma.contact.findMany({
@@ -19,17 +16,34 @@ export class InboxService {
     return contacts;
   }
 
-  async sendReply(threadId: string, message: string): Promise<{ ok: boolean }> {
-    const token = this.config.get<string>('FACEBOOK_ACCESS_TOKEN');
-    if (!token) return { ok: false };
+  async sendReply(workspaceId: string, threadId: string, message: string): Promise<{ ok: boolean }> {
+    const contact = await this.prisma.contact.findFirst({
+      where: { workspaceId, accountId: threadId },
+    });
+    if (!contact) {
+      this.logger.error(`sendReply: no Contact ${threadId} in workspace ${workspaceId}`);
+      return { ok: false };
+    }
 
-    const url = `https://graph.facebook.com/v18.0/me/messages?access_token=${token}`;
+    const integration = await this.prisma.integration.findFirst({
+      where: { workspaceId, platform: contact.platform as any },
+    });
+    if (!integration) {
+      this.logger.error(`sendReply: no ${contact.platform} integration for workspace ${workspaceId}`);
+      return { ok: false };
+    }
+
+    const url = `${GRAPH_API_BASE}/me/messages?access_token=${decryptToken(integration.accessToken)}`;
     try {
-      const res = await fetch(url, {
+      const res = await graphFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient: { id: threadId }, message: { text: message } }),
       });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        this.logger.error(`sendReply failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
+      }
       return { ok: res.ok };
     } catch (e) {
       this.logger.error(`sendReply failed: ${(e as Error).message}`);
