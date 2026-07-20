@@ -1,17 +1,19 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
-import { PostStatus } from './StatusBadge';
+import { StatusBadge, PostStatus } from './StatusBadge';
+import { PlatformChip, Platform } from './PlatformChip';
 
-const PLATFORMS = [
-  { id: 'FACEBOOK',  label: 'Facebook',    color: '#1877F2' },
-  { id: 'INSTAGRAM', label: 'Instagram',   color: '#E1306C' },
-  { id: 'TWITTER',   label: 'X / Twitter', color: '#1DA1F2' },
-  { id: 'TIKTOK',    label: 'TikTok',      color: '#000000' },
-  { id: 'YOUTUBE',   label: 'YouTube',     color: '#FF0000' },
+const PLATFORMS: { id: Platform; label: string }[] = [
+  { id: 'FACEBOOK',  label: 'Facebook' },
+  { id: 'INSTAGRAM', label: 'Instagram' },
+  { id: 'TWITTER',   label: 'X / Twitter' },
+  { id: 'TIKTOK',    label: 'TikTok' },
+  { id: 'YOUTUBE',   label: 'YouTube' },
 ];
 
 const USER_ID = 'demo-user';
@@ -72,11 +74,9 @@ export function EditPostModal({ post, onClose }: Props) {
     onError: (e: Error) => toast.error(`Error: ${e.message}`),
   });
 
-  if (!post) return null;
-
   // DRAFTs are fully editable too
-  const canEdit = post.status === 'SCHEDULED' || post.status === 'ERROR'
-    || post.status === 'PENDING' || post.status === 'DRAFT';
+  const canEdit = post != null && (post.status === 'SCHEDULED' || post.status === 'ERROR'
+    || post.status === 'PENDING' || post.status === 'DRAFT');
 
   const youtubeSelected = platforms.includes('YOUTUBE');
 
@@ -100,29 +100,33 @@ export function EditPostModal({ post, onClose }: Props) {
     setPlatforms(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
-  const statusColors: Record<string, string> = {
-    PUBLISHED:  'bg-green-900 text-green-300',
-    ERROR:      'bg-red-900 text-red-300',
-    SCHEDULED:  'bg-blue-900 text-blue-300',
-    PUBLISHING: 'bg-purple-900 text-purple-300',
-    PENDING:    'bg-yellow-900 text-yellow-300',
-    DRAFT:      'bg-gray-700 text-gray-300',
-  };
-
   return (
-    <div data-testid="edit-post-modal" className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+    <AnimatePresence>
+      {post && (
+        <motion.div
+          data-testid="edit-post-modal"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="bg-surface rounded-card w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
         <div className="flex justify-between items-center">
-          <h3 className="font-semibold text-lg">Editar Post</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={20} /></button>
+          <h3 className="font-display font-semibold text-lg text-ink">Editar Post</h3>
+          <button onClick={onClose} className="text-ink-muted hover:text-ink"><X size={20} /></button>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[post.status] ?? 'bg-gray-700 text-gray-300'}`}>
-            {post.status}
-          </span>
+          <StatusBadge status={post.status} />
           {!canEdit && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-ink-muted">
               {post.status === 'PUBLISHED' ? 'Los posts publicados no se pueden editar' : 'No editable en este estado'}
             </span>
           )}
@@ -130,7 +134,7 @@ export function EditPostModal({ post, onClose }: Props) {
 
         {/* Caption — also used as YouTube title */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             {youtubeSelected ? 'Caption / Título YouTube' : 'Caption'}
           </label>
           <textarea
@@ -138,39 +142,39 @@ export function EditPostModal({ post, onClose }: Props) {
             value={content}
             onChange={e => setContent(e.target.value)}
             disabled={!canEdit}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 focus:outline-none focus:border-indigo-500 resize-none disabled:opacity-50"
+            className="w-full bg-surface-2 rounded-lg px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-accent resize-none disabled:opacity-50"
           />
           {youtubeSelected && content.length > 100 && (
-            <p className="text-xs text-yellow-400 mt-0.5">El título de YouTube se recortará a 100 caracteres</p>
+            <p className="text-xs text-warning mt-0.5">El título de YouTube se recortará a 100 caracteres</p>
           )}
         </div>
 
         {/* YouTube extras */}
         {youtubeSelected && canEdit && (
-          <div className="p-3 bg-red-950/20 border border-red-900/40 rounded-xl space-y-3">
-            <p className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+          <div className="p-3 bg-surface-2 rounded-card space-y-3">
+            <p className="text-xs font-semibold text-warning flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-warning inline-block" />
               YouTube (extras opcionales)
             </p>
             <div>
-              <label className="text-xs text-gray-400 mb-1 block">Descripción</label>
+              <label className="text-xs text-ink-muted mb-1 block">Descripción</label>
               <textarea
                 rows={2}
                 maxLength={5000}
                 placeholder="Descripción del video..."
                 value={ytDescription}
                 onChange={e => setYtDescription(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none"
+                className="w-full bg-base rounded-lg px-3 py-2 text-sm text-ink placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-warning resize-none"
               />
             </div>
             <div>
-              <label className="text-xs text-gray-400 mb-1 block">Tags (separados por coma)</label>
+              <label className="text-xs text-ink-muted mb-1 block">Tags (separados por coma)</label>
               <input
                 type="text"
                 placeholder="shorts, tutorial, vlog"
                 value={ytTags}
                 onChange={e => setYtTags(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+                className="w-full bg-base rounded-lg px-3 py-2 text-sm text-ink placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-warning"
               />
             </div>
           </div>
@@ -178,19 +182,19 @@ export function EditPostModal({ post, onClose }: Props) {
 
         {/* Date */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Fecha y hora</label>
+          <label className="block text-sm font-medium text-ink mb-1">Fecha y hora</label>
           <input
             type="datetime-local"
             value={scheduledAt}
             onChange={e => setScheduledAt(e.target.value)}
             disabled={!canEdit}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+            className="bg-surface-2 rounded-lg px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
           />
         </div>
 
         {/* Platforms */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Plataformas</label>
+          <label className="block text-sm font-medium text-ink mb-2">Plataformas</label>
           <div className="flex flex-wrap gap-2">
             {PLATFORMS.map(p => (
               <button
@@ -198,13 +202,13 @@ export function EditPostModal({ post, onClose }: Props) {
                 type="button"
                 disabled={!canEdit}
                 onClick={() => togglePlatform(p.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all disabled:opacity-50 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-xs font-medium transition-all disabled:opacity-50 ${
                   platforms.includes(p.id)
-                    ? 'border-indigo-500 bg-indigo-950 text-white'
-                    : 'border-gray-700 bg-gray-800 text-gray-400'
+                    ? 'bg-accent/15 text-ink'
+                    : 'bg-surface-2 text-ink-muted'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                <PlatformChip platform={p.id} size="sm" />
                 {p.label}
               </button>
             ))}
@@ -214,7 +218,7 @@ export function EditPostModal({ post, onClose }: Props) {
         <div className="flex gap-2 pt-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium"
+            className="px-4 py-2 bg-surface-2 hover:bg-surface rounded-pill text-sm font-medium text-ink"
           >
             Cancelar
           </button>
@@ -223,13 +227,15 @@ export function EditPostModal({ post, onClose }: Props) {
               data-testid="save-post-btn"
               onClick={handleSave}
               disabled={updateMutation.isPending}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium"
+              className="px-4 py-2 bg-accent hover:opacity-90 disabled:opacity-50 rounded-pill text-sm font-medium text-ink"
             >
               {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
             </button>
           )}
-        </div>
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

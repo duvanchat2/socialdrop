@@ -39,6 +39,7 @@ export class IntegrationsController {
         accountName: true,
         profileId: true,
         tokenExpiry: true,
+        needsReauth: true,
         createdAt: true,
       },
     });
@@ -73,6 +74,7 @@ export class IntegrationsController {
         update: {
           accessToken: staticCreds.accessToken,
           accountName: staticCreds.accountName,
+          needsReauth: false,
         },
         create: {
           workspaceId,
@@ -176,6 +178,7 @@ export class IntegrationsController {
         refreshToken: authResult.refreshToken,
         tokenExpiry: authResult.tokenExpiry,
         accountName: authResult.accountName,
+        needsReauth: false,
       },
       create: {
         workspaceId,
@@ -198,7 +201,7 @@ export class IntegrationsController {
   async checkStatus(@Param('id') id: string, @ActiveWorkspace() workspaceId: string) {
     const integration = await this.prisma.integration.findFirst({
       where: { id, workspaceId },
-      select: { id: true, platform: true, accountName: true, tokenExpiry: true },
+      select: { id: true, platform: true, accountName: true, tokenExpiry: true, needsReauth: true },
     });
     if (!integration) throw new HttpException('Integration not found', HttpStatus.NOT_FOUND);
 
@@ -212,6 +215,7 @@ export class IntegrationsController {
       accountName: integration.accountName,
       isExpired,
       tokenExpiry: integration.tokenExpiry,
+      needsReauth: integration.needsReauth,
     };
   }
 

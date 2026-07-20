@@ -106,7 +106,7 @@ function fmtNum(n: number) {
 function Pill({ text, color = '#6366f1' }: { text: string; color?: string }) {
   return (
     <span
-      className="inline-block px-2 py-0.5 rounded-full text-xs font-medium mr-1 mb-1"
+      className="inline-block px-2 py-0.5 rounded-pill text-xs font-medium mr-1 mb-1"
       style={{ background: `${color}22`, color }}
     >
       {text}
@@ -198,17 +198,17 @@ export default function CompetitorsPage() {
   }
 
   return (
-    <div className="flex h-full min-h-screen bg-gray-950">
+    <div className="flex h-full min-h-screen bg-base">
       {/* ── Left sidebar ── */}
-      <aside className="w-72 shrink-0 border-r border-gray-800 bg-gray-900 flex flex-col">
-        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+      <aside className="w-72 shrink-0 border-r border-white/[0.04] bg-surface flex flex-col">
+        <div className="p-4 border-b border-white/[0.04] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Users size={16} className="text-indigo-400" />
-            <h1 className="font-semibold text-sm">Competidores</h1>
+            <Users size={16} className="text-accent" />
+            <h1 className="font-display font-semibold text-sm text-ink">Competidores</h1>
           </div>
           <button
             onClick={() => setShowModal(true)}
-            className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            className="p-1.5 rounded-lg bg-accent hover:opacity-90 text-ink transition-colors"
           >
             <Plus size={14} />
           </button>
@@ -216,18 +216,18 @@ export default function CompetitorsPage() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {isLoading && (
-            <div className="flex items-center justify-center py-8 text-gray-500">
+            <div className="flex items-center justify-center py-8 text-ink-muted">
               <RefreshCw className="animate-spin" size={16} />
             </div>
           )}
 
           {!isLoading && competitors.length === 0 && (
             <div className="text-center py-10 px-4">
-              <Users size={32} className="mx-auto text-gray-700 mb-3" />
-              <p className="text-xs text-gray-500">Agrega competidores para empezar.</p>
+              <Users size={32} className="mx-auto text-ink-muted mb-3" />
+              <p className="text-xs text-ink-muted">Agrega competidores para empezar.</p>
               <button
                 onClick={() => setShowModal(true)}
-                className="mt-3 text-xs text-indigo-400 hover:text-indigo-300"
+                className="mt-3 text-xs text-accent hover:opacity-80"
               >
                 + Agregar competidor
               </button>
@@ -242,13 +242,13 @@ export default function CompetitorsPage() {
                 key={c.id}
                 onClick={() => { setSelectedId(c.id); setTab('Resumen'); }}
                 className={`rounded-lg p-3 cursor-pointer transition-all group ${
-                  isSelected ? 'bg-indigo-950/60 border border-indigo-700/50' : 'hover:bg-gray-800 border border-transparent'
+                  isSelected ? 'bg-accent/20' : 'hover:bg-surface-2'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   {/* Avatar / initial */}
                   <div
-                    className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-sm font-bold overflow-hidden"
+                    className="w-9 h-9 rounded-pill shrink-0 flex items-center justify-center text-sm font-bold overflow-hidden"
                     style={{ background: `${color}33`, color }}
                   >
                     {c.avatar
@@ -258,14 +258,14 @@ export default function CompetitorsPage() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate text-gray-100">@{c.username}</p>
+                    <p className="text-sm font-medium truncate text-ink">@{c.username}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-[10px]" style={{ color }}>{PLATFORM_EMOJI[c.platform]} {c.platform}</span>
                       {c.followers != null && (
-                        <span className="text-[10px] text-gray-500">{fmtNum(c.followers)}</span>
+                        <span className="text-[10px] text-ink-muted">{fmtNum(c.followers)}</span>
                       )}
                       {(c._count?.posts ?? 0) > 0 && (
-                        <span className="text-[10px] text-indigo-400">{c._count!.posts} posts</span>
+                        <span className="text-[10px] text-accent">{c._count!.posts} posts</span>
                       )}
                     </div>
                   </div>
@@ -274,20 +274,20 @@ export default function CompetitorsPage() {
                     <button
                       onClick={(e) => { e.stopPropagation(); handleAnalyze(c.id); }}
                       disabled={analyzing.has(c.id)}
-                      className="p-1 text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+                      className="p-1 text-accent hover:opacity-80 disabled:opacity-50"
                       title="Analizar con IA"
                     >
                       <Zap size={12} className={analyzing.has(c.id) ? 'animate-pulse' : ''} />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(c.id); }}
-                      className="p-1 text-gray-500 hover:text-red-400"
+                      className="p-1 text-ink-muted hover:text-warning"
                       title="Eliminar"
                     >
                       <Trash2 size={12} />
                     </button>
                   </div>
-                  {isSelected && <ChevronRight size={12} className="text-indigo-400 shrink-0" />}
+                  {isSelected && <ChevronRight size={12} className="text-accent shrink-0" />}
                 </div>
               </div>
             );
@@ -296,13 +296,13 @@ export default function CompetitorsPage() {
 
         {/* Trends footer */}
         {trends && trends.totalPostsAnalyzed > 0 && (
-          <div className="p-3 border-t border-gray-800 space-y-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Tendencias globales</p>
-            <p className="text-xs text-gray-400">
+          <div className="p-3 border-t border-white/[0.04] space-y-1">
+            <p className="text-[10px] text-ink-muted uppercase tracking-wider">Tendencias globales</p>
+            <p className="text-xs text-ink-muted">
               {trends.topFormats[0]?.format ?? '—'} domina •{' '}
               {trends.bestHour ? `Mejor hora: ${trends.bestHour.hour}:00` : ''}
             </p>
-            <p className="text-[10px] text-gray-600">{trends.totalPostsAnalyzed} posts analizados</p>
+            <p className="text-[10px] text-ink-muted">{trends.totalPostsAnalyzed} posts analizados</p>
           </div>
         )}
       </aside>
@@ -327,30 +327,30 @@ export default function CompetitorsPage() {
       {/* ── Add modal ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 w-full max-w-sm">
+          <div className="bg-surface rounded-card p-5 w-full max-w-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">Agregar competidor</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white">
+              <h2 className="font-display font-semibold text-ink">Agregar competidor</h2>
+              <button onClick={() => setShowModal(false)} className="text-ink-muted hover:text-ink">
                 <X size={16} />
               </button>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">Nombre de usuario</label>
+                <label className="text-xs text-ink-muted mb-1 block">Nombre de usuario</label>
                 <input
                   type="text"
                   value={form.username}
                   onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                   placeholder="ej. cocacola"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-surface-2 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">Plataforma</label>
+                <label className="text-xs text-ink-muted mb-1 block">Plataforma</label>
                 <select
                   value={form.platform}
                   onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-surface-2 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
                 >
                   {PLATFORMS.map((p) => <option key={p} value={p}>{PLATFORM_EMOJI[p]} {p}</option>)}
                 </select>
@@ -359,14 +359,14 @@ export default function CompetitorsPage() {
             <div className="flex gap-2 mt-4">
               <button
                 onClick={() => setShowModal(false)}
-                className="flex-1 px-3 py-2 text-sm border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800"
+                className="flex-1 px-3 py-2 text-sm text-ink rounded-lg hover:bg-surface-2"
               >
                 Cancelar
               </button>
               <button
                 onClick={() => addMutation.mutate(form)}
                 disabled={!form.username || addMutation.isPending}
-                className="flex-1 px-3 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-white font-medium"
+                className="flex-1 px-3 py-2 text-sm bg-accent hover:opacity-90 disabled:opacity-50 rounded-lg text-ink font-medium"
               >
                 {addMutation.isPending ? 'Guardando…' : 'Agregar'}
               </button>
@@ -382,11 +382,11 @@ export default function CompetitorsPage() {
 function EmptyState({ onAdd, hasData }: { onAdd: () => void; hasData: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center h-full py-20 text-center px-8">
-      <Users size={48} className="text-gray-700 mb-4" />
-      <h2 className="text-lg font-semibold text-gray-300 mb-2">
+      <Users size={48} className="text-ink-muted mb-4" />
+      <h2 className="text-lg font-display font-semibold text-ink mb-2">
         {hasData ? 'Selecciona un competidor' : 'Inteligencia Competitiva'}
       </h2>
-      <p className="text-sm text-gray-500 max-w-sm">
+      <p className="text-sm text-ink-muted max-w-sm">
         {hasData
           ? 'Haz clic en un competidor del panel izquierdo para ver su análisis.'
           : 'Agrega competidores y usa la extensión de Chrome para capturar sus datos de Instagram.'}
@@ -394,16 +394,16 @@ function EmptyState({ onAdd, hasData }: { onAdd: () => void; hasData: boolean })
       {!hasData && (
         <button
           onClick={onAdd}
-          className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg"
+          className="mt-4 px-4 py-2 bg-accent hover:opacity-90 text-ink text-sm font-medium rounded-lg"
         >
           + Agregar competidor
         </button>
       )}
       {!hasData && (
-        <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-4 text-left max-w-sm">
-          <p className="text-xs font-semibold text-gray-400 mb-2">📦 Cómo usar la extensión</p>
-          <ol className="text-xs text-gray-500 space-y-1 list-decimal list-inside">
-            <li>Carga <code className="text-indigo-400">apps/extension/</code> en chrome://extensions</li>
+        <div className="mt-6 bg-surface rounded-card p-4 text-left max-w-sm">
+          <p className="text-xs font-semibold text-ink-muted mb-2">📦 Cómo usar la extensión</p>
+          <ol className="text-xs text-ink-muted space-y-1 list-decimal list-inside">
+            <li>Carga <code className="text-accent">apps/extension/</code> en chrome://extensions</li>
             <li>Navega al perfil del competidor en Instagram</li>
             <li>Haz clic en el ícono de SocialDrop</li>
             <li>Presiona "Analizar este perfil"</li>
@@ -440,7 +440,7 @@ function CompetitorDetail({
       {/* Profile header */}
       <div className="flex items-start gap-4">
         <div
-          className="w-16 h-16 rounded-full shrink-0 flex items-center justify-center text-2xl font-bold overflow-hidden"
+          className="w-16 h-16 rounded-pill shrink-0 flex items-center justify-center text-2xl font-bold overflow-hidden"
           style={{ background: `${color}22`, color }}
         >
           {c.avatar
@@ -450,9 +450,9 @@ function CompetitorDetail({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl font-bold">@{c.username}</h2>
+            <h2 className="text-xl font-display font-bold text-ink">@{c.username}</h2>
             <span
-              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              className="text-xs font-semibold px-2 py-0.5 rounded-pill"
               style={{ background: `${color}22`, color }}
             >
               {PLATFORM_EMOJI[c.platform]} {c.platform}
@@ -461,23 +461,23 @@ function CompetitorDetail({
               href={`https://www.instagram.com/${c.username}/`}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1 text-gray-500 hover:text-indigo-400"
+              className="p-1 text-ink-muted hover:text-accent"
             >
               <ExternalLink size={13} />
             </a>
           </div>
-          {c.displayName && <p className="text-sm text-gray-400 mt-0.5">{c.displayName}</p>}
-          {c.bio && <p className="text-xs text-gray-500 mt-1 max-w-md">{c.bio}</p>}
-          <div className="flex gap-4 mt-2 text-sm text-gray-300">
-            {c.followers != null && <span><b>{fmtNum(c.followers)}</b> <span className="text-gray-500 text-xs">seguidores</span></span>}
-            {c.following != null && <span><b>{fmtNum(c.following)}</b> <span className="text-gray-500 text-xs">seguidos</span></span>}
-            {c.postsCount != null && <span><b>{fmtNum(c.postsCount)}</b> <span className="text-gray-500 text-xs">posts</span></span>}
+          {c.displayName && <p className="text-sm text-ink-muted mt-0.5">{c.displayName}</p>}
+          {c.bio && <p className="text-xs text-ink-muted mt-1 max-w-md">{c.bio}</p>}
+          <div className="flex gap-4 mt-2 text-sm text-ink">
+            {c.followers != null && <span><b>{fmtNum(c.followers)}</b> <span className="text-ink-muted text-xs">seguidores</span></span>}
+            {c.following != null && <span><b>{fmtNum(c.following)}</b> <span className="text-ink-muted text-xs">seguidos</span></span>}
+            {c.postsCount != null && <span><b>{fmtNum(c.postsCount)}</b> <span className="text-ink-muted text-xs">posts</span></span>}
           </div>
         </div>
         <button
           onClick={onAnalyze}
           disabled={analyzing}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:opacity-90 disabled:opacity-50 text-ink text-sm font-medium rounded-lg"
         >
           <Zap size={13} className={analyzing ? 'animate-pulse' : ''} />
           {analyzing ? 'Analizando…' : 'Análisis IA'}
@@ -485,15 +485,15 @@ function CompetitorDetail({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-900 rounded-lg p-1 border border-gray-800">
+      <div className="flex gap-1 bg-surface rounded-lg p-1">
         {TABS.map((t) => (
           <button
             key={t}
             onClick={() => onTabChange(t)}
             className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
               tab === t
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                ? 'bg-accent text-ink'
+                : 'text-ink-muted hover:text-ink hover:bg-surface-2'
             }`}
           >
             {t}
@@ -554,10 +554,10 @@ function TabVideos({
 
   if (!videos.length) {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-        <Play size={32} className="mx-auto text-gray-700 mb-3" />
-        <p className="text-gray-400 text-sm">Sin videos sincronizados aún.</p>
-        <p className="text-xs text-gray-600 mt-1">
+      <div className="bg-surface rounded-card p-8 text-center">
+        <Play size={32} className="mx-auto text-ink-muted mb-3" />
+        <p className="text-ink-muted text-sm">Sin videos sincronizados aún.</p>
+        <p className="text-xs text-ink-muted mt-1">
           Usa la extensión de Chrome en el perfil del competidor para capturar sus posts.
         </p>
       </div>
@@ -567,27 +567,27 @@ function TabVideos({
   return (
     <div className="space-y-4">
       {/* Action bar */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center justify-between gap-3">
+      <div className="bg-surface rounded-card p-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">
-            {reels.length} reels · <span className="text-green-400">{analyzedCount} analizados</span>
-            {pendingCount > 0 && <span className="text-amber-400"> · {pendingCount} pendientes</span>}
+          <p className="text-sm font-semibold text-ink">
+            {reels.length} reels · <span className="text-positive">{analyzedCount} analizados</span>
+            {pendingCount > 0 && <span className="text-warning"> · {pendingCount} pendientes</span>}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-ink-muted mt-0.5">
             Transcripción + análisis de ganchos con Claude
           </p>
         </div>
         <button
           onClick={handleQueueAll}
           disabled={!reels.length || queueingDisabled(reels)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg whitespace-nowrap"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:opacity-90 disabled:opacity-50 text-ink text-sm font-medium rounded-lg whitespace-nowrap"
         >
           <Sparkles size={13} />
           Analizar videos
         </button>
       </div>
       {queuingMsg && (
-        <p className="text-xs text-indigo-400 -mt-2">{queuingMsg}</p>
+        <p className="text-xs text-accent -mt-2">{queuingMsg}</p>
       )}
 
       {/* Video cards */}
@@ -629,34 +629,34 @@ function VideoCard({
   const score = v.analysisScore ?? 0;
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col">
+    <div className="bg-surface rounded-card overflow-hidden flex flex-col">
       <div className="flex gap-3 p-3">
-        <div className="relative w-20 h-20 shrink-0 bg-gray-800 rounded-lg overflow-hidden">
+        <div className="relative w-20 h-20 shrink-0 bg-surface-2 rounded-lg overflow-hidden">
           {v.thumbnail
             ? <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
-            : <span className="flex items-center justify-center h-full text-gray-600 text-2xl">🎬</span>}
+            : <span className="flex items-center justify-center h-full text-ink-muted text-2xl">🎬</span>}
           {v.isReel && (
-            <span className="absolute top-1 left-1 bg-pink-600 text-white text-[9px] px-1 rounded font-bold">REEL</span>
+            <span className="absolute top-1 left-1 bg-accent text-ink text-[9px] px-1 rounded font-bold">REEL</span>
           )}
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-ink-muted">
             {v.views > 0 && <span className="flex items-center gap-1"><Eye size={11} />{fmtNum(v.views)}</span>}
             <span className="flex items-center gap-1"><Heart size={11} />{fmtNum(v.likes)}</span>
             <span className="flex items-center gap-1"><MessageCircle size={11} />{fmtNum(v.comments)}</span>
           </div>
 
-          <p className="text-[10px] text-gray-500 mt-1">
+          <p className="text-[10px] text-ink-muted mt-1">
             {isAnalyzed
-              ? <span className="text-green-400">✓ Analizado</span>
+              ? <span className="text-positive">✓ Analizado</span>
               : v.isReel
-                ? <span className="text-amber-400">⏳ Pendiente de análisis</span>
+                ? <span className="text-warning">⏳ Pendiente de análisis</span>
                 : <span>Imagen</span>}
           </p>
 
           {v.url && (
-            <a href={v.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5 mt-1">
+            <a href={v.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline flex items-center gap-0.5 mt-1">
               Ver en Instagram <ExternalLink size={9} />
             </a>
           )}
@@ -666,20 +666,20 @@ function VideoCard({
       {isAnalyzed && (
         <div className="px-3 pb-3 space-y-2">
           {v.hookText && (
-            <p className="text-xs text-gray-200 leading-relaxed border-l-2 border-indigo-500 pl-2">
+            <p className="text-xs text-ink leading-relaxed border-l-2 border-accent pl-2">
               <b>Hook:</b> "{v.hookText}"
             </p>
           )}
           {score > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-gray-500 uppercase">Score</span>
-              <div className="flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+              <span className="text-[10px] text-ink-muted uppercase">Score</span>
+              <div className="flex-1 bg-surface-2 rounded-pill h-1.5 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-pink-500"
+                  className="h-full bg-accent"
                   style={{ width: `${Math.min(100, score * 10)}%` }}
                 />
               </div>
-              <span className="text-xs font-semibold text-white">{score}/10</span>
+              <span className="text-xs font-semibold text-ink">{score}/10</span>
             </div>
           )}
 
@@ -687,7 +687,7 @@ function VideoCard({
             {v.transcript && (
               <button
                 onClick={() => setShowTranscript(!showTranscript)}
-                className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded flex items-center gap-1"
+                className="px-2 py-1 bg-surface-2 hover:bg-surface-2 text-ink rounded flex items-center gap-1"
               >
                 <FileText size={10} />Transcripción
               </button>
@@ -695,7 +695,7 @@ function VideoCard({
             {(v.whyItWorks || v.keyTakeaway) && (
               <button
                 onClick={() => setShowAnalysis(!showAnalysis)}
-                className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded flex items-center gap-1"
+                className="px-2 py-1 bg-surface-2 hover:bg-surface-2 text-ink rounded flex items-center gap-1"
               >
                 <Sparkles size={10} />Análisis
               </button>
@@ -703,22 +703,22 @@ function VideoCard({
           </div>
 
           {showTranscript && v.transcript && (
-            <div className="bg-black/40 rounded p-2 text-[11px] text-gray-300 max-h-32 overflow-y-auto whitespace-pre-wrap">
+            <div className="bg-black/40 rounded p-2 text-[11px] text-ink max-h-32 overflow-y-auto whitespace-pre-wrap">
               {v.transcript}
             </div>
           )}
           {showAnalysis && (
-            <div className="bg-indigo-950/30 border border-indigo-800/40 rounded p-2 text-[11px] text-gray-300 space-y-1">
-              {v.hookType && <p><b className="text-indigo-400">Tipo de hook:</b> {v.hookType}</p>}
-              {v.emotionTrigger && <p><b className="text-indigo-400">Emoción:</b> {v.emotionTrigger}</p>}
-              {v.whyItWorks && <p><b className="text-indigo-400">Por qué funciona:</b> {v.whyItWorks}</p>}
-              {v.keyTakeaway && <p><b className="text-indigo-400">Para replicar:</b> {v.keyTakeaway}</p>}
+            <div className="bg-accent/30 border border-accent/40 rounded p-2 text-[11px] text-ink space-y-1">
+              {v.hookType && <p><b className="text-accent">Tipo de hook:</b> {v.hookType}</p>}
+              {v.emotionTrigger && <p><b className="text-accent">Emoción:</b> {v.emotionTrigger}</p>}
+              {v.whyItWorks && <p><b className="text-accent">Por qué funciona:</b> {v.whyItWorks}</p>}
+              {v.keyTakeaway && <p><b className="text-accent">Para replicar:</b> {v.keyTakeaway}</p>}
             </div>
           )}
 
           <button
             onClick={onAdapt}
-            className="w-full px-3 py-2 bg-gradient-to-r from-indigo-600 to-pink-600 hover:opacity-90 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5"
+            className="w-full px-3 py-2 bg-accent hover:opacity-90 text-ink text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5"
           >
             <Mic size={11} /> Adaptar a mi voz
           </button>
@@ -762,47 +762,47 @@ function AdaptModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+      <div className="bg-surface rounded-card p-5 w-full max-w-lg max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold flex items-center gap-2"><Mic size={16} /> Adaptar a mi voz</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={16} /></button>
+          <h2 className="font-display font-semibold text-ink flex items-center gap-2"><Mic size={16} /> Adaptar a mi voz</h2>
+          <button onClick={onClose} className="text-ink-muted hover:text-ink"><X size={16} /></button>
         </div>
 
         {!adapted && !loading && !error && (
           <>
-            <p className="text-xs text-gray-400 mb-4">
+            <p className="text-xs text-ink-muted mb-4">
               Genera un guión para tu propio video usando el hook y estructura de este competidor, adaptado a tu voz y nicho.
             </p>
             <button
               onClick={generate}
-              className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg"
+              className="w-full px-4 py-2 bg-accent hover:opacity-90 text-ink text-sm font-medium rounded-lg"
             >
               ✨ Generar guión
             </button>
           </>
         )}
 
-        {loading && <p className="text-sm text-gray-400 text-center py-8">Generando con Claude...</p>}
+        {loading && <p className="text-sm text-ink-muted text-center py-8">Generando con Claude...</p>}
 
         {error && (
-          <div className="bg-amber-950/40 border border-amber-800/40 rounded-lg p-3 text-xs text-amber-300">
+          <div className="bg-warning/40 border border-warning/40 rounded-lg p-3 text-xs text-warning">
             {error}
           </div>
         )}
 
         {adapted && (
           <div className="space-y-3">
-            <div className="bg-black/40 rounded-lg p-3 text-sm text-gray-200 whitespace-pre-wrap">{adapted}</div>
+            <div className="bg-black/40 rounded-lg p-3 text-sm text-ink whitespace-pre-wrap">{adapted}</div>
             <div className="flex gap-2">
               <button
                 onClick={() => { navigator.clipboard.writeText(adapted); }}
-                className="flex-1 px-3 py-2 text-xs border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800"
+                className="flex-1 px-3 py-2 text-xs text-ink rounded-lg hover:bg-surface-2"
               >
                 Copiar
               </button>
               <a
                 href={`/posts/new?script=${encodeURIComponent(adapted)}`}
-                className="flex-1 px-3 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white text-center rounded-lg font-medium"
+                className="flex-1 px-3 py-2 text-xs bg-accent hover:opacity-90 text-ink text-center rounded-lg font-medium"
               >
                 Crear post
               </a>
@@ -818,8 +818,8 @@ function AdaptModal({
 function TabResumen({ analysis: a, aiAnalysis }: { analysis: PostAnalysis | null; aiAnalysis: CompetitorAnalysis | null }) {
   if (!a && !aiAnalysis) {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-        <p className="text-gray-500 text-sm">Sin datos aún. Usa la extensión de Chrome para capturar posts.</p>
+      <div className="bg-surface rounded-card p-8 text-center">
+        <p className="text-ink-muted text-sm">Sin datos aún. Usa la extensión de Chrome para capturar posts.</p>
       </div>
     );
   }
@@ -836,30 +836,30 @@ function TabResumen({ analysis: a, aiAnalysis }: { analysis: PostAnalysis | null
               { label: 'Engagement rate', value: a.engagementRate ?? '—', icon: Zap },
               { label: 'Mejor formato', value: a.bestFormat ?? '—', icon: Hash },
             ].map(({ label, value, icon: Icon }) => (
-              <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <Icon size={14} className="text-indigo-400 mb-2" />
-                <p className="text-lg font-bold text-white">{value}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">{label}</p>
+              <div key={label} className="bg-surface rounded-card p-4">
+                <Icon size={14} className="text-accent mb-2" />
+                <p className="text-lg font-bold text-ink">{value}</p>
+                <p className="text-[10px] text-ink-muted mt-0.5">{label}</p>
               </div>
             ))}
           </div>
 
           {/* Format breakdown */}
           {a.formats.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Rendimiento por formato</p>
+            <div className="bg-surface rounded-card p-4">
+              <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3">Rendimiento por formato</p>
               <div className="space-y-2">
                 {a.formats.sort((x, y) => y.avgEngagement - x.avgEngagement).map((f) => (
                   <div key={f.format} className="flex items-center gap-3">
-                    <span className="text-xs text-gray-300 w-20 shrink-0">{f.format}</span>
-                    <div className="flex-1 bg-gray-800 rounded-full h-2">
+                    <span className="text-xs text-ink w-20 shrink-0">{f.format}</span>
+                    <div className="flex-1 bg-surface-2 rounded-pill h-2">
                       <div
-                        className="h-2 rounded-full bg-indigo-500"
+                        className="h-2 rounded-pill bg-accent"
                         style={{ width: `${Math.min(100, (f.avgEngagement / (a.formats[0]?.avgEngagement || 1)) * 100)}%` }}
                       />
                     </div>
-                    <span className="text-xs text-gray-400 w-16 text-right">{fmtNum(f.avgEngagement)} eng</span>
-                    <span className="text-[10px] text-gray-600 w-14 text-right">{f.count} posts</span>
+                    <span className="text-xs text-ink-muted w-16 text-right">{fmtNum(f.avgEngagement)} eng</span>
+                    <span className="text-[10px] text-ink-muted w-14 text-right">{f.count} posts</span>
                   </div>
                 ))}
               </div>
@@ -868,11 +868,11 @@ function TabResumen({ analysis: a, aiAnalysis }: { analysis: PostAnalysis | null
 
           {/* Best time */}
           {(a.bestPostingTime || a.bestDay) && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center gap-3">
-              <Clock size={18} className="text-indigo-400 shrink-0" />
+            <div className="bg-surface rounded-card p-4 flex items-center gap-3">
+              <Clock size={18} className="text-accent shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-white">Mejor momento para publicar</p>
-                <p className="text-xs text-gray-400">
+                <p className="text-sm font-semibold text-ink">Mejor momento para publicar</p>
+                <p className="text-xs text-ink-muted">
                   {a.bestDay?.label ?? ''}{a.bestDay && a.bestPostingTime ? ' · ' : ''}{a.bestPostingTime?.label ?? ''}
                 </p>
               </div>
@@ -883,22 +883,22 @@ function TabResumen({ analysis: a, aiAnalysis }: { analysis: PostAnalysis | null
 
       {/* AI analysis */}
       {aiAnalysis && (
-        <div className="bg-indigo-950/20 border border-indigo-800/30 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Análisis IA</p>
-          <p className="text-sm text-gray-300 leading-relaxed">{aiAnalysis.summary}</p>
+        <div className="bg-accent/20 border border-accent/30 rounded-card p-4 space-y-3">
+          <p className="text-xs font-semibold text-accent uppercase tracking-wider">Análisis IA</p>
+          <p className="text-sm text-ink leading-relaxed">{aiAnalysis.summary}</p>
           {aiAnalysis.hooks.length > 0 && (
-            <div><p className="text-[10px] text-gray-500 uppercase mb-1">Hooks</p><div className="flex flex-wrap">{aiAnalysis.hooks.map((h, i) => <Pill key={i} text={h} color="#6366f1" />)}</div></div>
+            <div><p className="text-[10px] text-ink-muted uppercase mb-1">Hooks</p><div className="flex flex-wrap">{aiAnalysis.hooks.map((h, i) => <Pill key={i} text={h} color="#6366f1" />)}</div></div>
           )}
           {aiAnalysis.themes.length > 0 && (
-            <div><p className="text-[10px] text-gray-500 uppercase mb-1">Temas</p><div className="flex flex-wrap">{aiAnalysis.themes.map((t, i) => <Pill key={i} text={t} color="#14b8a6" />)}</div></div>
+            <div><p className="text-[10px] text-ink-muted uppercase mb-1">Temas</p><div className="flex flex-wrap">{aiAnalysis.themes.map((t, i) => <Pill key={i} text={t} color="#A3E635" />)}</div></div>
           )}
           {aiAnalysis.recommendations.length > 0 && (
             <div>
-              <p className="text-[10px] text-gray-500 uppercase mb-1">Recomendaciones</p>
+              <p className="text-[10px] text-ink-muted uppercase mb-1">Recomendaciones</p>
               <ol className="space-y-1">
                 {aiAnalysis.recommendations.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-gray-300">
-                    <span className="shrink-0 w-4 h-4 rounded-full bg-indigo-900/60 text-indigo-400 flex items-center justify-center text-[9px] font-bold mt-0.5">{i + 1}</span>
+                  <li key={i} className="flex gap-2 text-xs text-ink">
+                    <span className="shrink-0 w-4 h-4 rounded-pill bg-accent/60 text-accent flex items-center justify-center text-[9px] font-bold mt-0.5">{i + 1}</span>
                     {r}
                   </li>
                 ))}
@@ -916,34 +916,34 @@ function TabTopPosts({ analysis: a }: { analysis: PostAnalysis | null }) {
   if (!a?.topPosts.length) return <NoDataCard />;
   return (
     <div className="space-y-3">
-      <p className="text-xs text-gray-500">Top 5 posts por engagement</p>
+      <p className="text-xs text-ink-muted">Top 5 posts por engagement</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {a.topPosts.map((p, i) => (
-          <div key={p.postId} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex gap-3 p-3">
-            <div className="relative w-16 h-16 shrink-0 bg-gray-800 rounded-lg overflow-hidden">
+          <div key={p.postId} className="bg-surface rounded-card overflow-hidden flex gap-3 p-3">
+            <div className="relative w-16 h-16 shrink-0 bg-surface-2 rounded-lg overflow-hidden">
               {p.thumbnail
                 ? <img src={p.thumbnail} alt="" className="w-full h-full object-cover" />
-                : <span className="flex items-center justify-center h-full text-gray-600 text-xl">
+                : <span className="flex items-center justify-center h-full text-ink-muted text-xl">
                     {p.mediaType === 'VIDEO' ? '🎬' : '🖼️'}
                   </span>
               }
-              <span className="absolute top-1 left-1 bg-black/70 text-white text-[9px] px-1 rounded font-bold">#{i + 1}</span>
+              <span className="absolute top-1 left-1 bg-black/70 text-ink text-[9px] px-1 rounded font-bold">#{i + 1}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-300 line-clamp-2 mb-1">{p.caption ?? '(sin caption)'}</p>
-              <div className="flex gap-3 text-xs text-gray-400">
+              <p className="text-xs text-ink line-clamp-2 mb-1">{p.caption ?? '(sin caption)'}</p>
+              <div className="flex gap-3 text-xs text-ink-muted">
                 <span>❤️ {fmtNum(p.likes)}</span>
                 <span>💬 {fmtNum(p.comments)}</span>
               </div>
               {p.hashtags.slice(0, 3).length > 0 && (
                 <div className="flex flex-wrap mt-1">
                   {p.hashtags.slice(0, 3).map((h) => (
-                    <span key={h} className="text-[9px] text-indigo-400 mr-1">#{h}</span>
+                    <span key={h} className="text-[9px] text-accent mr-1">#{h}</span>
                   ))}
                 </div>
               )}
               {p.url && (
-                <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5 mt-1">
+                <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent hover:underline flex items-center gap-0.5 mt-1">
                   Ver post <ExternalLink size={9} />
                 </a>
               )}
@@ -963,15 +963,15 @@ function TabHashtags({ analysis: a }: { analysis: PostAnalysis | null }) {
   return (
     <div className="space-y-4">
       {/* Tag cloud */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nube de hashtags</p>
+      <div className="bg-surface rounded-card p-4">
+        <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3">Nube de hashtags</p>
         <div className="flex flex-wrap gap-2">
           {a.topHashtags.map(({ tag, count }) => {
             const size = 10 + Math.round((count / maxCount) * 12);
             return (
               <span
                 key={tag}
-                className="text-indigo-400 hover:text-indigo-300 cursor-default transition-colors"
+                className="text-accent hover:opacity-80 cursor-default transition-colors"
                 style={{ fontSize: `${size}px` }}
               >
                 #{tag}
@@ -982,22 +982,22 @@ function TabHashtags({ analysis: a }: { analysis: PostAnalysis | null }) {
       </div>
 
       {/* Table */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="bg-surface rounded-card overflow-hidden">
         <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-800">
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Hashtag</th>
-              <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Usos</th>
-              <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase">Eng. promedio</th>
+            <tr className="border-b border-white/[0.04]">
+              <th className="text-left px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase">Hashtag</th>
+              <th className="text-right px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase">Usos</th>
+              <th className="text-right px-4 py-2.5 text-xs font-semibold text-ink-muted uppercase">Eng. promedio</th>
             </tr>
           </thead>
           <tbody>
             {a.topHashtags.slice(0, 15).map(({ tag, count, avgEngagement }) => (
-              <tr key={tag} className="border-b border-gray-800/50 hover:bg-gray-800/50">
-                <td className="px-4 py-2 text-indigo-400 font-mono text-xs">#{tag}</td>
-                <td className="px-4 py-2 text-right text-gray-300">{count}</td>
-                <td className="px-4 py-2 text-right text-gray-400">{fmtNum(avgEngagement)}</td>
+              <tr key={tag} className="border-b border-white/[0.04] hover:bg-surface-2/50">
+                <td className="px-4 py-2 text-accent font-mono text-xs">#{tag}</td>
+                <td className="px-4 py-2 text-right text-ink">{count}</td>
+                <td className="px-4 py-2 text-right text-ink-muted">{fmtNum(avgEngagement)}</td>
               </tr>
             ))}
           </tbody>
@@ -1018,22 +1018,22 @@ function TabSchedule({ analysis: a }: { analysis: PostAnalysis | null }) {
   return (
     <div className="space-y-4">
       {/* Hour heatmap */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Engagement por hora del día (UTC)</p>
+      <div className="bg-surface rounded-card p-4">
+        <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3">Engagement por hora del día (UTC)</p>
         <div className="flex gap-0.5 items-end h-16">
           {a.hourHeatmap.map(({ hour, avgEngagement }) => {
             const pct = avgEngagement / maxHourEng;
             return (
               <div key={hour} className="flex-1 flex flex-col items-center gap-0.5 group relative">
                 <div
-                  className="w-full rounded-t-sm bg-indigo-500 transition-all"
+                  className="w-full rounded-t-sm bg-accent transition-all"
                   style={{ height: `${Math.max(4, pct * 56)}px`, opacity: 0.3 + pct * 0.7 }}
                 />
                 {hour % 6 === 0 && (
-                  <span className="text-[8px] text-gray-600">{hour}</span>
+                  <span className="text-[8px] text-ink-muted">{hour}</span>
                 )}
                 {/* Tooltip */}
-                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-800 text-[9px] text-white px-1.5 py-0.5 rounded whitespace-nowrap z-10">
+                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-surface-2 text-[9px] text-ink px-1.5 py-0.5 rounded whitespace-nowrap z-10">
                   {hour}:00 · {fmtNum(avgEngagement)}
                 </div>
               </div>
@@ -1043,8 +1043,8 @@ function TabSchedule({ analysis: a }: { analysis: PostAnalysis | null }) {
       </div>
 
       {/* Day heatmap */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Engagement por día de la semana</p>
+      <div className="bg-surface rounded-card p-4">
+        <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-3">Engagement por día de la semana</p>
         <div className="grid grid-cols-7 gap-1">
           {a.dayHeatmap.map(({ day, label, avgEngagement, count }) => {
             const pct = avgEngagement / maxDayEng;
@@ -1055,15 +1055,15 @@ function TabSchedule({ analysis: a }: { analysis: PostAnalysis | null }) {
                 className="rounded-lg p-2 text-center cursor-default"
                 style={{ background: bg }}
               >
-                <p className="text-[10px] text-gray-300 font-medium">{label}</p>
-                <p className="text-xs font-bold text-white mt-0.5">{fmtNum(avgEngagement)}</p>
-                <p className="text-[9px] text-gray-500">{count} posts</p>
+                <p className="text-[10px] text-ink font-medium">{label}</p>
+                <p className="text-xs font-bold text-ink mt-0.5">{fmtNum(avgEngagement)}</p>
+                <p className="text-[9px] text-ink-muted">{count} posts</p>
               </div>
             );
           })}
         </div>
         {a.bestDay && (
-          <p className="text-xs text-indigo-400 mt-3">
+          <p className="text-xs text-accent mt-3">
             ✓ Mejor día: <b>{a.bestDay.label}</b>
             {a.bestPostingTime && <span> a las <b>{a.bestPostingTime.label}</b></span>}
           </p>
@@ -1086,8 +1086,8 @@ function TabComparativa({ competitor: c }: { competitor: Competitor }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Tú vs @{c.username}</p>
+      <div className="bg-surface rounded-card p-4">
+        <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-4">Tú vs @{c.username}</p>
         <div className="grid grid-cols-2 gap-4">
           {[
             { label: 'Tus seguidores', value: myFollowers != null ? fmtNum(myFollowers) : '—', highlight: diff != null && diff >= 0 },
@@ -1095,17 +1095,17 @@ function TabComparativa({ competitor: c }: { competitor: Competitor }) {
           ].map(({ label, value, highlight }) => (
             <div
               key={label}
-              className={`rounded-xl p-4 border ${
-                highlight ? 'border-indigo-600/50 bg-indigo-950/30' : 'border-gray-700 bg-gray-800'
+              className={`rounded-card p-4 border ${
+                highlight ? 'border-accent/50 bg-accent/30' : 'border-white/[0.04] bg-surface-2'
               }`}
             >
-              <p className="text-xs text-gray-500 mb-1">{label}</p>
-              <p className="text-2xl font-bold text-white">{value}</p>
+              <p className="text-xs text-ink-muted mb-1">{label}</p>
+              <p className="text-2xl font-bold text-ink">{value}</p>
             </div>
           ))}
         </div>
         {diff != null && (
-          <p className={`mt-3 text-sm font-semibold ${diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`mt-3 text-sm font-semibold ${diff >= 0 ? 'text-positive' : 'text-warning'}`}>
             {diff >= 0
               ? `✓ Llevas ${fmtNum(Math.abs(diff))} seguidores más`
               : `⚠ Te faltan ${fmtNum(Math.abs(diff))} seguidores para alcanzarle`}
@@ -1119,9 +1119,9 @@ function TabComparativa({ competitor: c }: { competitor: Competitor }) {
 /* ─── No data card ───────────────────────────────────────────────────────── */
 function NoDataCard() {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-      <p className="text-gray-500 text-sm mb-2">Sin datos de posts aún.</p>
-      <p className="text-xs text-gray-600">
+    <div className="bg-surface rounded-card p-8 text-center">
+      <p className="text-ink-muted text-sm mb-2">Sin datos de posts aún.</p>
+      <p className="text-xs text-ink-muted">
         Usa la extensión de Chrome para capturar posts de este competidor.
       </p>
     </div>

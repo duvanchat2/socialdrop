@@ -50,6 +50,7 @@ model Workspace {
   contentBrain     ContentBrain?
   platformMetrics  PlatformMetrics[]
   postAnalytics    PostAnalytics[]
+  postMetricSnapshots PostMetricSnapshot[]
 }
 
 model WorkspaceMember {
@@ -107,6 +108,7 @@ model Integration {
   tokenExpiry  DateTime?
   profileId    String?
   metadata     Json?
+  needsReauth  Boolean           @default(false)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   posts        PostIntegration[]
@@ -290,6 +292,28 @@ model PostAnalytics {
   @@unique([workspaceId, platform, platformPostId])
   @@index([workspaceId, platform])
   @@index([recordedAt])
+}
+
+/// Append-only history of per-post metrics — one row per capture, never overwritten.
+/// PostAnalytics stays as the "latest snapshot" view; this table is what powers time-series charts.
+model PostMetricSnapshot {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform       String
+  platformPostId String
+  postId         String?
+  likes          Int       @default(0)
+  comments       Int       @default(0)
+  shares         Int       @default(0)
+  saves          Int       @default(0)
+  reach          Int       @default(0)
+  impressions    Int       @default(0)
+  views          Int       @default(0)
+  recordedAt     DateTime  @default(now())
+
+  @@index([platformPostId, recordedAt])
+  @@index([workspaceId])
 }
 
 model ContentItem {

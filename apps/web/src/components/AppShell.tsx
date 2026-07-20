@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'motion/react';
 import dynamic from 'next/dynamic';
 import {
   LayoutDashboard, Calendar, PlusSquare, HardDrive, Settings, Menu,
@@ -67,12 +68,12 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate: (
       {NAV_GROUPS.map((group, i) => (
         <div key={group.label ?? `group-${i}`} className={i > 0 ? 'pt-4' : undefined}>
           {group.label && !collapsed && (
-            <p className="px-3 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-wider">
+            <p className="px-3 pb-1 text-[11px] font-medium text-ink-muted uppercase tracking-wider">
               {group.label}
             </p>
           )}
           {group.label && collapsed && (
-            <div className="mx-3 mb-2 border-t border-gray-200 dark:border-gray-800" />
+            <div className="mx-3 mb-2 h-px bg-surface-2" />
           )}
           <div className="space-y-1">
             {group.items.map(({ href, label, icon: Icon }) => (
@@ -81,12 +82,12 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate: (
                 href={href}
                 onClick={onNavigate}
                 title={collapsed ? label : undefined}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-pill text-sm transition-colors ${
                   collapsed ? 'justify-center' : ''
                 } ${
                   pathname === href
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                    ? 'bg-accent text-ink'
+                    : 'text-ink-muted hover:text-ink hover:bg-surface-2'
                 }`}
               >
                 <Icon size={16} className="shrink-0" />
@@ -120,25 +121,25 @@ function Sidebar({
         />
       )}
       <aside
-        className={`fixed top-0 left-0 h-full ${collapsed ? 'lg:w-16' : 'lg:w-56'} w-56 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 z-30 flex flex-col transform transition-[transform,width] duration-200 ${
+        className={`fixed top-0 left-0 h-full ${collapsed ? 'lg:w-16' : 'lg:w-56'} w-56 bg-base z-30 flex flex-col transform transition-[transform,width] duration-200 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div className="p-4 flex items-center justify-between">
           {!collapsed && (
             <div className="min-w-0">
-              <span className="text-xl font-bold text-gray-900 dark:text-white">SocialDrop</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">scheduler</span>
+              <span className="text-xl font-display font-bold text-ink">SocialDrop</span>
+              <span className="text-xs text-ink-muted ml-1">scheduler</span>
             </div>
           )}
           <button
-            className="lg:hidden text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            className="lg:hidden text-ink-muted hover:text-ink"
             onClick={onCloseMobile}
           >
             <X size={18} />
           </button>
           <button
-            className="hidden lg:flex text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            className="hidden lg:flex text-ink-muted hover:text-ink"
             onClick={onToggleCollapsed}
             title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
           >
@@ -154,14 +155,14 @@ function Sidebar({
           <NavLinks collapsed={collapsed} onNavigate={onCloseMobile} />
         </nav>
         {!collapsed && (
-          <div className="p-4 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400 dark:text-gray-600 space-y-2">
-            <Link href="/debug" className="flex items-center gap-1.5 hover:text-gray-700 dark:hover:text-gray-400 transition-colors">
+          <div className="p-4 text-xs text-ink-muted space-y-2">
+            <Link href="/debug" className="flex items-center gap-1.5 hover:text-ink transition-colors">
               <Terminal size={12} /> Debug Logs
             </Link>
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-              <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Privacidad</Link>
-              <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Términos</Link>
-              <Link href="/support" className="hover:text-gray-700 dark:hover:text-gray-400 transition-colors">Soporte</Link>
+              <Link href="/privacy" className="hover:text-ink transition-colors">Privacidad</Link>
+              <Link href="/terms" className="hover:text-ink transition-colors">Términos</Link>
+              <Link href="/support" className="hover:text-ink transition-colors">Soporte</Link>
             </div>
             <p>v1.0.0</p>
           </div>
@@ -177,7 +178,7 @@ function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      className="p-2 rounded-lg text-ink-muted hover:bg-surface-2 transition-colors"
       title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
     >
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -204,27 +205,29 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Sidebar
-        mobileOpen={sidebarOpen}
-        onCloseMobile={() => setSidebarOpen(false)}
-        collapsed={collapsed}
-        onToggleCollapsed={toggleCollapsed}
-      />
-      <div className={`${collapsed ? 'lg:ml-16' : 'lg:ml-56'} min-h-screen flex flex-col transition-[margin] duration-200`}>
-        <header className="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 bg-white dark:bg-gray-900">
-          <button
-            className="lg:hidden text-gray-500 dark:text-gray-400"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
-          <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto mr-1">SocialDrop</span>
-          <ThemeToggle />
-        </header>
-        <main className="flex-1 p-6">{children}</main>
-      </div>
-      <Toaster theme={theme} position="bottom-right" />
-    </QueryClientProvider>
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <Sidebar
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
+          collapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
+        />
+        <div className={`${collapsed ? 'lg:ml-16' : 'lg:ml-56'} min-h-screen flex flex-col transition-[margin] duration-200`}>
+          <header className="h-14 flex items-center px-4 gap-3 bg-base">
+            <button
+              className="lg:hidden text-ink-muted"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <span className="text-sm text-ink-muted ml-auto mr-1">SocialDrop</span>
+            <ThemeToggle />
+          </header>
+          <main className="flex-1 p-6">{children}</main>
+        </div>
+        <Toaster theme={theme} position="bottom-right" />
+      </QueryClientProvider>
+    </MotionConfig>
   );
 }

@@ -317,6 +317,13 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
           await this.debugLog.push(workspaceId, 'error', platform,
             `[${platform}] Token refresh + retry failed: ${msg}`, String(refreshErr));
           finalError = refreshErr as Error;
+
+          // Refresh itself failed after a 401 — the stored refresh token is no longer
+          // usable, so the account needs to be reconnected via OAuth.
+          await this.prisma.integration.update({
+            where: { id: pi.integration.id },
+            data: { needsReauth: true },
+          });
         }
       }
 

@@ -7,6 +7,7 @@ import type {
   MediaUpload,
 } from '@socialdrop/shared';
 import { Platform } from '@socialdrop/shared';
+import { isMetaRateLimitBody } from './graph-api.js';
 
 export class RefreshTokenError extends Error {
   constructor(message = 'Token refresh required') {
@@ -49,7 +50,15 @@ export abstract class SocialAbstract implements ISocialProvider {
         throw new RefreshTokenError();
       }
 
-      if (response.status === 429 || response.status >= 500) {
+      // Meta often returns rate-limit errors (code 4/17/32/613) as HTTP 200/400
+      // with the error in the JSON body, not as a 429 — inspect it too.
+      let rateLimited = response.status === 429;
+      if (!rateLimited && (response.status === 200 || response.status === 400)) {
+        const body = await response.clone().text().catch(() => '');
+        rateLimited = isMetaRateLimitBody(body);
+      }
+
+      if (rateLimited || response.status >= 500) {
         if (attempt < retries - 1) {
           const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
           await new Promise((resolve) => setTimeout(resolve, delay));

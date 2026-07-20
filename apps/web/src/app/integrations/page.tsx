@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, API_URL } from '@/lib/api';
 import { toast } from 'sonner';
-import { CheckCircle, XCircle, Link2, Unlink, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Link2, Unlink, Loader2, AlertTriangle } from 'lucide-react';
 
 const PLATFORMS = [
   { id: 'FACEBOOK',  label: 'Facebook',   color: '#1877F2', bg: 'bg-blue-950'  },
@@ -15,7 +15,7 @@ const PLATFORMS = [
 ];
 
 interface Integration {
-  id: string; platform: string; accountName?: string; createdAt: string;
+  id: string; platform: string; accountName?: string; createdAt: string; needsReauth: boolean;
 }
 
 export default function IntegrationsPage() {
@@ -93,20 +93,26 @@ export default function IntegrationsPage() {
                     )}
                   </div>
                 </div>
-                {integration
-                  ? <CheckCircle className="text-green-400 shrink-0" size={22} />
+                {integration?.needsReauth
+                  ? <AlertTriangle className="text-warning shrink-0" size={22} />
+                  : integration
+                  ? <CheckCircle className="text-positive shrink-0" size={22} />
                   : <XCircle className="text-gray-600 shrink-0" size={22} />}
               </div>
 
               {/* Status badge */}
               <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  integration
-                    ? 'bg-green-900/60 text-green-300 border border-green-800'
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-pill text-xs font-medium ${
+                  integration?.needsReauth
+                    ? 'bg-warning/15 text-warning'
+                    : integration
+                    ? 'bg-positive/15 text-positive'
                     : 'bg-gray-800 text-gray-400 border border-gray-700'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${integration ? 'bg-green-400' : 'bg-gray-600'}`} />
-                  {integration ? 'Conectado' : 'Desconectado'}
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    integration?.needsReauth ? 'bg-warning' : integration ? 'bg-positive' : 'bg-gray-600'
+                  }`} />
+                  {integration?.needsReauth ? 'Reconectar' : integration ? 'Conectado' : 'Desconectado'}
                 </span>
                 {integration?.createdAt && (
                   <span className="text-xs text-gray-500">
@@ -116,7 +122,14 @@ export default function IntegrationsPage() {
               </div>
 
               {/* Action button */}
-              {integration ? (
+              {integration?.needsReauth ? (
+                <a
+                  href={connectUrl(id)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-warning/15 hover:bg-warning/25 rounded-pill text-sm text-warning font-medium transition-colors"
+                >
+                  <AlertTriangle size={14} /> Reconectar
+                </a>
+              ) : integration ? (
                 <button
                   onClick={() => disconnectMutation.mutate(integration.id)}
                   disabled={isDisconnecting}
