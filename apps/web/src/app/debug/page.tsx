@@ -2,7 +2,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
-import { Terminal, RefreshCw, Trash2 } from 'lucide-react';
+import { Terminal, RefreshCw, Trash2, RotateCw, Inbox } from 'lucide-react';
+
+interface DeadLetterJob {
+  id: string;
+  workspaceId: string | null;
+  queueName: string;
+  jobName: string;
+  reason: string;
+  failedAt: string;
+}
 
 interface LogEntry {
   timestamp: string;
@@ -41,6 +50,17 @@ export default function DebugPage() {
   const clearMutation = useMutation({
     mutationFn: () => apiFetch(`/api/debug/logs?userId=${userId}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['debug-logs', userId] }),
+  });
+
+  const { data: deadLetterJobs = [] } = useQuery<DeadLetterJob[]>({
+    queryKey: ['dead-letter-jobs'],
+    queryFn: () => apiFetch<DeadLetterJob[]>('/api/debug/dead-letter'),
+    refetchInterval: 10000,
+  });
+
+  const requeueMutation = useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/debug/dead-letter/${id}/requeue`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dead-letter-jobs'] }),
   });
 
   const visible = filter === 'error' ? logs.filter(l => l.level === 'error') : logs;
@@ -138,6 +158,39 @@ export default function DebugPage() {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Dead-letter jobs */}
+      <div className="space-y-1.5 pt-2">
+        <div className="flex items-center gap-2">
+          <Inbox size={16} className="text-red-400" />
+          <h2 className="font-semibold text-sm">Dead-letter ({deadLetterJobs.length})</h2>
+        </div>
+        {deadLetterJobs.length === 0 ? (
+          <div className="py-8 text-center text-gray-500 text-sm bg-gray-900 border border-gray-800 rounded-xl">
+            Sin jobs en dead-letter.
+          </div>
+        ) : (
+          deadLetterJobs.map((job) => (
+            <div
+              key={job.id}
+              className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-2.5 font-mono text-xs flex items-start gap-3"
+            >
+              <span className="shrink-0 text-gray-500">
+                {new Date(job.failedAt).toLocaleString()}
+              </span>
+              <span className="shrink-0 text-gray-400 w-28 truncate">[{job.jobName}]</span>
+              <span className="flex-1 break-all text-red-300">{job.reason}</span>
+              <button
+                onClick={() => requeueMutation.mutate(job.id)}
+                disabled={requeueMutation.isPending}
+                className="shrink-0 flex items-center gap-1 px-2 py-1 text-[11px] text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 disabled:opacity-50"
+              >
+                <RotateCw size={11} /> Reencolar
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
       <p className="text-xs text-gray-600 text-center">

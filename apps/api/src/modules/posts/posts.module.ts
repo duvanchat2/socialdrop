@@ -5,6 +5,7 @@ import { PostsService } from './posts.service.js';
 import { PostSchedulerProcessor } from './processors/post-scheduler.processor.js';
 import { IntegrationsModule } from '../integrations/integrations.module.js';
 import { DebugModule } from '../debug/debug.module.js';
+import { AlertsModule } from '../alerts/alerts.module.js';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DebugModule } from '../debug/debug.module.js';
     }),
     IntegrationsModule,
     DebugModule,
+    AlertsModule,
   ],
   controllers: [PostsController],
   providers: [PostsService, PostSchedulerProcessor],

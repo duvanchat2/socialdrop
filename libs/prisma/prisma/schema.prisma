@@ -294,6 +294,21 @@ model PostAnalytics {
   @@index([recordedAt])
 }
 
+/// A job that exhausted its retries — kept for the /debug dead-letter panel
+/// (view + requeue). Diagnostic/ops data, not tenant data proper, so no FK.
+model DeadLetterJob {
+  id          String    @id @default(cuid())
+  workspaceId String?
+  queueName   String
+  jobName     String
+  jobData     Json
+  reason      String
+  failedAt    DateTime  @default(now())
+  requeuedAt  DateTime?
+
+  @@index([failedAt])
+}
+
 /// Append-only history of per-post metrics — one row per capture, never overwritten.
 /// PostAnalytics stays as the "latest snapshot" view; this table is what powers time-series charts.
 model PostMetricSnapshot {

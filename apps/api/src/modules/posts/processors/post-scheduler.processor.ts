@@ -8,6 +8,8 @@ import * as path from 'path';
 import { PrismaService, encryptToken, decryptToken } from '@socialdrop/prisma';
 import { IntegrationManager, RefreshTokenError, GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 import { DebugLogService } from '../../debug/debug-log.service.js';
+import { AlertsService } from '../../alerts/alerts.service.js';
+import { DeadLetterService } from '../../alerts/dead-letter.service.js';
 
 const DEBUG_USER = 'demo-user';
 const UPLOAD_DIR = process.env.UPLOAD_DIRECTORY ?? 'uploads';
@@ -36,6 +38,8 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     private readonly integrationManager: IntegrationManager,
     @InjectQueue('post-scheduler') private readonly schedulerQueue: Queue,
     private readonly debugLog: DebugLogService,
+    private readonly alerts: AlertsService,
+    private readonly deadLetter: DeadLetterService,
   ) {
     super();
   }
@@ -125,6 +129,16 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
         await this.prisma.flowExecution.create({
           data: { flowId: sequenceId, triggeredBy: contactAccountId, triggerType: 'SEQUENCE', status: 'FAILED' },
         });
+        await this.deadLetter.record({
+          workspaceId,
+          queueName: 'post-scheduler',
+          jobName: 'sequence-step',
+          jobData: job.data as object,
+          reason: (err as Error).message,
+        });
+        await this.alerts.notify(
+          `🔴 Sequence step failed permanently (${attemptsMade}/${maxAttempts} attempts)\nsequence=${sequenceId}\nstep=${stepIndex}\nworkspace=${workspaceId}\nerror=${(err as Error).message}`,
+        );
       }
       throw err; // let BullMQ retry per this job's backoff config
     }
@@ -386,6 +400,9 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
             where: { id: pi.integration.id },
             data: { needsReauth: true },
           });
+          await this.alerts.notify(
+            `⚠️ ${platform} integration needs reconnecting\nintegration=${pi.integration.id}\nworkspace=${workspaceId}\nerror=${msg}`,
+          );
         }
       }
 
@@ -412,6 +429,16 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
 
       if (retryCount >= maxRetries) {
         await this.updatePostStatus(pi.postId, mediaUrls);
+        await this.deadLetter.record({
+          workspaceId,
+          queueName: 'post-scheduler',
+          jobName: 'publish',
+          jobData: { type: 'publish', postIntegrationId },
+          reason: finalError.message,
+        });
+        await this.alerts.notify(
+          `🔴 Post publish failed permanently (${retryCount}/${maxRetries} attempts)\nplatform=${platform}\npostIntegrationId=${postIntegrationId}\nworkspace=${workspaceId}\nerror=${finalError.message}`,
+        );
       }
     }
   }

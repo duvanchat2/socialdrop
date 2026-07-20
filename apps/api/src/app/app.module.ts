@@ -31,6 +31,7 @@ import { FlowsModule } from '../modules/flows/flows.module.js';
 import { InboxModule } from '../modules/inbox/inbox.module.js';
 import { SequencesModule } from '../modules/sequences/sequences.module.js';
 import { DebugModule } from '../modules/debug/debug.module.js';
+import { AlertsModule } from '../modules/alerts/alerts.module.js';
 import { YoutubeModule } from '../modules/youtube/youtube.module.js';
 import { UsersModule } from '../modules/users/users.module.js';
 import { BrainModule } from '../modules/brain/brain.module.js';
@@ -83,6 +84,7 @@ import redisConfig from '../config/redis.config.js';
     InboxModule,
     SequencesModule,
     DebugModule,
+    AlertsModule,
     YoutubeModule,
     UsersModule,
     BrainModule,
