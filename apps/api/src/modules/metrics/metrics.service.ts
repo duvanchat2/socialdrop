@@ -23,6 +23,12 @@ interface IgMedia {
   error?: { message: string };
 }
 
+interface IgInsights {
+  reach: number;
+  impressions: number;
+  saved: number;
+}
+
 interface FbPage {
   id: string;
   fan_count?: number;
@@ -111,11 +117,19 @@ export class MetricsService {
         } else {
           const posts = mediaData.data ?? [];
           for (const p of posts) {
+            const insights = await this.fetchIgInsights(p.id, token);
+            const likes = p.like_count ?? 0;
+            const comments = p.comments_count ?? 0;
+
+            // PostAnalytics stays the "latest snapshot" view (upsert, overwrites).
             await this.prisma.postAnalytics.upsert({
               where: { workspaceId_platform_platformPostId: { workspaceId, platform: 'INSTAGRAM', platformPostId: p.id } },
               update: {
-                likes: p.like_count ?? 0,
-                comments: p.comments_count ?? 0,
+                likes,
+                comments,
+                reach: insights.reach,
+                impressions: insights.impressions,
+                saves: insights.saved,
                 recordedAt: new Date(),
               },
               create: {
@@ -124,17 +138,67 @@ export class MetricsService {
                 platformPostId: p.id,
                 caption: p.caption ?? null,
                 mediaUrl: p.media_url ?? null,
-                likes: p.like_count ?? 0,
-                comments: p.comments_count ?? 0,
+                likes,
+                comments,
+                reach: insights.reach,
+                impressions: insights.impressions,
+                saves: insights.saved,
                 publishedAt: p.timestamp ? new Date(p.timestamp) : null,
               },
             });
+
+            // PostMetricSnapshot is append-only — every sync run adds a new row,
+            // which is what powers the per-post history endpoint/chart.
+            await this.prisma.postMetricSnapshot.create({
+              data: {
+                workspaceId,
+                platform: 'INSTAGRAM',
+                platformPostId: p.id,
+                likes,
+                comments,
+                reach: insights.reach,
+                impressions: insights.impressions,
+                saves: insights.saved,
+              },
+            });
+
+            // Basic spacing between insights calls — full rate-limit backoff is PR-20's scope.
+            await new Promise((resolve) => setTimeout(resolve, 250));
           }
           this.logger.log(`[Metrics] Instagram: synced ${posts.length} posts for user ${workspaceId}`);
         }
       }
     } catch (err) {
       this.logger.error(`[Metrics] Instagram sync failed for ${workspaceId}: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * reach/impressions/saved are NOT valid /media fields — Graph API requires a
+   * separate /{media-id}/insights call. `impressions` is deprecated for some
+   * media types on recent API versions, so any missing/errored metric degrades
+   * to 0 instead of failing the whole sync.
+   */
+  private async fetchIgInsights(mediaId: string, token: string): Promise<IgInsights> {
+    const empty: IgInsights = { reach: 0, impressions: 0, saved: 0 };
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v19.0/${mediaId}/insights?metric=reach,impressions,saved&access_token=${token}`,
+      );
+      if (!res.ok) return empty;
+      const data = (await res.json()) as {
+        data?: { name: string; values?: { value?: number }[] }[];
+        error?: { message: string };
+      };
+      if (data.error) return empty;
+      const byName = new Map((data.data ?? []).map((m) => [m.name, m.values?.[0]?.value ?? 0]));
+      return {
+        reach: byName.get('reach') ?? 0,
+        impressions: byName.get('impressions') ?? 0,
+        saved: byName.get('saved') ?? 0,
+      };
+    } catch {
+      return empty;
     }
   }
 
@@ -424,6 +488,27 @@ export class MetricsService {
     for (const { id } of workspaces) {
       await this.syncAll(id);
     }
+  }
+
+  // ── Snapshot retention (180 days) ─────────────────────────────────────────
+  @Cron('0 4 * * *')
+  async cleanupOldSnapshots(): Promise<void> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 180);
+    const { count } = await this.prisma.postMetricSnapshot.deleteMany({
+      where: { recordedAt: { lt: cutoff } },
+    });
+    if (count > 0) {
+      this.logger.log(`[Metrics] cleanupOldSnapshots: removed ${count} snapshots older than ${cutoff.toISOString()}`);
+    }
+  }
+
+  /** Ordered history for a single post — powers the per-post metrics chart. Scoped to the workspace to avoid leaking another tenant's history by guessing a platformPostId. */
+  async getPostMetricHistory(workspaceId: string, platformPostId: string) {
+    return this.prisma.postMetricSnapshot.findMany({
+      where: { workspaceId, platformPostId },
+      orderBy: { recordedAt: 'asc' },
+    });
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────

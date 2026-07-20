@@ -53,6 +53,15 @@ export class MetricsController {
     return this.metricsService.getPostAnalytics(workspaceId, platform, limit ? parseInt(limit, 10) : 25, period, sortBy);
   }
 
+  @Get('post/:platformPostId/history')
+  @ApiOperation({ summary: 'Append-only metric history for a single post, ordered for charting' })
+  async getPostHistory(
+    @Param('platformPostId') platformPostId: string,
+    @ActiveWorkspace() workspaceId: string,
+  ) {
+    return this.metricsService.getPostMetricHistory(workspaceId, platformPostId);
+  }
+
   @Get('overview')
   @ApiOperation({ summary: 'Get aggregated metrics summary: followers, posts, reach, engagement' })
   @ApiQuery({ name: 'period', required: false, description: '7d | 14d | 30d | 90d' })
