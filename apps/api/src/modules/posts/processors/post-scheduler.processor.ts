@@ -6,7 +6,7 @@ import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '@socialdrop/prisma';
-import { IntegrationManager, RefreshTokenError } from '@socialdrop/integrations';
+import { IntegrationManager, RefreshTokenError, GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 import { DebugLogService } from '../../debug/debug-log.service.js';
 
 const DEBUG_USER = 'demo-user';
@@ -20,6 +20,7 @@ interface SchedulerJobData {
   platform?: string;
   message?: string;
   stepIndex?: number;
+  workspaceId?: string;
 }
 
 interface DeleteMediaJobData {
@@ -55,6 +56,11 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
       return this.deleteMedia(job as Job<DeleteMediaJobData>);
     }
 
+    // ─── Drip sequence step (DM) ───────────────────────────────────────────
+    if (job.name === 'sequence-step') {
+      return this.processSequenceStep(job as Job<SchedulerJobData>);
+    }
+
     const data = job.data as SchedulerJobData;
 
     if (data.type === 'scan') {
@@ -66,6 +72,62 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     }
 
     return null;
+  }
+
+  // ─── Drip sequence step ─────────────────────────────────────────────────
+  private async processSequenceStep(job: Job<SchedulerJobData>): Promise<void> {
+    const { sequenceId, contactAccountId, platform, message, workspaceId, stepIndex } = job.data;
+
+    if (!sequenceId || !contactAccountId || !platform || !message || !workspaceId) {
+      this.logger.error(`[Sequence] step job missing required fields: ${JSON.stringify(job.data)}`);
+      return;
+    }
+
+    const integration = await this.prisma.integration.findFirst({
+      where: { workspaceId, platform: platform as any },
+    });
+
+    if (!integration) {
+      await this.debugLog.push(
+        workspaceId, 'error', platform,
+        `[Sequence] step ${stepIndex}: no ${platform} integration found for workspace — cannot DM ${contactAccountId}`,
+      );
+      await this.prisma.flowExecution.create({
+        data: { flowId: sequenceId, triggeredBy: contactAccountId, triggerType: 'SEQUENCE', status: 'FAILED' },
+      });
+      return; // missing integration won't resolve itself on retry
+    }
+
+    try {
+      const res = await graphFetch(`${GRAPH_API_BASE}/me/messages?access_token=${integration.accessToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: { id: contactAccountId }, message: { text: message } }),
+      });
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
+      }
+
+      await this.debugLog.push(workspaceId, 'log', platform, `[Sequence] step ${stepIndex} DM sent to ${contactAccountId}`);
+      await this.prisma.flowExecution.create({
+        data: { flowId: sequenceId, triggeredBy: contactAccountId, triggerType: 'SEQUENCE', status: 'COMPLETED' },
+      });
+    } catch (err) {
+      const attemptsMade = job.attemptsMade + 1;
+      const maxAttempts = job.opts.attempts ?? 1;
+      await this.debugLog.push(
+        workspaceId, 'error', platform,
+        `[Sequence] step ${stepIndex} failed (attempt ${attemptsMade}/${maxAttempts}): ${(err as Error).message}`,
+      );
+      if (attemptsMade >= maxAttempts) {
+        await this.prisma.flowExecution.create({
+          data: { flowId: sequenceId, triggeredBy: contactAccountId, triggerType: 'SEQUENCE', status: 'FAILED' },
+        });
+      }
+      throw err; // let BullMQ retry per this job's backoff config
+    }
   }
 
   // ─── Delete media files (called 24h after PUBLISHED) ──────────────────
