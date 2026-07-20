@@ -19,9 +19,10 @@ export class InboxController {
   @Post(':threadId/reply')
   @ApiOperation({ summary: 'Send manual reply to a contact' })
   sendReply(
+    @ActiveWorkspace() workspaceId: string,
     @Param('threadId') threadId: string,
     @Body('message') message: string,
   ) {
-    return this.inboxService.sendReply(threadId, message);
+    return this.inboxService.sendReply(workspaceId, threadId, message);
   }
 }

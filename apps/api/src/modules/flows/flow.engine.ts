@@ -1,22 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@socialdrop/prisma';
+import { GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 
 interface WebhookEvent {
   type: 'message' | 'comment' | 'postback';
   senderId: string;
   payload: any;
   platform?: string;
+  /** Workspace that owns the Integration the event arrived on — scopes which flows can fire. */
+  workspaceId: string;
+  /** Access token of that same Integration, used for any outbound DM/reply. */
+  accessToken?: string;
 }
 
 @Injectable()
 export class FlowEngine {
   private readonly logger = new Logger(FlowEngine.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async processEvent(event: WebhookEvent): Promise<void> {
     const platform = event.platform ?? 'INSTAGRAM';
@@ -27,8 +28,10 @@ export class FlowEngine {
     };
     const triggerType = triggerMap[event.type] ?? 'DM_RECEIVED';
 
+    // Scoped to the workspace that owns the Integration the event arrived on —
+    // otherwise a page event would fire every workspace's matching flows.
     const flows = await this.prisma.flow.findMany({
-      where: { isActive: true, platform, trigger: triggerType },
+      where: { workspaceId: event.workspaceId, isActive: true, platform, trigger: triggerType },
     });
 
     for (const flow of flows) {
@@ -71,7 +74,9 @@ export class FlowEngine {
   }
 
   private async executeNode(node: any, event: WebhookEvent, flow: any): Promise<void> {
-    const token = this.config.get<string>('FACEBOOK_ACCESS_TOKEN');
+    // Token of the Integration that received the event — not a global env var,
+    // so this works for every connected account, not just one.
+    const token = event.accessToken;
 
     switch (node.type) {
       case 'SEND_DM': {
@@ -109,10 +114,13 @@ export class FlowEngine {
   }
 
   private async sendDM(recipientId: string, message: string, token?: string): Promise<void> {
-    if (!token) return;
-    const url = `https://graph.facebook.com/v18.0/me/messages?access_token=${token}`;
+    if (!token) {
+      this.logger.error(`sendDM skipped: no Integration access token for recipient=${recipientId}`);
+      return;
+    }
+    const url = `${GRAPH_API_BASE}/me/messages?access_token=${token}`;
     try {
-      const res = await fetch(url, {
+      const res = await graphFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } }),
@@ -127,10 +135,13 @@ export class FlowEngine {
   }
 
   private async replyComment(commentId: string, message: string, token?: string): Promise<void> {
-    if (!token) return;
-    const url = `https://graph.facebook.com/v18.0/${commentId}/replies?access_token=${token}`;
+    if (!token) {
+      this.logger.error(`replyComment skipped: no Integration access token for comment=${commentId}`);
+      return;
+    }
+    const url = `${GRAPH_API_BASE}/${commentId}/replies?access_token=${token}`;
     try {
-      const res = await fetch(url, {
+      const res = await graphFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),

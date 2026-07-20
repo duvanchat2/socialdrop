@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '@socialdrop/prisma';
 import { FlowEngine } from '../flows/flow.engine.js';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class WebhookService {
 
   constructor(
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
     @Optional() private readonly flowEngine: FlowEngine,
   ) {}
 
@@ -19,12 +21,28 @@ export class WebhookService {
     return null;
   }
 
-  processEvent(payload: any): void {
+  async processEvent(payload: any): Promise<void> {
     const object: string = payload?.object ?? 'unknown';
     const entries: any[] = payload?.entry ?? [];
     const platform = object === 'instagram' ? 'INSTAGRAM' : 'FACEBOOK';
 
     for (const entry of entries) {
+      // entry.id is the page/IG-business-account id Meta sent the event to —
+      // resolve it to a real Integration so events are routed to (and DMs
+      // sent as) the workspace that actually owns that account.
+      const pageId: string | undefined = entry?.id;
+      const integration = pageId
+        ? await this.prisma.integration.findFirst({ where: { profileId: pageId, platform } })
+        : null;
+
+      if (!integration) {
+        this.logger.warn(`[webhook] no Integration found for entry.id=${pageId ?? 'unknown'} platform=${platform} — skipping event(s)`);
+        continue;
+      }
+
+      const workspaceId = integration.workspaceId;
+      const accessToken = integration.accessToken;
+
       for (const event of entry.messaging ?? []) {
         const senderId: string = event?.sender?.id ?? 'unknown';
         let type: 'message' | 'postback' = 'message';
@@ -37,15 +55,17 @@ export class WebhookService {
           continue;
         }
 
-        this.logger.log(`[webhook] ${type} from ${senderId} on ${object}`, WebhookService.name);
-        this.flowEngine?.processEvent({ type, senderId, payload: event, platform });
+        this.logger.log(`[webhook] ${type} from ${senderId} on ${object} (workspace=${workspaceId})`, WebhookService.name);
+        this.flowEngine?.processEvent({ type, senderId, payload: event, platform, workspaceId, accessToken })
+          .catch((e) => this.logger.error(`[webhook] flow processing failed: ${(e as Error).message}`));
       }
 
       for (const change of entry.changes ?? []) {
         if (change?.field === 'comments') {
           const senderId: string = change?.value?.from?.id ?? 'unknown';
-          this.logger.log(`[webhook] comment from ${senderId} on ${object}`, WebhookService.name);
-          this.flowEngine?.processEvent({ type: 'comment', senderId, payload: change, platform });
+          this.logger.log(`[webhook] comment from ${senderId} on ${object} (workspace=${workspaceId})`, WebhookService.name);
+          this.flowEngine?.processEvent({ type: 'comment', senderId, payload: change, platform, workspaceId, accessToken })
+            .catch((e) => this.logger.error(`[webhook] flow processing failed: ${(e as Error).message}`));
         }
       }
     }
