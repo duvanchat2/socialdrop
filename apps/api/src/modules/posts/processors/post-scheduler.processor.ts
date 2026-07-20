@@ -5,7 +5,7 @@ import { Job, Queue } from 'bullmq';
 import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, encryptToken, decryptToken } from '@socialdrop/prisma';
 import { IntegrationManager, RefreshTokenError, GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 import { DebugLogService } from '../../debug/debug-log.service.js';
 
@@ -99,7 +99,7 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     }
 
     try {
-      const res = await graphFetch(`${GRAPH_API_BASE}/me/messages?access_token=${integration.accessToken}`, {
+      const res = await graphFetch(`${GRAPH_API_BASE}/me/messages?access_token=${decryptToken(integration.accessToken)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient: { id: contactAccountId }, message: { text: message } }),
@@ -258,8 +258,8 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
     const provider = this.integrationManager.getProvider(platform);
 
     // Pre-emptively refresh token if expired or about to expire within 5 minutes
-    let accessToken = pi.integration.accessToken;
-    const refreshToken = pi.integration.refreshToken;
+    let accessToken = decryptToken(pi.integration.accessToken);
+    const refreshToken = pi.integration.refreshToken ? decryptToken(pi.integration.refreshToken) : pi.integration.refreshToken;
     const tokenExpiry = pi.integration.tokenExpiry;
     const fiveMinutes = 5 * 60 * 1000;
 
@@ -284,8 +284,8 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
         await this.prisma.integration.update({
           where: { id: pi.integration.id },
           data: {
-            accessToken: refreshed.accessToken,
-            ...(refreshed.refreshToken && { refreshToken: refreshed.refreshToken }),
+            accessToken: encryptToken(refreshed.accessToken),
+            ...(refreshed.refreshToken && { refreshToken: encryptToken(refreshed.refreshToken) }),
             ...(refreshed.tokenExpiry && { tokenExpiry: refreshed.tokenExpiry }),
           },
         });
@@ -348,8 +348,8 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
           await this.prisma.integration.update({
             where: { id: pi.integration.id },
             data: {
-              accessToken: refreshed.accessToken,
-              ...(refreshed.refreshToken && { refreshToken: refreshed.refreshToken }),
+              accessToken: encryptToken(refreshed.accessToken),
+              ...(refreshed.refreshToken && { refreshToken: encryptToken(refreshed.refreshToken) }),
               ...(refreshed.tokenExpiry && { tokenExpiry: refreshed.tokenExpiry }),
             },
           });

@@ -5,7 +5,7 @@ import { Queue } from 'bullmq';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import type { drive_v3 } from 'googleapis';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, encryptToken, decryptToken } from '@socialdrop/prisma';
 import { ConfigureDriveDto } from '@socialdrop/shared';
 import { CsvParserService } from './csv-parser.service.js';
 
@@ -40,8 +40,8 @@ export class DriveService {
         workspaceId_folderId: { workspaceId, folderId: '__pending__' },
       },
       update: {
-        accessToken: tokens.access_token!,
-        refreshToken: tokens.refresh_token ?? '',
+        accessToken: encryptToken(tokens.access_token!),
+        refreshToken: encryptToken(tokens.refresh_token ?? ''),
         tokenExpiry: tokens.expiry_date
           ? new Date(tokens.expiry_date)
           : null,
@@ -49,8 +49,8 @@ export class DriveService {
       create: {
         workspaceId,
         folderId: '__pending__',
-        accessToken: tokens.access_token!,
-        refreshToken: tokens.refresh_token ?? '',
+        accessToken: encryptToken(tokens.access_token!),
+        refreshToken: encryptToken(tokens.refresh_token ?? ''),
         tokenExpiry: tokens.expiry_date
           ? new Date(tokens.expiry_date)
           : null,
@@ -345,8 +345,8 @@ export class DriveService {
   }): Promise<OAuth2Client> {
     const oauth2Client = this.createOAuth2Client();
     oauth2Client.setCredentials({
-      access_token: driveConfig.accessToken,
-      refresh_token: driveConfig.refreshToken,
+      access_token: decryptToken(driveConfig.accessToken),
+      refresh_token: decryptToken(driveConfig.refreshToken),
       expiry_date: driveConfig.tokenExpiry?.getTime(),
     });
 
@@ -359,7 +359,7 @@ export class DriveService {
       await this.prisma.driveConfig.update({
         where: { id: driveConfig.id },
         data: {
-          accessToken: credentials.access_token!,
+          accessToken: encryptToken(credentials.access_token!),
           tokenExpiry: credentials.expiry_date
             ? new Date(credentials.expiry_date)
             : null,

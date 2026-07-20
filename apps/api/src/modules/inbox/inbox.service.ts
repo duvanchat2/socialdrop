@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, decryptToken } from '@socialdrop/prisma';
 import { GRAPH_API_BASE, graphFetch } from '@socialdrop/integrations';
 
 @Injectable()
@@ -33,7 +33,7 @@ export class InboxService {
       return { ok: false };
     }
 
-    const url = `${GRAPH_API_BASE}/me/messages?access_token=${integration.accessToken}`;
+    const url = `${GRAPH_API_BASE}/me/messages?access_token=${decryptToken(integration.accessToken)}`;
     try {
       const res = await graphFetch(url, {
         method: 'POST',

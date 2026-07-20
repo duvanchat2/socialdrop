@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, decryptToken } from '@socialdrop/prisma';
 import { FlowEngine } from '../flows/flow.engine.js';
 
 @Injectable()
@@ -41,7 +41,7 @@ export class WebhookService {
       }
 
       const workspaceId = integration.workspaceId;
-      const accessToken = integration.accessToken;
+      const accessToken = decryptToken(integration.accessToken);
 
       for (const event of entry.messaging ?? []) {
         const senderId: string = event?.sender?.id ?? 'unknown';

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
-import { PrismaService } from '@socialdrop/prisma';
+import { PrismaService, encryptToken, decryptToken } from '@socialdrop/prisma';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 
@@ -45,8 +45,8 @@ export class YoutubeService {
 
     const client = this.createOAuth2Client();
     client.setCredentials({
-      access_token: integration.accessToken,
-      refresh_token: integration.refreshToken ?? undefined,
+      access_token: decryptToken(integration.accessToken),
+      refresh_token: integration.refreshToken ? decryptToken(integration.refreshToken) : undefined,
       expiry_date: integration.tokenExpiry?.getTime(),
     });
 
@@ -56,8 +56,8 @@ export class YoutubeService {
       await this.prisma.integration.update({
         where: { id: integration.id },
         data: {
-          accessToken: tokens.access_token ?? integration.accessToken,
-          ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+          accessToken: tokens.access_token ? encryptToken(tokens.access_token) : integration.accessToken,
+          ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
           ...(tokens.expiry_date ? { tokenExpiry: new Date(tokens.expiry_date) } : {}),
         },
       });
