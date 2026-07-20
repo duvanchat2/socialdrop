@@ -10,7 +10,8 @@ import { Stagger, FadeUp } from '@/components/motion';
 import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
 import { BestTimesHeatmap, BestTimes } from '@/components/BestTimesHeatmap';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
-import { Loader2, X, RefreshCw, AlertCircle, Pencil } from 'lucide-react';
+import Link from 'next/link';
+import { Loader2, X, RefreshCw, AlertCircle, AlertTriangle, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
 function fmtBogota(iso: string) {
@@ -50,6 +51,13 @@ interface Post {
   integrations: PostIntegrationDetail[];
 }
 
+interface IntegrationSummary {
+  id: string;
+  platform: Platform;
+  accountName?: string;
+  needsReauth: boolean;
+}
+
 export default function DashboardPage() {
   const userId = 'demo-user';
   const qc = useQueryClient();
@@ -80,6 +88,12 @@ export default function DashboardPage() {
     queryKey: ['posts'],
     queryFn: async () => (await apiFetch<{ posts: Post[] }>(`/api/posts?userId=${userId}&limit=20`)).posts,
   });
+
+  const integrations = useQuery({
+    queryKey: ['integrations'],
+    queryFn: () => apiFetch<IntegrationSummary[]>(`/api/integrations?userId=${userId}`),
+  });
+  const needsReauthIntegrations = (integrations.data ?? []).filter((i) => i.needsReauth);
 
   const failedPosts = useQuery({
     queryKey: ['posts-failed'],
@@ -118,6 +132,23 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-display font-bold text-ink">Dashboard</h1>
 
       <OnboardingChecklist userId={userId} hasPosts={(posts.data ?? []).length > 0} />
+
+      {needsReauthIntegrations.length > 0 && (
+        <div className="bg-warning/15 rounded-card p-4 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-warning shrink-0" />
+          <p className="text-sm text-warning flex-1">
+            {needsReauthIntegrations.length === 1
+              ? `${needsReauthIntegrations[0].accountName ?? needsReauthIntegrations[0].platform} necesita reconexión — sus posts fallarán hasta que reconectes la cuenta.`
+              : `${needsReauthIntegrations.length} cuentas necesitan reconexión — sus posts fallarán hasta que las reconectes.`}
+          </p>
+          <Link
+            href="/integrations"
+            className="shrink-0 px-3 py-1.5 bg-warning/15 hover:bg-warning/25 rounded-pill text-xs font-medium text-warning"
+          >
+            Reconectar
+          </Link>
+        </div>
+      )}
 
       {/* Stat cards */}
       <Stagger className="grid grid-cols-2 lg:grid-cols-4 gap-4">

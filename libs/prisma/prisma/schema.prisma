@@ -107,6 +107,7 @@ model Integration {
   tokenExpiry  DateTime?
   profileId    String?
   metadata     Json?
+  needsReauth  Boolean           @default(false)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   posts        PostIntegration[]
