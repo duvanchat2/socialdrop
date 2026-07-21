@@ -400,6 +400,8 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
             where: { id: pi.integration.id },
             data: { needsReauth: true },
           });
+          await this.debugLog.pushCritical(workspaceId, 'error', platform,
+            `[${platform}] Integration needs reauth: ${msg}`, String(refreshErr));
           await this.alerts.notify(
             `⚠️ ${platform} integration needs reconnecting\nintegration=${pi.integration.id}\nworkspace=${workspaceId}\nerror=${msg}`,
           );
@@ -423,9 +425,15 @@ export class PostSchedulerProcessor extends WorkerHost implements OnModuleInit {
       });
 
       this.logger.error(`Failed to publish to ${platform}: ${finalError.message}`);
-      await this.debugLog.push(workspaceId, 'error', platform,
-        `[${platform}] Final failure (retry ${retryCount}/${maxRetries}): ${finalError.message}`,
-        finalError.stack);
+      if (retryCount >= maxRetries) {
+        await this.debugLog.pushCritical(workspaceId, 'error', platform,
+          `[${platform}] Final failure (retry ${retryCount}/${maxRetries}): ${finalError.message}`,
+          finalError.stack);
+      } else {
+        await this.debugLog.push(workspaceId, 'error', platform,
+          `[${platform}] Final failure (retry ${retryCount}/${maxRetries}): ${finalError.message}`,
+          finalError.stack);
+      }
 
       if (retryCount >= maxRetries) {
         await this.updatePostStatus(pi.postId, mediaUrls);

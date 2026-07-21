@@ -309,6 +309,22 @@ model DeadLetterJob {
   @@index([failedAt])
 }
 
+/// Persisted copy of critical debug events (publish failure, needsReauth) —
+/// the live /debug panel still reads from Redis; this survives Redis
+/// rotation and multi-tenant key collisions. Retention: cleaned up after 30
+/// days by a daily cron in DebugLogService.
+model EventLog {
+  id        String   @id @default(cuid())
+  userId    String
+  level     String
+  context   String
+  message   String
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
 /// Append-only history of per-post metrics — one row per capture, never overwritten.
 /// PostAnalytics stays as the "latest snapshot" view; this table is what powers time-series charts.
 model PostMetricSnapshot {
