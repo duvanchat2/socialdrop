@@ -25,4 +25,14 @@ export class DebugController {
   clearLogs(@CurrentUser() userId: string) {
     return this.debugLog.clearLogs(userId);
   }
+
+  @Get('events')
+  @ApiOperation({ summary: 'Get persisted critical events for a user (survives Redis rotation)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getEvents(
+    @CurrentUser() userId: string,
+    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
+  ) {
+    return this.debugLog.getEventLogs(userId, Math.min(limit, 500));
+  }
 }
