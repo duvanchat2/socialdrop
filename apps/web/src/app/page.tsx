@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { StatusBadge, PostStatus } from '@/components/StatusBadge';
 import { PlatformChip, Platform } from '@/components/PlatformChip';
 import { EditPostModal, EditablePost } from '@/components/EditPostModal';
-import { Stagger, FadeUp } from '@/components/motion';
+import { Stagger, FadeUp, CountUp } from '@/components/motion';
 import { PlatformBreakdownChart, PlatformStat } from '@/components/PlatformBreakdownChart';
 import { BestTimesHeatmap, BestTimes } from '@/components/BestTimesHeatmap';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
@@ -163,12 +163,23 @@ export default function DashboardPage() {
           >
             <p className="text-xs text-ink-muted">{label}</p>
             <p className={`font-mono-nums text-[32px] tabular-nums mt-1 ${warn ? 'text-warning' : 'text-ink'}`}>
-              {(stats.isLoading || kpis.isLoading) ? <Loader2 className="animate-spin" size={24} /> : value}
+              {(stats.isLoading || kpis.isLoading) ? (
+                <Loader2 className="animate-spin" size={24} />
+              ) : typeof value === 'number' ? (
+                <CountUp value={value} />
+              ) : (
+                value
+              )}
             </p>
             {delta !== undefined && delta !== null && (
-              <p className={`text-xs mt-1 font-mono-nums ${delta >= 0 ? 'text-positive' : 'text-warning'}`}>
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.15, duration: 0.2 }}
+                className={`text-xs mt-1 font-mono-nums ${delta >= 0 ? 'text-positive' : 'text-warning'}`}
+              >
                 {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}% vs semana anterior
-              </p>
+              </motion.p>
             )}
             {clickable && typeof value === 'number' && value > 0 && (
               <p className="text-xs text-warning mt-1">Click para ver detalles →</p>
