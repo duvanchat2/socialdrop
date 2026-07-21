@@ -3,9 +3,19 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import * as Sentry from '@sentry/node';
 import { AppModule } from './app/app.module';
+import { SentryExceptionFilter } from './common/sentry-exception.filter.js';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
+
+// Sentry.init is a no-op if SENTRY_DSN is unset — safe with no tracker configured.
+// GlitchTip is DSN/API-compatible with the Sentry SDK, so this works for either.
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV ?? 'development',
+  tracesSampleRate: 0.1,
+});
 
 async function bootstrap() {
   // Ensure uploads directory exists
@@ -17,6 +27,7 @@ async function bootstrap() {
   // bytes Meta signed, not a re-serialized JSON body.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.useLogger(['log', 'error', 'warn', 'debug']);
+  app.useGlobalFilters(new SentryExceptionFilter());
 
   // Security headers
   app.use(helmet());
