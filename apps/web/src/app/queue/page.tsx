@@ -20,7 +20,6 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 interface QueueSlot {
   id: string;
-  userId: string;
   platform: string;
   dayOfWeek: number;
   hour: number;
@@ -30,15 +29,14 @@ interface QueueSlot {
 
 export default function QueuePage() {
   const qc = useQueryClient();
-  const userId = 'demo-user';
   const [activePlatform, setActivePlatform] = useState(PLATFORMS[0].id);
 
   const activeMeta = PLATFORMS.find((p) => p.id === activePlatform)!;
 
   const { data: slots = [], isLoading } = useQuery({
-    queryKey: ['queue-slots', userId, activePlatform],
+    queryKey: ['queue-slots', activePlatform],
     queryFn: () =>
-      apiFetch<QueueSlot[]>(`/api/queue?userId=${userId}&platform=${activePlatform}`),
+      apiFetch<QueueSlot[]>(`/api/queue?platform=${activePlatform}`),
   });
 
   const createSlot = useMutation({
@@ -74,7 +72,6 @@ export default function QueuePage() {
       deleteSlot.mutate(existingId);
     } else {
       createSlot.mutate({
-        userId,
         platform: activePlatform,
         dayOfWeek,
         hour,

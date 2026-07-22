@@ -113,45 +113,41 @@ export class FlowEngine {
     }
   }
 
+  /**
+   * Throws on failure instead of swallowing it — executeFlow()'s catch is what
+   * marks the FlowExecution FAILED. Logging-and-returning here meant every send
+   * failure (expired token, missing permission, rate limit) was invisible: the
+   * execution was recorded COMPLETED even though nothing was actually sent.
+   */
   private async sendDM(recipientId: string, message: string, token?: string): Promise<void> {
     if (!token) {
-      this.logger.error(`sendDM skipped: no Integration access token for recipient=${recipientId}`);
-      return;
+      throw new Error(`sendDM: no Integration access token for recipient=${recipientId}`);
     }
     const url = `${GRAPH_API_BASE}/me/messages?access_token=${token}`;
-    try {
-      const res = await graphFetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } }),
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        this.logger.error(`sendDM failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
-      }
-    } catch (e) {
-      this.logger.error(`sendDM failed: ${(e as Error).message}`);
+    const res = await graphFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`sendDM failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
     }
   }
 
   private async replyComment(commentId: string, message: string, token?: string): Promise<void> {
     if (!token) {
-      this.logger.error(`replyComment skipped: no Integration access token for comment=${commentId}`);
-      return;
+      throw new Error(`replyComment: no Integration access token for comment=${commentId}`);
     }
     const url = `${GRAPH_API_BASE}/${commentId}/replies?access_token=${token}`;
-    try {
-      const res = await graphFetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        this.logger.error(`replyComment failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
-      }
-    } catch (e) {
-      this.logger.error(`replyComment failed: ${(e as Error).message}`);
+    const res = await graphFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`replyComment failed: HTTP ${res.status} — ${body.slice(0, 300)}`);
     }
   }
 }
